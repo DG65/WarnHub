@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta.23 (2026-09-04)
+
+- Warnungs-Historie: neues Attribut `WarnHistory` protokolliert jede neue
+  Warnung UND jede Entwarnung (nicht nur die aktuell aktiven, siehe
+  `WHUB_GetActiveWarnings()`) -- unabhängig davon, ob Push zum jeweiligen
+  Zeitpunkt überhaupt aktiv war. Deckel bei 500 Einträgen, älteste zuerst
+  raus (identisches Prinzip wie EMS' bewährtes `SpecialEventsLog`). Neue
+  Funktion `WHUB_GetHistory($id, $limit = 100)` liefert die Liste
+  newest-first als JSON, für eigene Auswertungen/Skripte -- bewusst kein
+  eigenes Formularfeld dafür (analog zu EMS' `GetSpecialEvents()`, das
+  ebenfalls rein als Funktionsvertrag existiert). Dritter und letzter Teil
+  von Dietmars Wunsch 04.09.2026 "IPSView, Mehrkanal-Push und eine
+  Warnungs-Historie packen wir nun an."
+
 ## 0.1.0-beta.22 (2026-09-04)
 
 - IPSView-taugliche Statusvariablen: WarnHub war bisher komplett "headless"

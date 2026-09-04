@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.22-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.23-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -141,6 +141,9 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   `gewitter`/`schnee`/`hitze`), unabhängig von einer echten Warnung, vom Standort-Filter und
   vom Mindest-Schweregrad -- reiner Aktor-Test. Im Formular als sechs Schaltflächen im
   Schutzaktionen-Panel verfügbar.
+- `WHUB_GetHistory($id, $limit = 100): string` -- JSON-Liste der zuletzt gepushten
+  Warnungen UND Entwarnungen (newest first, bis zu 500 Einträge gespeichert, unabhängig
+  davon, ob Push gerade aktiv war) -- für eigene Auswertungen/Skripte.
 
 ## IPSView & eigene Dashboards
 

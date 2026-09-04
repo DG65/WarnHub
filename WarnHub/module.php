@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.22';
-    private const NEWS_VERSION = '0.1.0-beta.22';
+    private const DOC_VERSION = '0.1.0-beta.23';
+    private const NEWS_VERSION = '0.1.0-beta.23';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -325,6 +325,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeString('PendingSirenOff', '[]');
         $this->RegisterAttributeInteger('LastPollTs', 0);
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
+        $this->RegisterAttributeString('WarnHistory', '[]');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
@@ -666,6 +667,7 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_Poll($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'],
+                ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'],
                 ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'],
                 [
                     'type' => 'Button',
@@ -985,6 +987,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Mehrkanal-Push: neben WebFront/Kachel-Visualisierung jetzt auch Telegram (offizielles Symcon-Modul) und Pushover (Community-Modul) als Push-Ziele -- einfach "🔎 Push-Ziele suchen" erneut klicken, vorhandene Telegram-Bot-/Pushover-Instanzen werden automatisch gefunden'],
                 ['type' => 'Label', 'caption' => '• IPSView-tauglich: vier neue Statusvariablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) für ein eigenes Dashboard -- WarnHub war bisher komplett "headless" (nur Push + Konsole)'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen lassen sich jetzt je Alarmtyp einzeln testen ("🌪️ Sturm testen" usw.) -- löst sofort alle passenden aktiven Aktionen aus, unabhängig von einer echten Warnung, praktisch um z. B. die Raffstore-Ansteuerung ohne Warten auf den nächsten Sturm zu prüfen'],
+                ['type' => 'Label', 'caption' => '• Warnungs-Historie: bis zu 500 vergangene Warnungen/Entwarnungen über die neue Funktion WHUB_GetHistory() abrufbar -- für eigene Auswertungen/Skripte, auch wenn Push zwischenzeitlich ausgeschaltet war'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2788,6 +2791,7 @@ class WarnHub extends IPSModule
                 if ($w['msgType'] === 'Cancel') {
                     if (isset($seen[$pairKey])) {
                         unset($seen[$pairKey]);
+                        $this->logHistory('entwarnung', $standort['Name'], $w, $category);
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
                                 '✅ Entwarnung',
@@ -2818,6 +2822,7 @@ class WarnHub extends IPSModule
 
                 if (!isset($seen[$pairKey])) {
                     $seen[$pairKey] = ['msgType' => $w['msgType'], 'pushedAt' => time()];
+                    $this->logHistory('warnung', $standort['Name'], $w, $category);
                     if ($pushAktiv) {
                         $this->pushToAllWebfronts(
                             $this->buildPushTitle($w['severity'], $w['event']),
@@ -3146,5 +3151,49 @@ class WarnHub extends IPSModule
             'generatedAt' => $this->ReadAttributeInteger('LastPollTs'),
             'warnings' => $active,
         ]);
+    }
+
+    /**
+     * Warnungs-Historie: JSON-Liste der zuletzt gepushten Warnungen UND
+     * Entwarnungen (nicht nur der aktuell aktiven, siehe WHUB_GetActiveWarnings())
+     * -- newest first, auf $limit Einträge begrenzt (Deckel im Attribut selbst
+     * bereits bei 500, analog zum EMS-Vorbild SpecialEventsLog). Für eine
+     * eigene Auswertung ("wie oft hat es hier eigentlich schon Sturm
+     * gegeben?") oder eine Verlaufsanzeige im eigenen Dashboard.
+     */
+    public function GetHistory(int $limit = 100): string
+    {
+        $log = json_decode($this->ReadAttributeString('WarnHistory'), true) ?: [];
+        $log = array_reverse($log);
+        if ($limit > 0) {
+            $log = array_slice($log, 0, $limit);
+        }
+        return json_encode($log);
+    }
+
+    /**
+     * Hängt einen Verlaufseintrag an (neue Warnung ODER Entwarnung) --
+     * unabhängig davon, ob Push überhaupt aktiv ist (die Historie soll auch
+     * dokumentieren, was passiert wäre, wenn Push zwischenzeitlich
+     * ausgeschaltet war). Deckel bei 500 Einträgen, älteste zuerst raus
+     * (identisches Prinzip wie EMS' SpecialEventsLog).
+     */
+    private function logHistory(string $kind, string $standortName, array $w, string $category): void
+    {
+        $log = json_decode($this->ReadAttributeString('WarnHistory'), true) ?: [];
+        $log[] = [
+            'ts' => time(),
+            'kind' => $kind, // 'warnung' oder 'entwarnung'
+            'standort' => $standortName,
+            'event' => $w['event'],
+            'headline' => $w['headline'],
+            'severity' => $w['severity'],
+            'category' => $category,
+            'source' => $w['source'],
+        ];
+        if (count($log) > 500) {
+            $log = array_slice($log, count($log) - 500);
+        }
+        $this->WriteAttributeString('WarnHistory', json_encode($log));
     }
 }
