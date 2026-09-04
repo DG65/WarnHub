@@ -14,6 +14,7 @@
 
 const FROGGIT_GUID = '{499F8100-B051-E713-CEC0-499D795B2639}';
 const OTHER_FROGGIT_MODULE_GUID = '{22222222-2222-2222-2222-222222222222}';
+const WEATHERSTATION_WU_GUID = '{FBDB2770-0232-43D2-F40B-1240CEAF6CD4}';
 const LOCATION_CONTROL_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
 const LOCATION_INSTANCE_ID = 900;
 
@@ -24,20 +25,29 @@ const LOCATION_INSTANCE_ID = 900;
 //   11 Instanz "Andere Wetterstation" (nur über Namenssuche "froggit"
 //      auffindbar, KEINE Windböe/Regenrate-Variable -- muss trotz
 //      Namenstreffer abgelehnt werden)
+//   20 Instanz "Sainlogic" (Wolbolar/IPSymconWeatherStation, exakte GUID)
+//      -> 201 Ident "Windgust" (Anzeigename "Wind gust", NICHT "Windböe" --
+//         der Treffer muss über den Ident laufen, nicht den Namen),
+//         202 Ident "rainin" (Anzeigename "Rain")
 $GLOBALS['whub_test_tree'] = [
     10 => [101, 102, 103],
     11 => [111],
+    20 => [201, 202],
 ];
 $GLOBALS['whub_test_objects'] = [
-    10 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation'],
-    11 => ['ObjectType' => 1, 'ObjectName' => 'Andere Wetterstation'],
-    101 => ['ObjectType' => 2, 'ObjectName' => 'Windböe'],
-    102 => ['ObjectType' => 2, 'ObjectName' => 'Regenrate'],
-    103 => ['ObjectType' => 2, 'ObjectName' => 'Windböe (Max.) Tag'],
-    111 => ['ObjectType' => 2, 'ObjectName' => 'Innentemperatur'],
+    10 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation', 'ObjectIdent' => ''],
+    11 => ['ObjectType' => 1, 'ObjectName' => 'Andere Wetterstation', 'ObjectIdent' => ''],
+    20 => ['ObjectType' => 1, 'ObjectName' => 'Sainlogic', 'ObjectIdent' => ''],
+    101 => ['ObjectType' => 2, 'ObjectName' => 'Windböe', 'ObjectIdent' => ''],
+    102 => ['ObjectType' => 2, 'ObjectName' => 'Regenrate', 'ObjectIdent' => ''],
+    103 => ['ObjectType' => 2, 'ObjectName' => 'Windböe (Max.) Tag', 'ObjectIdent' => ''],
+    111 => ['ObjectType' => 2, 'ObjectName' => 'Innentemperatur', 'ObjectIdent' => ''],
+    201 => ['ObjectType' => 2, 'ObjectName' => 'Wind gust', 'ObjectIdent' => 'Windgust'],
+    202 => ['ObjectType' => 2, 'ObjectName' => 'Rain', 'ObjectIdent' => 'rainin'],
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     FROGGIT_GUID => [10],
+    WEATHERSTATION_WU_GUID => [20],
 ];
 $GLOBALS['whub_test_moduleNames'] = [
     OTHER_FROGGIT_MODULE_GUID => 'Froggit Legacy',
@@ -64,13 +74,17 @@ function IPS_GetName(int $id): string
 }
 function IPS_GetInstanceListByModuleID(string $guid): array
 {
-    if ($guid === FROGGIT_GUID) {
-        return $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] ?? [];
+    if (isset($GLOBALS['whub_test_instancesByModule'][$guid])) {
+        return $GLOBALS['whub_test_instancesByModule'][$guid];
     }
     if ($guid === LOCATION_CONTROL_GUID) {
         return $GLOBALS['whub_test_locationInstances'] ?? [];
     }
     return $GLOBALS['whub_test_instancesByOtherModule'][$guid] ?? [];
+}
+function IPS_VariableExists(int $id): bool
+{
+    return isset($GLOBALS['whub_test_objects'][$id]) && $GLOBALS['whub_test_objects'][$id]['ObjectType'] === 2;
 }
 function IPS_GetModuleList(): array
 {
@@ -300,12 +314,67 @@ check('schreibt Instanz-ID 10 ins Formularfeld "WetterstationInstanceID"', count
 
 echo "\n== DiscoverWetterstation(): namensähnliche, aber UNGEEIGNETE Instanz wird abgelehnt ==\n";
 $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = []; // exakte GUID liefert diesmal nichts -> Namenssuche "froggit" greift, findet Modul "Froggit Legacy" -> Instanz 11
+$GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = []; // auch die zweite unterstützte Wetterstation darf hier nicht mehr gefunden werden
 $hub7 = new WarnHub();
 $hub7->Create();
 $GLOBALS['whub_test_formFieldSets'] = [];
 $msg2 = $hub7->DiscoverWetterstation();
-check('meldet KEINEN Treffer, obwohl der Modulname "froggit" passt (Instanz 11 hat weder Windböe noch Regenrate)', str_contains($msg2, 'Keine Wetterstation'));
+check('meldet KEINEN Treffer, obwohl der Modulname "froggit" passt (Instanz 11 hat weder Windböe noch Regenrate)', str_contains($msg2, 'Keine unterstützte Wetterstations-Instanz'));
 check('schreibt NICHTS ins Formularfeld (kein Fehltreffer übernommen)', count(array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID')) === 0);
+
+echo "\n== DiscoverWetterstation(): zweites unterstütztes Modul (Wolbolar/IPSymconWeatherStation, Sainlogic/ELV via Wunderground-Protokoll) über Ident statt Anzeigename ==\n";
+$GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = []; // kein Froggit im System -- die zweite Quelle muss trotzdem gefunden werden
+$GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = [20];
+$hub8 = new WarnHub();
+$hub8->Create();
+$GLOBALS['whub_test_formFieldSets'] = [];
+$msg3 = $hub8->DiscoverWetterstation();
+check('meldet Erfolg (Sainlogic/ELV, Windgust/rainin)', str_contains($msg3, 'gefunden') && str_contains($msg3, 'Sainlogic'));
+$setCalls3 = array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID');
+check('schreibt Instanz-ID 20 ins Formularfeld -- gefunden über den Ident "Windgust", NICHT den Anzeigenamen "Wind gust"', count($setCalls3) === 1 && array_values($setCalls3)[0][2] === 20);
+
+echo "\n== fetchWetterstation(): liest Wolbolar-Instanz korrekt über Windgust/rainin-Ident ==\n";
+$hub9 = new WarnHub();
+$hub9->Create();
+$hub9->SetProp('WetterstationInstanceID', 20);
+$GLOBALS['whub_test_values'] = [201 => 85.0, 202 => 30.0]; // beide über dem Standard-Schwellwert
+$result3 = callPrivate($hub9, 'fetchWetterstation');
+check('genau zwei Warnungen (Wind über Ident 201, Regen über Ident 202)', count($result3) === 2);
+check('identifier bleibt wie beim Froggit-Pfad an die INSTANZ gebunden, nicht an die Variable', $result3[0]['identifier'] === 'wetterstation-windboe-20');
+
+echo "\n== fetchWetterstation(): manuelle Wind-/Regen-Variable hat Vorrang vor der Instanz (z. B. KNX) ==\n";
+$hub10 = new WarnHub();
+$hub10->Create();
+$hub10->SetProp('WetterstationInstanceID', 10); // Froggit-Instanz weiterhin konfiguriert
+$hub10->SetProp('WetterstationWindVariableID', 111); // manuelle Variable überschreibt sie für Wind
+$GLOBALS['whub_test_values'] = [101 => 5.0, 102 => 0.0, 111 => 95.0]; // Froggit-Windböe (101) wäre zu niedrig, manuelle Variable (111) liegt über dem Schwellwert
+$result4 = callPrivate($hub10, 'fetchWetterstation');
+check('genau eine Warnung (nur Wind, über die manuelle Variable ausgelöst)', count($result4) === 1);
+check('identifier trägt den neuen "var<ID>"-Suffix (unterscheidbar vom instanzbasierten Format)', $result4[0]['identifier'] === 'wetterstation-windboe-var111');
+
+echo "\n== fetchWetterstation(): gemischte Quellen -- Wind manuell (z. B. KNX), Regen weiterhin von der Froggit-Instanz ==\n";
+$hub11 = new WarnHub();
+$hub11->Create();
+$hub11->SetProp('WetterstationInstanceID', 10);
+$hub11->SetProp('WetterstationWindVariableID', 111);
+$GLOBALS['whub_test_values'] = [101 => 5.0, 102 => 40.0, 111 => 95.0]; // Regenrate (102) über dem Standard-Schwellwert
+$result5 = callPrivate($hub11, 'fetchWetterstation');
+check('zwei Warnungen: Wind von der manuellen Variable, Regen weiterhin von der Froggit-Instanz', count($result5) === 2);
+$byEvent = array_column($result5, null, 'event');
+check('Regen-Identifier bleibt instanzbasiert (unverändertes Format)', ($byEvent['Starkregen (eigene Messung)']['identifier'] ?? null) === 'wetterstation-regenrate-10');
+
+echo "\n== fetchWetterstation(): nur manuelle Variablen konfiguriert, KEINE Instanz (reiner KNX-Fall) ==\n";
+$hub12 = new WarnHub();
+$hub12->Create();
+$hub12->SetProp('WetterstationWindVariableID', 111);
+$GLOBALS['whub_test_values'] = [111 => 95.0];
+$result6 = callPrivate($hub12, 'fetchWetterstation');
+check('funktioniert auch komplett ohne Wetterstations-Instanz', count($result6) === 1 && $result6[0]['identifier'] === 'wetterstation-windboe-var111');
+
+echo "\n== fetchWetterstation(): weder Instanz noch manuelle Variable konfiguriert -> kein Fehler, leeres Ergebnis ==\n";
+$hub13 = new WarnHub();
+$hub13->Create();
+check('leeres Ergebnis statt Fehler', callPrivate($hub13, 'fetchWetterstation') === []);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

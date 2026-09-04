@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.25-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.26-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -43,11 +43,15 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Gefahrenstufen-Skala des Bundesamts für Umwelt für Fliessgewässer und Seen. Anders als
   PEGELONLINE/BfS/eigene Wetterstation eine echte behördliche Klassifikation, keine
   Eigenkonstruktion -- nur die Schwelle, ab der WarnHub meldet, ist einstellbar.
-- **Eigene Wetterstation** (aktuell Froggit) -- optional, unabhängig von allen übrigen
-  Quellen: löst aus, sobald die lokal gemessene Windböe oder Regenrate den eigenen
-  Schwellwert überschreitet. Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein
-  tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. Eine
-  Objektbaum-Suche findet eine passende Station automatisch.
+- **Eigene Wetterstation** -- optional, unabhängig von allen übrigen Quellen: löst aus,
+  sobald die lokal gemessene Windböe oder Regenrate den eigenen Schwellwert überschreitet.
+  Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal
+  auftretendes Ereignis nicht oder nicht rechtzeitig melden. Eine Objektbaum-Suche findet
+  eine Froggit- (Ecowitt-Protokoll, deckt auch als Sainlogic/HP1000SE/WH3000SE vertriebene
+  Ecowitt-Hardware ab) oder Sainlogic/ELV-Instanz (Wolbolar/IPSymconWeatherStation,
+  Wunderground-Protokoll) automatisch. Für jedes andere Fabrikat (KNX, Netatmo, TFA,
+  Homematic, ...) lassen sich Wind- und Regen-Variable stattdessen manuell auswählen, auch
+  gemischt (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).
 - **VKF-Hagelschutz-Signalbox** (Schweiz, `meteo.netitservices.com`) -- **BETA, ungetestet**:
   optional, bindet eine physisch bei einem konkreten Schweizer Gebäude registrierte
   Hagelschutz-Signalbox ein (hagelschutz-einfach-automatisch.ch). Aus der offiziellen
@@ -197,10 +201,17 @@ Ohne echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   Klappe öffnen statt schließen. Ohne gültige Zustands-Variable wird deshalb gar nicht erst
   ausgelöst. Der vordere Kofferraum (Frunk) lässt sich über die Tesla-API grundsätzlich nicht
   schließen, nur öffnen, und wird deshalb von WarnHub nicht automatisiert.
-- Die eigene Wetterstation braucht Variablen, die exakt "Windböe" bzw. "Regenrate" heißen
-  (wie bei Froggit-Modulen üblich) -- andere Fabrikate lassen sich zwar per Instanz-ID manuell
-  eintragen, liefern aber nur dann Werte, wenn sie entsprechend benannte Variablen besitzen.
-  Die automatische Suche findet aktuell nur Froggit-Instanzen.
+- Die automatische Wetterstations-Suche erkennt zwei Module: Froggit (Anzeigename "Windböe"/
+  "Regenrate") und Wolbolar/IPSymconWeatherStation für Sainlogic/ELV (Ident "Windgust"/
+  "rainin", quellcodeverifiziert, mangels eigenem Testgerät aber nicht live gegengeprüft --
+  wie bei Telegram/Pushover). Für jedes andere Modul/Fabrikat (KNX, Netatmo, TFA, Homematic,
+  eigene MQTT-Wetterstation, ...) gibt es keine automatische Erkennung -- diese Module/KNX
+  verwenden keine einheitliche Variablenbenennung. Stattdessen lassen sich Wind- und
+  Regen-Variable manuell auswählen (beliebige Symcon-Variable, keine Beschränkung auf ein
+  bestimmtes Modul); eine gesetzte manuelle Variable hat Vorrang vor der Instanz-Erkennung.
+  KNX-Wetterstationen insbesondere: Symcons KNX-Integration kennt keine vordefinierte
+  Gerätevorlage für Wetterstationen, Gruppenadressen werden frei benannt -- eine automatische
+  Verbindung ist hier technisch nicht möglich, nur die manuelle Auswahl funktioniert.
 - Schutzaktionen warten grundsätzlich bis kurz vor dem Gültigkeitsbeginn einer Warnung (siehe
   oben) -- Meldungen ganz ohne Zeitangabe (kommt selten vor) lösen weiterhin sofort aus, da es
   dann nichts zum Abwarten gibt.

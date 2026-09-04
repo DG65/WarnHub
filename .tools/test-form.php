@@ -286,6 +286,8 @@ foreach ($standortePanel['items'] ?? [] as $item) {
 check('Button "Fahrzeug-/Standort-Variablen suchen" (mobiler Standort) steht im Standorte-Panel', $mobilBtn !== null);
 
 check('Feld "WetterstationInstanceID" (eigene Wetterstation) vorhanden', findByName($decoded['elements'], 'WetterstationInstanceID') !== null);
+check('manuelles Feld "WetterstationWindVariableID" (andere Fabrikate, z. B. KNX) vorhanden', findByName($decoded['elements'], 'WetterstationWindVariableID') !== null);
+check('manuelles Feld "WetterstationRegenVariableID" (andere Fabrikate, z. B. KNX) vorhanden', findByName($decoded['elements'], 'WetterstationRegenVariableID') !== null);
 check('Schwellwert-Feld "WetterstationWindboeSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationWindboeSchwelle') !== null);
 check('Schwellwert-Feld "WetterstationRegenrateSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationRegenrateSchwelle') !== null);
 $wetterstationBtn = null;

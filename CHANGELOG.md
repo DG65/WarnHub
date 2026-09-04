@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.0-beta.26 (2026-09-04)
+
+- Zweites unterstütztes Wetterstations-Modul: Wolbolar/IPSymconWeatherStation
+  (Sainlogic/Froggit/ELV über das Wunderground-Protokoll statt Ecowitt) --
+  GUID und exakte Variablen-Idents ("Windgust"/"rainin", anders als Froggits
+  Anzeigenamen "Windböe"/"Regenrate") direkt gegen den echten
+  module.json-/module.php-Quellcode auf GitHub verifiziert. Neuer Helfer
+  `findChildVariableByIdent()` sucht per PHP-Ident statt Anzeigename, robust
+  gegen Übersetzungen. Mangels eigenem Testgerät nicht live gegengeprüft
+  (wie Telegram/Pushover).
+- Zwei neue manuelle Auswahlfelder ("Wind-Variable"/"Regen-Variable") für
+  JEDES andere Fabrikat -- KNX, Netatmo, TFA, Homematic, eigene
+  MQTT-Wetterstation etc. Recherche ergab: eine automatische Erkennung ist
+  für KNX-Wetterstationen technisch nicht möglich (Symcons KNX-Integration
+  kennt keine vordefinierte Gerätevorlage, Gruppenadressen werden in der
+  ETS frei benannt) und für die übrigen genannten Module mangels
+  einheitlicher Variablenbenennung ebenfalls nicht sinnvoll automatisierbar
+  -- die manuelle Auswahl ist hier der einzig robuste Weg. Eine gesetzte
+  manuelle Variable hat Vorrang vor der automatisch erkannten Instanz, Wind
+  und Regen sind unabhängig voneinander wähl-/mischbar (z. B. Wind von
+  einer KNX-Wetterstation, Regen vom Froggit-Gateway). Identifier des
+  bestehenden Froggit-/instanzbasierten Pfads bewusst unverändert gelassen
+  (kein Re-Push bereits gesehener Warnungen nach dem Update) -- nur der
+  neue manuelle Pfad bekommt ein eigenes, unterscheidbares Format.
+  Dietmars Fragen 04.09.2026 ("Welche Wetterstationsmodule gibt es...",
+  "gibt es hierbei eine Chance die [KNX-Wetterstationen] automatisch zu
+  verbinden?").
+
 ## 0.1.0-beta.25 (2026-09-04)
 
 - Doku-Korrektur zur Installation der beiden WebFront-Kacheln (Formular,

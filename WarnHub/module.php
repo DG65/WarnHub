@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.25';
-    private const NEWS_VERSION = '0.1.0-beta.25';
+    private const DOC_VERSION = '0.1.0-beta.26';
+    private const NEWS_VERSION = '0.1.0-beta.26';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -196,6 +196,16 @@ class WarnHub extends IPSModule
     // Für die Discovery zusätzlich Namenssuche als Fallback (andere
     // Wetterstationsmodule, gleiches Prinzip wie bei WebFront/Kachel-Visu).
     private const FROGGIT_GUID = '{499F8100-B051-E713-CEC0-499D795B2639}';
+
+    // Zweites unterstütztes Wetterstations-Modul: Wolbolar/IPSymconWeatherStation
+    // (Sainlogic/Froggit/ELV über das Wunderground-Protokoll, GUID + Idents
+    // direkt gegen den echten module.json-/module.php-Quellcode auf GitHub
+    // verifiziert, 04.09.2026 -- KEIN eigenes Testgerät verfügbar, wie bei
+    // Telegram/Pushover also quellcode-, nicht live-verifiziert). Andere
+    // Idents als Froggit: "Windgust" (Windböe) und "rainin" (aktuelle
+    // Regenrate) statt "Windböe"/"Regenrate" -- deshalb per Ident, nicht per
+    // Anzeigename gesucht (siehe findChildVariableByIdent()).
+    private const WEATHERSTATION_WU_GUID = '{FBDB2770-0232-43D2-F40B-1240CEAF6CD4}';
 
     // ISO-3166-1-alpha-2-Ländercode (wie von Nominatim reverse geliefert) ->
     // Länder-Slug der Meteoalarm-Feeds (feeds.meteoalarm.org). Live gegen
@@ -308,6 +318,8 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyInteger('BafuHydroSchwelle', 3);
         $this->RegisterPropertyString('HagelschutzPollUrl', '');
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
+        $this->RegisterPropertyInteger('WetterstationWindVariableID', 0);
+        $this->RegisterPropertyInteger('WetterstationRegenVariableID', 0);
         $this->RegisterPropertyFloat('WetterstationWindboeSchwelle', 70.0);
         $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
@@ -529,9 +541,13 @@ class WarnHub extends IPSModule
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Wetterstation suchen (Froggit)',
+                    'caption' => '🔎 Wetterstation suchen (Froggit/Sainlogic/ELV & Co.)',
                     'onClick' => 'echo WHUB_DiscoverWetterstation($id);',
                 ],
+                ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
+                ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)'],
+                ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)'],
+                ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationWindboeSchwelle', 'caption' => 'Schwellwert Windböe (km/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenrateSchwelle', 'caption' => 'Schwellwert Regenrate (mm/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
@@ -994,6 +1010,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Schutzaktionen lassen sich jetzt je Alarmtyp einzeln testen ("🌪️ Sturm testen" usw.) -- löst sofort alle passenden aktiven Aktionen aus, unabhängig von einer echten Warnung, praktisch um z. B. die Raffstore-Ansteuerung ohne Warten auf den nächsten Sturm zu prüfen'],
                 ['type' => 'Label', 'caption' => '• Warnungs-Historie: bis zu 500 vergangene Warnungen/Entwarnungen über die neue Funktion WHUB_GetHistory() abrufbar -- für eigene Auswertungen/Skripte, auch wenn Push zwischenzeitlich ausgeschaltet war'],
                 ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach im Objektbaum in den Bereich des WebFronts verlinken, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
+                ['type' => 'Label', 'caption' => '• Eigene Wetterstation: zweites unterstütztes Modul (Sainlogic/ELV via Wunderground-Protokoll) sowie zwei manuelle Wind-/Regen-Auswahlfelder für JEDES andere Fabrikat (KNX, Netatmo, TFA, Homematic, ...) -- keine automatische Erkennung möglich, da diese Module/KNX keine einheitliche Benennung verwenden, aber jede beliebige Variable im System lässt sich direkt auswählen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1214,6 +1231,25 @@ class WarnHub extends IPSModule
         foreach (@IPS_GetChildrenIDs($instanceID) ?: [] as $childID) {
             $obj = @IPS_GetObject($childID);
             if (is_array($obj) && (int) $obj['ObjectType'] === 2 && mb_strtolower(trim((string) $obj['ObjectName'])) === $needle) {
+                return $childID;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Wie findChildVariableByExactName(), aber über den PHP-Ident
+     * (IPS_SetIdent()/ObjectIdent) statt den -- je nach Sprache/Übersetzung
+     * unterschiedlichen -- Anzeigenamen. Nötig für Fremdmodule mit
+     * englischen Idents und übersetztem Anzeigenamen (z. B. Wolbolar/
+     * IPSymconWeatherStation: Ident "Windgust", Anzeigename je nach
+     * Sprachdatei "Wind gust"/"Windböe"/... -- der Ident bleibt stabil).
+     */
+    private function findChildVariableByIdent(int $instanceID, string $ident): ?int
+    {
+        foreach (@IPS_GetChildrenIDs($instanceID) ?: [] as $childID) {
+            $obj = @IPS_GetObject($childID);
+            if (is_array($obj) && (int) $obj['ObjectType'] === 2 && (string) $obj['ObjectIdent'] === $ident) {
                 return $childID;
             }
         }
@@ -1555,11 +1591,19 @@ class WarnHub extends IPSModule
     }
 
     /**
-     * Sucht eine Wetterstation im Objektbaum (Froggit-Modul-GUID, sonst
-     * Modulname enthält "froggit") und übernimmt sie NUR, wenn sie
-     * tatsächlich die benötigten Felder "Windböe" und "Regenrate" (exakter
-     * Name) besitzt -- sonst kein Treffer, statt eine irgendwie ähnlich
-     * benannte, aber ungeeignete Instanz zu übernehmen. Schreibt wie die
+     * Sucht eine Wetterstation im Objektbaum -- unterstützt zwei bekannte
+     * Module: zuerst Froggit (Ecowitt-Protokoll, deckt laut Store-Angaben
+     * auch als Froggit/Sainlogic/HP1000SE/WH3000SE vertriebene
+     * Ecowitt-Hardware ab, Felder "Windböe"/"Regenrate" per Anzeigename),
+     * dann Wolbolar/IPSymconWeatherStation (Sainlogic/Froggit/ELV über das
+     * Wunderground-Protokoll, GUID/Idents "Windgust"/"rainin" direkt gegen
+     * den echten Quellcode verifiziert -- mangels eigenem Testgerät wie bei
+     * Telegram/Pushover NICHT live gegengeprüft). Übernimmt eine gefundene
+     * Instanz nur, wenn sie tatsächlich beide benötigten Felder besitzt --
+     * sonst kein Treffer, statt eine ungeeignete Instanz zu übernehmen.
+     * Andere Fabrikate (KNX, Netatmo, TFA, Homematic, ...) haben keine
+     * einheitliche Benennung -- dafür gibt es die beiden manuellen
+     * Wind-/Regen-Auswahlfelder weiter unten im Formular. Schreibt wie die
      * übrigen Discover*()-Methoden nur in die offene Formularmaske,
      * „Übernehmen" bleibt der bewusste letzte Schritt. Dietmars Wunsch
      * 04.09.2026: "Du darfst die auch gerne selbst finden."
@@ -1574,9 +1618,21 @@ class WarnHub extends IPSModule
                 continue; // Name passt, aber die entscheidenden Felder fehlen -- kein Treffer
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
-            return sprintf('✅ Wetterstation "%s" gefunden (Windböe/Regenrate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+            return sprintf('✅ Wetterstation "%s" gefunden (Froggit, Windböe/Regenrate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
-        return 'ℹ️ Keine Wetterstation mit den benötigten Feldern (Windböe, Regenrate) gefunden -- Instanz-ID bei Bedarf oben von Hand eintragen.';
+
+        $candidatesWu = $this->findInstancesByModuleNameSubstring(self::WEATHERSTATION_WU_GUID, 'weatherstation');
+        foreach (array_keys($candidatesWu) as $instanceID) {
+            $windgust = $this->findChildVariableByIdent($instanceID, 'Windgust');
+            $rainin = $this->findChildVariableByIdent($instanceID, 'rainin');
+            if ($windgust === null || $rainin === null) {
+                continue;
+            }
+            $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
+            return sprintf('✅ Wetterstation "%s" gefunden (Sainlogic/ELV, Windgust/rainin vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+        }
+
+        return 'ℹ️ Keine unterstützte Wetterstations-Instanz gefunden (Froggit/Sainlogic/ELV) -- bei anderen Fabrikaten (z. B. KNX, Netatmo) unten die Wind-/Regen-Variable manuell auswählen.';
     }
 
     /**
@@ -2163,10 +2219,48 @@ class WarnHub extends IPSModule
     //  konfigurierten Systemstandort keine geratene Platzierung, siehe unten.
     // ----------------------------------------------------------------
 
+    /**
+     * Ermittelt die Wind- ODER Regen-Quellvariable: eine manuell gesetzte
+     * Variable (beliebiges Fabrikat, z. B. KNX) hat Vorrang; sonst wird die
+     * konfigurierte Wetterstations-Instanz nach dem Froggit-Anzeigenamen
+     * ODER dem Wolbolar-WeatherStation-Ident durchsucht (siehe
+     * DiscoverWetterstation()). $identSuffix bleibt bei der bisherigen,
+     * instanzbasierten Kennung ("<instanceID>"), damit sich beim Upgrade
+     * NICHTS an bereits gesehenen Warnungs-Identifiern ändert -- nur der neue
+     * manuelle Pfad bekommt einen eigenen, unterscheidbaren Suffix.
+     *
+     * @return array{0:?int,1:string} [VariableID oder null, Identifier-Suffix]
+     */
+    private function resolveWetterstationSource(int $manualVarID, int $instanceID, string $exactName, string $ident): array
+    {
+        if ($manualVarID > 0 && @IPS_VariableExists($manualVarID)) {
+            return [$manualVarID, 'var' . $manualVarID];
+        }
+        if ($instanceID > 0 && @IPS_InstanceExists($instanceID)) {
+            $found = $this->findChildVariableByExactName($instanceID, $exactName) ?? $this->findChildVariableByIdent($instanceID, $ident);
+            if ($found !== null) {
+                return [$found, (string) $instanceID];
+            }
+        }
+        return [null, ''];
+    }
+
     private function fetchWetterstation(): array
     {
         $instanceID = $this->ReadPropertyInteger('WetterstationInstanceID');
-        if ($instanceID <= 0 || !@IPS_InstanceExists($instanceID)) {
+        [$windboeID, $windIdentSuffix] = $this->resolveWetterstationSource(
+            $this->ReadPropertyInteger('WetterstationWindVariableID'),
+            $instanceID,
+            'Windböe',
+            'Windgust'
+        );
+        [$regenrateID, $regenIdentSuffix] = $this->resolveWetterstationSource(
+            $this->ReadPropertyInteger('WetterstationRegenVariableID'),
+            $instanceID,
+            'Regenrate',
+            'rainin'
+        );
+        if ($windboeID === null && $regenrateID === null) {
             return [];
         }
         $loc = $this->getSystemLocation();
@@ -2175,8 +2269,6 @@ class WarnHub extends IPSModule
             return [];
         }
 
-        $windboeID = $this->findChildVariableByExactName($instanceID, 'Windböe');
-        $regenrateID = $this->findChildVariableByExactName($instanceID, 'Regenrate');
         $windboeSchwelle = $this->ReadPropertyFloat('WetterstationWindboeSchwelle');
         if ($windboeSchwelle <= 0) {
             $windboeSchwelle = 70.0;
@@ -2193,7 +2285,7 @@ class WarnHub extends IPSModule
             $windboe = (float) @GetValue($windboeID);
             if ($windboe >= $windboeSchwelle) {
                 $out[] = [
-                    'identifier' => 'wetterstation-windboe-' . $instanceID,
+                    'identifier' => 'wetterstation-windboe-' . $windIdentSuffix,
                     'source' => 'wetterstation',
                     'msgType' => 'Alert',
                     'event' => 'Sturm (eigene Messung)',
@@ -2218,7 +2310,7 @@ class WarnHub extends IPSModule
             $regenrate = (float) @GetValue($regenrateID);
             if ($regenrate >= $regenrateSchwelle) {
                 $out[] = [
-                    'identifier' => 'wetterstation-regenrate-' . $instanceID,
+                    'identifier' => 'wetterstation-regenrate-' . $regenIdentSuffix,
                     'source' => 'wetterstation',
                     'msgType' => 'Alert',
                     'event' => 'Starkregen (eigene Messung)',
@@ -2660,7 +2752,9 @@ class WarnHub extends IPSModule
         if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
             $warnings = array_merge($warnings, $this->fetchHagelschutzCh());
         }
-        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
+        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0
+            || $this->ReadPropertyInteger('WetterstationWindVariableID') > 0
+            || $this->ReadPropertyInteger('WetterstationRegenVariableID') > 0) {
             $warnings = array_merge($warnings, $this->fetchWetterstation());
         }
 
