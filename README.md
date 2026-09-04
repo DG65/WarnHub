@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.32-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.33-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -49,10 +49,13 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   km/h, Regen Standard 15/25/40 mm/h, beide an DWDs eigene Warnstufen angelehnt) -- eine
   Markise ist windempfindlicher als ein Raffstore, jede Schutzaktions-Zeile wählt über ihr
   "Ab Schweregrad"-Feld selbst, ab welcher Stufe sie reagiert (Popups "Welchen Schwellwert
-  wähle ich?" helfen bei der Wahl). Ein Sicherheitsnetz für den Fall, dass amtliche
-  Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig
-  melden. Eine Objektbaum-Suche findet eine Froggit- (Ecowitt-Protokoll, deckt auch als
-  Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware ab), Sainlogic/ELV- (Wolbolar/
+  wähle ich?" helfen bei der Wahl). Sendet -- anders als bei einer amtlichen Warnung nicht
+  über ein Cancel der Quelle, sondern anhand des eigenen Verlaufs erkannt -- auch eine echte
+  "✅ Entwarnung"-Push, sobald Windböe/Regenrate wieder unter dem Schwellwert liegen. Ein
+  Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes
+  Ereignis nicht oder nicht rechtzeitig melden. Eine Objektbaum-Suche findet eine Froggit-
+  (Ecowitt-Protokoll, deckt auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-
+  Hardware ab), Sainlogic/ELV- (Wolbolar/
   IPSymconWeatherStation, Wunderground-Protokoll) oder Meteobridge/Meteohub-Instanz
   (Datenlogger-Aggregator, deckt zusätzlich weitere Marken wie DAVIS ab) automatisch --
   Windgeschwindigkeiten werden dabei unabhängig vom Quellprofil (km/h oder m/s) korrekt

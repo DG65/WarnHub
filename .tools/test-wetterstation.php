@@ -147,6 +147,17 @@ function GetValue(int $id)
 function IPS_LogMessage(string $sender, string $message): void
 {
 }
+$GLOBALS['whub_test_pushCalls'] = [];
+function WFC_PushNotification(int $id, string $title, string $text, string $sound, int $senderId): bool
+{
+    $GLOBALS['whub_test_pushCalls'][] = ['webfront', $id, $title, $text, $sound];
+    return true;
+}
+function VISU_PostNotificationEx(int $id, string $title, string $text, string $icon, string $sound, int $targetId): bool
+{
+    $GLOBALS['whub_test_pushCalls'][] = ['kachel', $id, $title, $text, $sound];
+    return true;
+}
 
 class IPSModule
 {
@@ -525,6 +536,63 @@ check('schreibt NICHTS in die manuelle Auswahl', count(array_filter($GLOBALS['wh
 $GLOBALS['whub_test_objects'] = $origObjects;
 $GLOBALS['whub_test_variableProfiles'] = $origProfiles;
 $GLOBALS['whub_test_tree'] = [10 => [101, 102, 103], 11 => [111], 20 => [201, 202], 30 => [301, 302]];
+
+echo "\n== wetterstationIdentifierWasSeen(): isoliert geprüft ==\n";
+$hub17 = new WarnHub();
+$hub17->Create();
+check('ohne jede SeenWarnings-Eintragung -> false', callPrivate($hub17, 'wetterstationIdentifierWasSeen', ['wetterstation-windboe-10']) === false);
+$hub17->WriteAttributeString('SeenWarnings', json_encode(['wetterstation-windboe-10|Zuhause' => ['msgType' => 'Alert', 'pushedAt' => time(), 'severity' => 'Severe']]));
+check('mit passendem Eintrag (unabhängig vom Standort-Teil) -> true', callPrivate($hub17, 'wetterstationIdentifierWasSeen', ['wetterstation-windboe-10']) === true);
+check('mit abweichendem Identifier -> false', callPrivate($hub17, 'wetterstationIdentifierWasSeen', ['wetterstation-regenrate-10']) === false);
+
+echo "\n== fetchWetterstation(): OHNE vorherige SeenWarnings-Eintragung wird bei Ruhe KEIN Cancel erzeugt (reine Rückkehr zu 'nichts zu melden') ==\n";
+$hub18 = new WarnHub();
+$hub18->Create();
+$hub18->SetProp('WetterstationInstanceID', 10);
+$GLOBALS['whub_test_values'] = [101 => 10.0, 102 => 0.0]; // ruhig, war nie aktiv
+check('leeres Ergebnis, kein Cancel ohne vorherige Aktivität', callPrivate($hub18, 'fetchWetterstation') === []);
+
+echo "\n== fetchWetterstation(): NACH einer laut SeenWarnings zuvor aktiven Warnung erzeugt Ruhe jetzt ein Cancel ==\n";
+$hub19 = new WarnHub();
+$hub19->Create();
+$hub19->SetProp('WetterstationInstanceID', 10);
+$hub19->WriteAttributeString('SeenWarnings', json_encode(['wetterstation-windboe-10|Zuhause' => ['msgType' => 'Alert', 'pushedAt' => time(), 'severity' => 'Severe']]));
+$GLOBALS['whub_test_values'] = [101 => 10.0, 102 => 0.0]; // jetzt ruhig
+$resultCancel = callPrivate($hub19, 'fetchWetterstation');
+check('genau ein Eintrag (das Cancel für Windböe)', count($resultCancel) === 1);
+check('msgType ist "Cancel"', $resultCancel[0]['msgType'] === 'Cancel');
+check('identifier ist identisch mit dem ursprünglichen Alert (nötig, damit processWarnings() es zuordnen kann)', $resultCancel[0]['identifier'] === 'wetterstation-windboe-10');
+check('Regenrate meldet weiterhin nichts (war nie aktiv)', !in_array('wetterstation-regenrate-10', array_column($resultCancel, 'identifier'), true));
+
+echo "\n== Ende-zu-Ende über processWarnings(): eigene Wetterstation sendet jetzt auch eine echte Entwarnung ==\n";
+$standortWetter = [
+    'Name' => 'Zuhause', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0,
+    'RadiusKm' => 15.0, 'MinSeverity' => 1, 'PushZielFilter' => '', 'Aktiv' => true,
+];
+$webfrontsWetter = [['InstanceID' => 701, 'Name' => 'Handy', 'Typ' => 'kachel', 'Aktiv' => true]];
+$hub20 = new WarnHub();
+$hub20->Create();
+$hub20->SetProp('WetterstationInstanceID', 10);
+$hub20->SetProp('Standorte', json_encode([$standortWetter]));
+$hub20->SetProp('WebFronts', json_encode($webfrontsWetter));
+$hub20->SetProp('PushAktiv', true);
+
+$GLOBALS['whub_test_values'] = [101 => 85.0, 102 => 0.0]; // Sturm
+$GLOBALS['whub_test_pushCalls'] = [];
+$warnungenAktiv = callPrivate($hub20, 'fetchWetterstation');
+$r1 = callPrivate($hub20, 'processWarnings', [$warnungenAktiv]);
+check('Sturm wird erkannt und gepusht', $r1['activeCount'] === 1 && count($GLOBALS['whub_test_pushCalls']) === 1);
+
+$GLOBALS['whub_test_values'] = [101 => 10.0, 102 => 0.0]; // Sturm vorbei
+$GLOBALS['whub_test_pushCalls'] = [];
+$warnungenRuhig = callPrivate($hub20, 'fetchWetterstation');
+$r2 = callPrivate($hub20, 'processWarnings', [$warnungenRuhig]);
+check('processWarnings() zählt eine Entwarnung', $r2['cancelled'] === 1);
+check('eine "✅ Entwarnung"-Push wird tatsächlich zugestellt', count($GLOBALS['whub_test_pushCalls']) === 1 && $GLOBALS['whub_test_pushCalls'][0][2] === '✅ Entwarnung');
+
+$GLOBALS['whub_test_pushCalls'] = [];
+$warnungenWeiterhinRuhig = callPrivate($hub20, 'fetchWetterstation');
+check('beim nächsten Poll (weiterhin ruhig): kein erneutes Cancel/keine Doppel-Entwarnung', $warnungenWeiterhinRuhig === []);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

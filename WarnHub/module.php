@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.32';
-    private const NEWS_VERSION = '0.1.0-beta.32';
+    private const DOC_VERSION = '0.1.0-beta.33';
+    private const NEWS_VERSION = '0.1.0-beta.33';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -1145,6 +1145,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU (optional, standardmäßig AUS): Automatische Rückstellung nach Windberuhigung für durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktionen -- stellt nach 20 Minuten durchgehender Ruhe automatisch den Wert vor dem Auslösen wieder her, prüft vorher aber, ob der Stand seitdem von Hand verändert wurde (dann keine Überschreibung). Die einzige Ausnahme von "keine automatische Rückstellung" im ganzen Modul, siehe Datenquellen-Panel'],
                 ['type' => 'Label', 'caption' => '• Eine bereits abgelaufene Warnung zählt nicht mehr als aktiv, auch wenn die Quelle sie verzögert weiterliefert -- Absicherung gegen veraltete Quelldaten'],
                 ['type' => 'Label', 'caption' => '• Auto-Rückstellung: wird jetzt zusätzlich in der Warnungs-Historie protokolliert (neuer Verlaufstyp "Rückstellung"), eine noch anstehende Rückstellung steht als eigene Statuszeile im Panel "Prüfung & Status"'],
+                ['type' => 'Label', 'caption' => '• Eigene Wetterstation sendet jetzt auch eine echte "✅ Entwarnung"-Push, sobald Windböe/Regenrate wieder unter dem Schwellwert liegen -- vorher gab es nur die "Sturm kommt"-Meldung, nie ein "Sturm vorbei" (die Quelle liefert selbst kein Cancel, WarnHub erkennt es jetzt anhand des eigenen Verlaufs)'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2701,9 +2702,10 @@ class WarnHub extends IPSModule
         if ($windboeID !== null) {
             $windboe = $this->readWindSpeedKmh($windboeID);
             $severity = $this->windSeverityForSpeed($windboe);
+            $windIdentifier = 'wetterstation-windboe-' . $windIdentSuffix;
             if ($severity !== null) {
                 $out[] = [
-                    'identifier' => 'wetterstation-windboe-' . $windIdentSuffix,
+                    'identifier' => $windIdentifier,
                     'source' => 'wetterstation',
                     'msgType' => 'Alert',
                     'event' => 'Sturm (eigene Messung)',
@@ -2722,14 +2724,36 @@ class WarnHub extends IPSModule
                     'rings' => [],
                     'circles' => [$circle],
                 ];
+            } elseif ($this->wetterstationIdentifierWasSeen($windIdentifier)) {
+                // War zuvor aktiv, jetzt wieder ruhig -- eigenes "Cancel"
+                // erzeugen, damit dieselbe Entwarnungs-Logik greift wie bei
+                // amtlichen Warnungen (die eigene Wetterstation liefert sonst
+                // nie ein Cancel, die Meldung verschwindet sonst nur still).
+                $out[] = [
+                    'identifier' => $windIdentifier,
+                    'source' => 'wetterstation',
+                    'msgType' => 'Cancel',
+                    'event' => 'Sturm (eigene Messung)',
+                    'headline' => 'Eigene Wetterstation: Windböe wieder unter dem Schwellwert',
+                    'description' => '',
+                    'instruction' => '',
+                    'severity' => 'Extreme', // nur für den Standort-Schwellwert-Gate relevant, nicht angezeigt
+                    'effective' => null,
+                    'onset' => null,
+                    'expires' => null,
+                    'areaDesc' => 'Eigene Wetterstation',
+                    'rings' => [],
+                    'circles' => [$circle],
+                ];
             }
         }
         if ($regenrateID !== null) {
             $regenrate = (float) @GetValue($regenrateID);
             $regenSeverity = $this->regenSeverityForRate($regenrate);
+            $regenIdentifier = 'wetterstation-regenrate-' . $regenIdentSuffix;
             if ($regenSeverity !== null) {
                 $out[] = [
-                    'identifier' => 'wetterstation-regenrate-' . $regenIdentSuffix,
+                    'identifier' => $regenIdentifier,
                     'source' => 'wetterstation',
                     'msgType' => 'Alert',
                     'event' => 'Starkregen (eigene Messung)',
@@ -2748,9 +2772,38 @@ class WarnHub extends IPSModule
                     'rings' => [],
                     'circles' => [$circle],
                 ];
+            } elseif ($this->wetterstationIdentifierWasSeen($regenIdentifier)) {
+                $out[] = [
+                    'identifier' => $regenIdentifier,
+                    'source' => 'wetterstation',
+                    'msgType' => 'Cancel',
+                    'event' => 'Starkregen (eigene Messung)',
+                    'headline' => 'Eigene Wetterstation: Regenrate wieder unter dem Schwellwert',
+                    'description' => '',
+                    'instruction' => '',
+                    'severity' => 'Extreme',
+                    'effective' => null,
+                    'onset' => null,
+                    'expires' => null,
+                    'areaDesc' => 'Eigene Wetterstation',
+                    'rings' => [],
+                    'circles' => [$circle],
+                ];
             }
         }
         return $out;
+    }
+
+    /** Prüft, ob ein Wetterstations-Identifier für IRGENDEINEN Standort noch als aktiv verfolgt wird (siehe fetchWetterstation()-Entwarnungslogik). */
+    private function wetterstationIdentifierWasSeen(string $identifier): bool
+    {
+        $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
+        foreach (array_keys($seen) as $pairKey) {
+            if (strstr($pairKey, '|', true) === $identifier) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ----------------------------------------------------------------

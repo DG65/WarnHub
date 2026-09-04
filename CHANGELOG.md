@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-beta.33 (2026-09-05)
+
+- Eigene Wetterstation sendet jetzt auch eine echte "✅ Entwarnung"-Push,
+  sobald Windböe/Regenrate wieder unter dem Schwellwert liegen -- vorher
+  gab es nur die "Sturm kommt"-Meldung, nie ein "Sturm vorbei": anders
+  als amtliche Quellen liefert die eigene Wetterstation selbst kein
+  Cancel-Ereignis, die Meldung verschwand bisher nur still aus der
+  Ergebnisliste. Neuer Helfer `wetterstationIdentifierWasSeen()` prüft
+  anhand des bestehenden `SeenWarnings`-Verlaufs, ob eine jetzt ruhige
+  Windböe/Regenrate zuvor tatsächlich aktiv gemeldet war, und
+  `fetchWetterstation()` erzeugt in dem Fall ein synthetisches Cancel
+  mit identischem Identifier -- nutzt exakt denselben
+  Entwarnungs-Mechanismus, der für amtliche Warnungen schon existiert,
+  kein neuer Code-Pfad. Betroffen sind besonders alle ohne aktivierte
+  Auto-Rückstellung (Standardeinstellung), da das bisher die einzige
+  "Alles klar"-Rückmeldung der eigenen Wetterstation war.
+  Dietmars Bestätigung 04.09.2026 zu meinem eigenen Fund.
+
 ## 0.1.0-beta.32 (2026-09-05)
 
 - Auto-Rückstellung wird jetzt in der Warnungs-Historie protokolliert
