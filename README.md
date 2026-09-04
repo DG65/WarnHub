@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.17-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.18-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -33,6 +33,10 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Die frei zugänglichen Feeds liefern keine Warnfläche, nur benannte Gebiete -- der Abgleich
   läuft deshalb über einen separaten, im Meldungstext klar gekennzeichneten Namensvergleich
   statt geometrischem Matching.
+- **GeoSphere Austria** (`warnungen.zamg.at`) -- optional, amtliche Warnungen direkt von der
+  österreichischen Wetterbehörde (ZAMG), koordinatengenau statt Namensabgleich. Übernimmt für
+  österreichische Standorte automatisch von Meteoalarm, sobald aktiviert (analog dazu, wie die
+  direkte DWD-Anbindung den entsprechenden NINA-Kanal für deutsche Standorte ersetzt).
 - **Eigene Wetterstation** (aktuell Froggit) -- optional, unabhängig von allen übrigen
   Quellen: löst aus, sobald die lokal gemessene Windböe oder Regenrate den eigenen
   Schwellwert überschreitet. Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein
@@ -143,6 +147,11 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
 - Schutzaktionen warten grundsätzlich bis kurz vor dem Gültigkeitsbeginn einer Warnung (siehe
   oben) -- Meldungen ganz ohne Zeitangabe (kommt selten vor) lösen weiterhin sofort aus, da es
   dann nichts zum Abwarten gibt.
+- GeoSphere Austria prüft serverseitig, ob eine Warnung an der abgefragten Koordinate gilt --
+  WarnHub kennt die zugrundeliegende Gemeinde-Fläche selbst nicht und platziert das Ergebnis
+  deshalb als kleinen Kreis exakt an dieser Koordinate. Ein Standort direkt an einer
+  Gemeindegrenze kann eine Warnung im nur wenige hundert Meter entfernten Nachbarort dadurch
+  knapp verpassen.
 
 ## Lizenz
 

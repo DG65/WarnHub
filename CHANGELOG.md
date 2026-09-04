@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.0-beta.18 (2026-09-04)
+
+- Neue Datenquelle für Österreich: direkte Anbindung der GeoSphere Austria
+  Warn API (warnungen.zamg.at, amtliche Quelle der österreichischen
+  Wetterbehörde ZAMG, CC-BY-4.0, kein Zugangsschlüssel nötig). Anders als
+  Meteoalarm liefert diese API koordinatengenaue Treffer direkt je
+  Standort statt nur benannter Verwaltungsgebiete -- präziser, ohne
+  eigenen Namensabgleich. Übernimmt für österreichische Standorte
+  automatisch von Meteoalarm, sobald aktiviert (analog zur direkten
+  DWD-Anbindung, die den entsprechenden NINA-Kanal für deutsche Standorte
+  ersetzt). Vorausgegangen ist eine Recherche über Home Assistant, FHEM,
+  ioBroker, openHAB und Loxone: keines dieser Systeme hat bisher eine
+  Schweiz-Lösung, Österreich wird dort überwiegend über denselben ZAMG-
+  bzw. den privaten UWZ-Aggregator gelöst. Dietmars Nachfrage 04.09.2026
+  ("haben Österreich und die Schweiz keine eigenen Warn-APIs?").
+
 ## 0.1.0-beta.17 (2026-09-04)
 
 - Neue, unabhängige Datenquelle: eigene Wetterstation (aktuell Froggit).

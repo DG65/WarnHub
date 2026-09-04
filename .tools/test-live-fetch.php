@@ -291,5 +291,23 @@ check('liefert mindestens einen Regionsnamen', count($geo['names']) > 0);
 echo '  Info: Regionsnamen: ' . implode(', ', $geo['names']) . "\n";
 check('Ergebnis wird gecacht (zweiter Aufruf ohne erneuten Netzzugriff liefert dasselbe)', callPrivate($hub, 'reverseGeocodeStandort', [48.4785, 7.9448]) === $geo);
 
+echo "== Live-Abruf GeoSphere Austria (warnungen.zamg.at, koordinatengenau) ==\n";
+// Wien (Stephansplatz) als bekannte, garantiert innerhalb Österreichs
+// liegende Koordinate -- ob dort GERADE eine Warnung aktiv ist, ist
+// wetterabhängig und deshalb informativ, kein harter Fehlschlag.
+$geosphereResult = callPrivate($hub, 'fetchGeosphereAtCoords', [48.208333, 16.373056]);
+check('fetchGeosphereAtCoords() liefert ein Array (auch bei 0 aktuell aktiven Warnungen kein Fehler)', is_array($geosphereResult));
+echo '  Info: ' . count($geosphereResult) . " aktuell aktive GeoSphere-Austria-Warnung(en) für Wien.\n";
+if (count($geosphereResult) > 0) {
+    $w = $geosphereResult[0];
+    foreach (['identifier', 'source', 'event', 'severity', 'headline', 'onset', 'expires', 'circles'] as $field) {
+        check("erste GeoSphere-Austria-Warnung hat Feld '$field'", array_key_exists($field, $w));
+    }
+    check('source ist "geosphere_at"', $w['source'] === 'geosphere_at');
+    check('severity liegt im erwarteten Vokabular (Moderate/Severe/Extreme)', in_array($w['severity'], ['Moderate', 'Severe', 'Extreme'], true));
+    check('Kreis liegt exakt an der abgefragten Wien-Koordinate', $w['circles'][0]['lat'] === 48.208333 && $w['circles'][0]['lon'] === 16.373056);
+    echo "  Info: [{$w['severity']}] {$w['event']} -- {$w['headline']}\n";
+}
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

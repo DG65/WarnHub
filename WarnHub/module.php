@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.17';
-    private const NEWS_VERSION = '0.1.0-beta.17';
+    private const DOC_VERSION = '0.1.0-beta.18';
+    private const NEWS_VERSION = '0.1.0-beta.18';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -205,6 +205,19 @@ class WarnHub extends IPSModule
         'se' => 'sweden', 'ch' => 'switzerland', 'ua' => 'ukraine', 'gb' => 'united-kingdom',
     ];
 
+    // GeoSphere Austria Warn API (warnungen.zamg.at, live gegen die offizielle
+    // OpenAPI-Spezifikation geprüft 04.09.2026, CC-BY-4.0, kein Zugangsschlüssel
+    // nötig) -- amtliche, koordinatengenaue Warnungen für Österreich, präziser
+    // als Meteoalarms Namensabgleich (siehe fetchGeosphereAt()). Codes laut
+    // offizieller Doku: WarnType 1=storm,2=rain,3=snow,4=black ice,5=thunderstorm,
+    // 6=heat,7=cold; WarnLevel 1=yellow,2=orange,3=red.
+    private const GEOSPHERE_AT_URL = 'https://warnungen.zamg.at/wsapp/api/getWarningsForCoords';
+    private const GEOSPHERE_AT_WARNTYPE_EVENT = [
+        1 => 'Sturm', 2 => 'Starkregen', 3 => 'Schnee', 4 => 'Glatteis',
+        5 => 'Gewitter', 6 => 'Hitze', 7 => 'Kälte',
+    ];
+    private const GEOSPHERE_AT_WARNLEVEL_SEVERITY = [1 => 'Moderate', 2 => 'Severe', 3 => 'Extreme'];
+
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
     // (Deutsch, DWD/MoWaS-Vokabular -- siehe reale Beispiele in .tools/test-geo.php).
     private const CATEGORY_KEYWORDS = [
@@ -247,6 +260,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleBfsOdl', false);
         $this->RegisterPropertyFloat('BfsOdlSchwellwert', 0.3);
         $this->RegisterPropertyBoolean('QuelleMeteoalarm', false);
+        $this->RegisterPropertyBoolean('QuelleGeosphereAt', false);
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyFloat('WetterstationWindboeSchwelle', 70.0);
         $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
@@ -312,7 +326,7 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz) sowie optional die eigene Wetterstation als unabhängiges Sicherheitsnetz.'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG) sowie optional die eigene Wetterstation als unabhängiges Sicherheitsnetz.'],
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
@@ -402,6 +416,8 @@ class WarnHub extends IPSModule
                 ],
                 ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
                 ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung oben bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
+                ['type' => 'CheckBox', 'name' => 'QuelleGeosphereAt', 'caption' => 'Zusätzlich direkte GeoSphere-Austria-Warnungen (warnungen.zamg.at) -- koordinatengenau für österreichische Standorte, präziser als Meteoalarm'],
+                ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für österreichische Standorte automatisch von Meteoalarm (koordinatengenau statt Namensabgleich) -- analog zur direkten DWD-Anbindung, die für deutsche Standorte den entsprechenden NINA-Kanal ersetzt. Amtliche Quelle (GeoSphere Austria/ZAMG), kein Zugangsschlüssel nötig.'],
                 ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                 [
                     'type' => 'SelectInstance',
@@ -825,6 +841,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation (Froggit) als unabhängige, zusätzliche Warnquelle -- löst auch aus, wenn eine amtliche Warnung ein tatsächlich lokal auftretendes Ereignis nicht meldet. Objektbaum-Suche findet eine passende Station automatisch'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen feuern nicht mehr sofort bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf) -- eine morgens eintreffende, erst für den Nachmittag gültige Warnung fährt die Markise nicht mehr schon morgens ein. Die Push-Benachrichtigung bleibt weiterhin sofort'],
                 ['type' => 'Label', 'caption' => '• Meteoalarm deckt neben Deutschland auch Österreich und die Schweiz ab -- WarnHub eignet sich damit für den gesamten deutschsprachigen Raum (D-A-CH), nicht nur für Deutschland'],
+                ['type' => 'Label', 'caption' => '• Neue Datenquelle für Österreich: direkte GeoSphere-Austria-Anbindung (warnungen.zamg.at) -- koordinatengenau statt Namensabgleich, übernimmt für österreichische Standorte automatisch von Meteoalarm, sobald aktiviert'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2144,15 +2161,22 @@ class WarnHub extends IPSModule
      */
     private function fetchMeteoalarm(): array
     {
+        // Ist die direkte GeoSphere-Austria-Anbindung aktiv, übernimmt SIE
+        // Österreich (koordinatengenau, siehe fetchGeosphereAt()) -- Meteoalarm
+        // liefert für AT nur einen ungenaueren Namensabgleich. Gleiches Prinzip
+        // wie "DWD direkt ersetzt den NINA-'dwd'-Kanal" oben in Poll().
+        $geosphereAtActive = $this->ReadPropertyBoolean('QuelleGeosphereAt');
+
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
         $slugs = [];
         foreach ($standorte as $s) {
             $coords = $this->resolveStandortCoords($s);
             $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
             $slug = self::METEOALARM_COUNTRY_SLUGS[$geo['countryCode']] ?? null;
-            if ($slug !== null) {
-                $slugs[$slug] = true;
+            if ($slug === null || ($slug === 'austria' && $geosphereAtActive)) {
+                continue;
             }
+            $slugs[$slug] = true;
         }
 
         $out = [];
@@ -2216,6 +2240,89 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  GeoSphere Austria Warn API -- koordinatengenaue, amtliche Warnungen
+    //  für Österreich (siehe Konstanten-Kommentar oben). Anders als
+    //  Meteoalarm macht diese API das geometrische Matching selbst: ein
+    //  Aufruf pro Standort-Koordinate liefert direkt, ob DORT eine Warnung
+    //  gilt. Deshalb bekommt jede zurückgegebene Warnung einen winzigen
+    //  Kreis GENAU an der abgefragten Koordinate (kein eigenes Polygon
+    //  nötig) -- läuft dadurch unverändert durch das normale geometrische
+    //  Matching in processWarnings(), inklusive Umkreis für benachbarte
+    //  Standorte.
+    // ----------------------------------------------------------------
+
+    private function fetchGeosphereAt(): array
+    {
+        $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
+        $out = [];
+        foreach ($standorte as $s) {
+            $coords = $this->resolveStandortCoords($s);
+            $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
+            if ($geo['countryCode'] !== 'at') {
+                continue;
+            }
+            $out = array_merge($out, $this->fetchGeosphereAtCoords($coords['lat'], $coords['lon']));
+        }
+        return $out;
+    }
+
+    private function fetchGeosphereAtCoords(float $lat, float $lon): array
+    {
+        $url = self::GEOSPHERE_AT_URL . '?' . http_build_query(['lat' => $lat, 'lon' => $lon, 'lang' => 'de']);
+        $json = $this->httpGetJson($url);
+        if (!is_array($json)) {
+            return [];
+        }
+        return $this->parseGeosphereAtResponse($json, $lat, $lon);
+    }
+
+    /** Vom HTTP-Abruf getrennt (wie parseMeteoalarmAtom()/parseCapXml()), damit sich die Auswertung ohne Netzzugriff testen lässt. */
+    private function parseGeosphereAtResponse(array $json, float $lat, float $lon): array
+    {
+        $warnings = $json['properties']['warnings'] ?? null;
+        if (!is_array($warnings) || count($warnings) === 0) {
+            return [];
+        }
+        $areaName = (string) ($json['properties']['location']['properties']['name'] ?? 'Österreich');
+
+        $out = [];
+        foreach ($warnings as $w) {
+            $props = $w['properties'] ?? [];
+            $warnId = $props['warnid'] ?? null;
+            if ($warnId === null) {
+                continue;
+            }
+            $wtype = (int) ($props['rawinfo']['wtype'] ?? 0);
+            $wlevel = (int) ($props['rawinfo']['wlevel'] ?? 0);
+            $startTs = isset($props['rawinfo']['start']) ? (int) $props['rawinfo']['start'] : null;
+            $endTs = isset($props['rawinfo']['end']) ? (int) $props['rawinfo']['end'] : null;
+            $event = self::GEOSPHERE_AT_WARNTYPE_EVENT[$wtype] ?? 'Warnung';
+            $description = trim((string) ($props['auswirkungen'] ?? ''));
+            $empfehlungen = trim((string) ($props['empfehlungen'] ?? ''));
+            if ($empfehlungen !== '') {
+                $description = $description !== '' ? $description . ' ' . $empfehlungen : $empfehlungen;
+            }
+            $out[] = [
+                'identifier' => 'geosphere-at-' . $warnId,
+                'source' => 'geosphere_at',
+                'msgType' => 'Alert',
+                'event' => $event,
+                'headline' => (string) ($props['text'] ?? sprintf('%s-Warnung für %s', $event, $areaName)),
+                'description' => $description,
+                'instruction' => '',
+                'severity' => self::GEOSPHERE_AT_WARNLEVEL_SEVERITY[$wlevel] ?? 'Moderate',
+                'effective' => $startTs !== null ? date('c', $startTs) : null,
+                'onset' => $startTs !== null ? date('c', $startTs) : null,
+                'expires' => $endTs !== null ? date('c', $endTs) : null,
+                'areaDesc' => $areaName,
+                'rings' => [],
+                'circles' => [['lat' => $lat, 'lon' => $lon, 'radiusKm' => 5.0]],
+            ];
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
     //  Abfragezyklus: Poll, Matching, Push, Schutzaktionen
     // ----------------------------------------------------------------
 
@@ -2248,6 +2355,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleMeteoalarm')) {
             $warnings = array_merge($warnings, $this->fetchMeteoalarm());
+        }
+        if ($this->ReadPropertyBoolean('QuelleGeosphereAt')) {
+            $warnings = array_merge($warnings, $this->fetchGeosphereAt());
         }
         if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
             $warnings = array_merge($warnings, $this->fetchWetterstation());
