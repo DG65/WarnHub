@@ -15,39 +15,59 @@
 const FROGGIT_GUID = '{499F8100-B051-E713-CEC0-499D795B2639}';
 const OTHER_FROGGIT_MODULE_GUID = '{22222222-2222-2222-2222-222222222222}';
 const WEATHERSTATION_WU_GUID = '{FBDB2770-0232-43D2-F40B-1240CEAF6CD4}';
+const METEOBRIDGE_GUID = '{24A6FC41-748D-4843-BEF9-0606DBB95CD3}';
 const LOCATION_CONTROL_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
 const LOCATION_INSTANCE_ID = 900;
 
 // Fake-Objektbaum für DiscoverWetterstation():
-//   10 Instanz "Wetterstation" (exakte Froggit-GUID) -> 101 "Windböe",
-//      102 "Regenrate", 103 "Windböe (Max.) Tag" (Dekoy, exakter
-//      Namensabgleich darf sie NICHT mit 101 verwechseln)
+//   10 Instanz "Wetterstation" (exakte Froggit-GUID) -> 101 "Windböe"
+//      (Profil ~WindSpeed.kmh), 102 "Regenrate" (~Rainfall), 103 "Windböe
+//      (Max.) Tag" (Dekoy, exakter Namensabgleich darf sie NICHT mit 101
+//      verwechseln)
 //   11 Instanz "Andere Wetterstation" (nur über Namenssuche "froggit"
 //      auffindbar, KEINE Windböe/Regenrate-Variable -- muss trotz
 //      Namenstreffer abgelehnt werden)
 //   20 Instanz "Sainlogic" (Wolbolar/IPSymconWeatherStation, exakte GUID)
 //      -> 201 Ident "Windgust" (Anzeigename "Wind gust", NICHT "Windböe" --
-//         der Treffer muss über den Ident laufen, nicht den Namen),
-//         202 Ident "rainin" (Anzeigename "Rain")
+//         der Treffer muss über den Ident laufen, nicht den Namen; echtes
+//         Profil laut Quellcode ~WindSpeed.ms, NICHT km/h -- prüft die
+//         Einheiten-Umrechnung), 202 Ident "rainin" (Anzeigename "Rain",
+//         ~Rainfall)
+//   30 Instanz "Meteobridge" (elueckel/Symcon_Meteobridge_Meteohub, exakte
+//      GUID) -> 301 Ident "Wind_Gust_KmH" (~WindSpeed.kmh, schon km/h),
+//      302 Ident "Rain_Rate" (~Rainfall)
 $GLOBALS['whub_test_tree'] = [
     10 => [101, 102, 103],
     11 => [111],
     20 => [201, 202],
+    30 => [301, 302],
 ];
 $GLOBALS['whub_test_objects'] = [
     10 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation', 'ObjectIdent' => ''],
     11 => ['ObjectType' => 1, 'ObjectName' => 'Andere Wetterstation', 'ObjectIdent' => ''],
     20 => ['ObjectType' => 1, 'ObjectName' => 'Sainlogic', 'ObjectIdent' => ''],
+    30 => ['ObjectType' => 1, 'ObjectName' => 'Meteobridge', 'ObjectIdent' => ''],
     101 => ['ObjectType' => 2, 'ObjectName' => 'Windböe', 'ObjectIdent' => ''],
     102 => ['ObjectType' => 2, 'ObjectName' => 'Regenrate', 'ObjectIdent' => ''],
     103 => ['ObjectType' => 2, 'ObjectName' => 'Windböe (Max.) Tag', 'ObjectIdent' => ''],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Innentemperatur', 'ObjectIdent' => ''],
     201 => ['ObjectType' => 2, 'ObjectName' => 'Wind gust', 'ObjectIdent' => 'Windgust'],
     202 => ['ObjectType' => 2, 'ObjectName' => 'Rain', 'ObjectIdent' => 'rainin'],
+    301 => ['ObjectType' => 2, 'ObjectName' => 'Wind Gust km/h', 'ObjectIdent' => 'Wind_Gust_KmH'],
+    302 => ['ObjectType' => 2, 'ObjectName' => 'Rain Rate', 'ObjectIdent' => 'Rain_Rate'],
+];
+$GLOBALS['whub_test_variableProfiles'] = [
+    101 => '~WindSpeed.kmh',
+    102 => '~Rainfall',
+    201 => '~WindSpeed.ms', // echtes Wolbolar-Verhalten -- KEIN km/h
+    202 => '~Rainfall',
+    301 => '~WindSpeed.kmh',
+    302 => '~Rainfall',
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     FROGGIT_GUID => [10],
     WEATHERSTATION_WU_GUID => [20],
+    METEOBRIDGE_GUID => [30],
 ];
 $GLOBALS['whub_test_moduleNames'] = [
     OTHER_FROGGIT_MODULE_GUID => 'Froggit Legacy',
@@ -67,6 +87,20 @@ function IPS_GetChildrenIDs(int $id): array
 function IPS_GetObject(int $id)
 {
     return $GLOBALS['whub_test_objects'][$id] ?? false;
+}
+function IPS_GetVariable(int $id)
+{
+    if (!isset($GLOBALS['whub_test_objects'][$id]) || $GLOBALS['whub_test_objects'][$id]['ObjectType'] !== 2) {
+        return false;
+    }
+    return [
+        'VariableProfile' => $GLOBALS['whub_test_variableProfiles'][$id] ?? '',
+        'VariableCustomProfile' => '',
+    ];
+}
+function IPS_GetVariableList(): array
+{
+    return array_keys(array_filter($GLOBALS['whub_test_objects'], fn ($o) => $o['ObjectType'] === 2));
 }
 function IPS_GetName(int $id): string
 {
@@ -315,6 +349,7 @@ check('schreibt Instanz-ID 10 ins Formularfeld "WetterstationInstanceID"', count
 echo "\n== DiscoverWetterstation(): namensähnliche, aber UNGEEIGNETE Instanz wird abgelehnt ==\n";
 $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = []; // exakte GUID liefert diesmal nichts -> Namenssuche "froggit" greift, findet Modul "Froggit Legacy" -> Instanz 11
 $GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = []; // auch die zweite unterstützte Wetterstation darf hier nicht mehr gefunden werden
+$GLOBALS['whub_test_instancesByModule'][METEOBRIDGE_GUID] = []; // und auch die dritte nicht
 $hub7 = new WarnHub();
 $hub7->Create();
 $GLOBALS['whub_test_formFieldSets'] = [];
@@ -333,14 +368,38 @@ check('meldet Erfolg (Sainlogic/ELV, Windgust/rainin)', str_contains($msg3, 'gef
 $setCalls3 = array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID');
 check('schreibt Instanz-ID 20 ins Formularfeld -- gefunden über den Ident "Windgust", NICHT den Anzeigenamen "Wind gust"', count($setCalls3) === 1 && array_values($setCalls3)[0][2] === 20);
 
-echo "\n== fetchWetterstation(): liest Wolbolar-Instanz korrekt über Windgust/rainin-Ident ==\n";
+echo "\n== fetchWetterstation(): liest Wolbolar-Instanz korrekt über Windgust/rainin-Ident, MIT Einheiten-Umrechnung m/s -> km/h ==\n";
 $hub9 = new WarnHub();
 $hub9->Create();
 $hub9->SetProp('WetterstationInstanceID', 20);
-$GLOBALS['whub_test_values'] = [201 => 85.0, 202 => 30.0]; // beide über dem Standard-Schwellwert
+// 201 (Windgust) traegt laut Fixture das Profil ~WindSpeed.ms (echtes
+// Wolbolar-Verhalten) -- 20 m/s = 72 km/h, ueber dem Standard-Schwellwert
+// (70 km/h) NUR nach korrekter Umrechnung, nicht als Rohwert (20 waere
+// weit darunter). 202 (rainin) liegt ueber dem Regen-Schwellwert.
+$GLOBALS['whub_test_values'] = [201 => 20.0, 202 => 30.0];
 $result3 = callPrivate($hub9, 'fetchWetterstation');
-check('genau zwei Warnungen (Wind über Ident 201, Regen über Ident 202)', count($result3) === 2);
+check('genau zwei Warnungen (Wind über Ident 201 NACH m/s->km/h-Umrechnung, Regen über Ident 202)', count($result3) === 2);
 check('identifier bleibt wie beim Froggit-Pfad an die INSTANZ gebunden, nicht an die Variable', $result3[0]['identifier'] === 'wetterstation-windboe-20');
+$windEintrag = array_values(array_filter($result3, fn ($w) => $w['event'] === 'Sturm (eigene Messung)'))[0] ?? null;
+check('Meldungstext nennt den umgerechneten km/h-Wert (72,0), nicht den rohen m/s-Wert (20,0)', $windEintrag !== null && str_contains($windEintrag['headline'], '72,0'));
+
+echo "\n== readWindSpeedKmh(): Einheiten-Umrechnung isoliert geprüft ==\n";
+check('~WindSpeed.kmh (Froggit, 101) -- Rohwert bleibt unverändert', callPrivate($hub9, 'readWindSpeedKmh', [101]) === 0.0); // kein Wert gesetzt -> 0
+$GLOBALS['whub_test_values'][101] = 44.5;
+check('~WindSpeed.kmh -- 44.5 bleibt 44.5 (keine Umrechnung)', callPrivate($hub9, 'readWindSpeedKmh', [101]) === 44.5);
+$GLOBALS['whub_test_values'][201] = 10.0;
+check('~WindSpeed.ms -- 10.0 m/s wird zu 36.0 km/h umgerechnet (Faktor 3.6)', callPrivate($hub9, 'readWindSpeedKmh', [201]) === 36.0);
+$GLOBALS['whub_test_values'][111] = 50.0;
+check('Variable ohne Profil (z. B. reine KNX-Variable ohne Profilzuweisung) -- Rohwert wird als km/h angenommen, keine Umrechnung', callPrivate($hub9, 'readWindSpeedKmh', [111]) === 50.0);
+
+echo "\n== fetchWetterstation(): liest Meteobridge-Instanz korrekt (Wind_Gust_KmH bereits in km/h) ==\n";
+$hub9b = new WarnHub();
+$hub9b->Create();
+$hub9b->SetProp('WetterstationInstanceID', 30);
+$GLOBALS['whub_test_values'] = [301 => 85.0, 302 => 30.0];
+$result3b = callPrivate($hub9b, 'fetchWetterstation');
+check('genau zwei Warnungen (Meteobridge, bereits km/h, keine Umrechnung nötig)', count($result3b) === 2);
+check('identifier ist instanzbasiert', $result3b[0]['identifier'] === 'wetterstation-windboe-30');
 
 echo "\n== fetchWetterstation(): manuelle Wind-/Regen-Variable hat Vorrang vor der Instanz (z. B. KNX) ==\n";
 $hub10 = new WarnHub();
@@ -375,6 +434,52 @@ echo "\n== fetchWetterstation(): weder Instanz noch manuelle Variable konfigurie
 $hub13 = new WarnHub();
 $hub13->Create();
 check('leeres Ergebnis statt Fehler', callPrivate($hub13, 'fetchWetterstation') === []);
+
+echo "\n== DiscoverWetterstation(): drittes unterstütztes Modul (Meteobridge/Meteohub) über Ident ==\n";
+$GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = [];
+$GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = [];
+$GLOBALS['whub_test_instancesByModule'][METEOBRIDGE_GUID] = [30];
+$hub14 = new WarnHub();
+$hub14->Create();
+$GLOBALS['whub_test_formFieldSets'] = [];
+$msg4 = $hub14->DiscoverWetterstation();
+check('meldet Erfolg (Meteobridge/Meteohub, Wind_Gust_KmH/Rain_Rate)', str_contains($msg4, 'gefunden') && str_contains($msg4, 'Meteobridge'));
+$setCalls4 = array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID');
+check('schreibt Instanz-ID 30 ins Formularfeld', count($setCalls4) === 1 && array_values($setCalls4)[0][2] === 30);
+
+echo "\n== DiscoverWetterstation(): letzter Rückfall -- eindeutiger systemweiter Profil-Treffer (z. B. profilierte KNX-Variable) wird in die manuelle Auswahl übernommen ==\n";
+$GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = [];
+$GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = [];
+$GLOBALS['whub_test_instancesByModule'][METEOBRIDGE_GUID] = [];
+// Isolierter Fake-Baum: nur diese EINE zusätzliche profilierte Wind-Variable
+// im ganzen System (401, z. B. eine KNX-Gruppenadresse mit manuell
+// zugewiesenem Profil) -- die drei bekannten Module liefern hier nichts.
+$origObjects = $GLOBALS['whub_test_objects'];
+$origProfiles = $GLOBALS['whub_test_variableProfiles'];
+$GLOBALS['whub_test_tree'] = []; // keine der bekannten Instanzen hat mehr Kinder -> ihre Ident-/Namenssuche findet nichts
+$GLOBALS['whub_test_objects'] = [401 => ['ObjectType' => 2, 'ObjectName' => 'KNX Windgeschwindigkeit', 'ObjectIdent' => '']];
+$GLOBALS['whub_test_variableProfiles'] = [401 => '~WindSpeed.kmh'];
+$hub15 = new WarnHub();
+$hub15->Create();
+$GLOBALS['whub_test_formFieldSets'] = [];
+$msg5 = $hub15->DiscoverWetterstation();
+check('meldet Erfolg über den Profil-Rückfall (kein bekanntes Modul, aber eindeutige Wind-Variable im System)', str_contains($msg5, 'Standard-Profil'));
+$setCalls5 = array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationWindVariableID');
+check('schreibt die gefundene Variable (401) in die manuelle Wind-Auswahl', count($setCalls5) === 1 && array_values($setCalls5)[0][2] === 401);
+
+echo "\n== DiscoverWetterstation(): Profil-Rückfall rät NICHT bei mehreren Kandidaten ==\n";
+$GLOBALS['whub_test_objects'][402] = ['ObjectType' => 2, 'ObjectName' => 'Zweite Windgeschwindigkeit', 'ObjectIdent' => ''];
+$GLOBALS['whub_test_variableProfiles'][402] = '~WindSpeed.ms';
+$hub16 = new WarnHub();
+$hub16->Create();
+$GLOBALS['whub_test_formFieldSets'] = [];
+$msg6 = $hub16->DiscoverWetterstation();
+check('bei mehreren Kandidaten im System: kein Rateversuch, klare "nichts gefunden"-Rückmeldung', str_contains($msg6, 'Keine unterstützte Wetterstations-Instanz'));
+check('schreibt NICHTS in die manuelle Auswahl', count(array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => in_array($c[0], ['WetterstationWindVariableID', 'WetterstationRegenVariableID'], true))) === 0);
+// Fixture wieder in den Ausgangszustand versetzen.
+$GLOBALS['whub_test_objects'] = $origObjects;
+$GLOBALS['whub_test_variableProfiles'] = $origProfiles;
+$GLOBALS['whub_test_tree'] = [10 => [101, 102, 103], 11 => [111], 20 => [201, 202], 30 => [301, 302]];
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.26-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.27-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -48,10 +48,15 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal
   auftretendes Ereignis nicht oder nicht rechtzeitig melden. Eine Objektbaum-Suche findet
   eine Froggit- (Ecowitt-Protokoll, deckt auch als Sainlogic/HP1000SE/WH3000SE vertriebene
-  Ecowitt-Hardware ab) oder Sainlogic/ELV-Instanz (Wolbolar/IPSymconWeatherStation,
-  Wunderground-Protokoll) automatisch. Für jedes andere Fabrikat (KNX, Netatmo, TFA,
-  Homematic, ...) lassen sich Wind- und Regen-Variable stattdessen manuell auswählen, auch
-  gemischt (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).
+  Ecowitt-Hardware ab), Sainlogic/ELV- (Wolbolar/IPSymconWeatherStation, Wunderground-
+  Protokoll) oder Meteobridge/Meteohub-Instanz (Datenlogger-Aggregator, deckt zusätzlich
+  weitere Marken wie DAVIS ab) automatisch -- Windgeschwindigkeiten werden dabei unabhängig
+  vom Quellprofil (km/h oder m/s) korrekt normiert. Findet sich keines der drei Module,
+  hilft als letzter Rückfall eine systemweite Suche nach dem passenden Symcon-Standardprofil
+  (z. B. eine bereits profilierte KNX-Variable). Für jedes andere Fabrikat (KNX ohne
+  zugewiesenes Profil, Netatmo, TFA, Homematic, ...) lassen sich Wind- und Regen-Variable
+  stattdessen manuell auswählen, auch gemischt (z. B. Wind von einer KNX-Wetterstation,
+  Regen vom Froggit-Gateway).
 - **VKF-Hagelschutz-Signalbox** (Schweiz, `meteo.netitservices.com`) -- **BETA, ungetestet**:
   optional, bindet eine physisch bei einem konkreten Schweizer Gebäude registrierte
   Hagelschutz-Signalbox ein (hagelschutz-einfach-automatisch.ch). Aus der offiziellen
@@ -201,17 +206,23 @@ Ohne echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   Klappe öffnen statt schließen. Ohne gültige Zustands-Variable wird deshalb gar nicht erst
   ausgelöst. Der vordere Kofferraum (Frunk) lässt sich über die Tesla-API grundsätzlich nicht
   schließen, nur öffnen, und wird deshalb von WarnHub nicht automatisiert.
-- Die automatische Wetterstations-Suche erkennt zwei Module: Froggit (Anzeigename "Windböe"/
-  "Regenrate") und Wolbolar/IPSymconWeatherStation für Sainlogic/ELV (Ident "Windgust"/
-  "rainin", quellcodeverifiziert, mangels eigenem Testgerät aber nicht live gegengeprüft --
-  wie bei Telegram/Pushover). Für jedes andere Modul/Fabrikat (KNX, Netatmo, TFA, Homematic,
-  eigene MQTT-Wetterstation, ...) gibt es keine automatische Erkennung -- diese Module/KNX
-  verwenden keine einheitliche Variablenbenennung. Stattdessen lassen sich Wind- und
-  Regen-Variable manuell auswählen (beliebige Symcon-Variable, keine Beschränkung auf ein
-  bestimmtes Modul); eine gesetzte manuelle Variable hat Vorrang vor der Instanz-Erkennung.
+- Die automatische Wetterstations-Suche erkennt drei Module: Froggit (Anzeigename "Windböe"/
+  "Regenrate"), Wolbolar/IPSymconWeatherStation für Sainlogic/ELV (Ident "Windgust"/"rainin")
+  und Meteobridge/Meteohub (Ident "Wind_Gust_KmH"/"Rain_Rate") -- alle drei quellcodeverifiziert,
+  mangels eigenem Testgerät aber nicht live gegengeprüft, wie bei Telegram/Pushover. Findet
+  sich keines davon, folgt als letzter Rückfall eine systemweite Suche nach dem Symcon-
+  Standardprofil ("~WindSpeed.kmh"/"~WindSpeed.ms"/"~Rainfall") -- nur bei GENAU einem
+  eindeutigen Treffer übernommen, sonst wird nichts geraten. Für jedes andere Modul/Fabrikat
+  ganz ohne erkennbares Profil (KNX, Netatmo, TFA, Homematic, eigene MQTT-Wetterstation, ...)
+  gibt es keine automatische Erkennung. Stattdessen lassen sich Wind- und Regen-Variable
+  manuell auswählen (beliebige Symcon-Variable, keine Beschränkung auf ein bestimmtes Modul);
+  eine gesetzte manuelle Variable hat Vorrang vor der Instanz-Erkennung. Windgeschwindigkeiten
+  werden dabei immer normiert (m/s wird automatisch zu km/h umgerechnet, erkannt am
+  Variablenprofil) -- eine Variable ganz ohne Profil wird als bereits km/h angenommen.
   KNX-Wetterstationen insbesondere: Symcons KNX-Integration kennt keine vordefinierte
   Gerätevorlage für Wetterstationen, Gruppenadressen werden frei benannt -- eine automatische
-  Verbindung ist hier technisch nicht möglich, nur die manuelle Auswahl funktioniert.
+  Verbindung ist hier nur möglich, wenn der eigenen KNX-Variable manuell ein passendes Profil
+  zugewiesen wurde, sonst funktioniert nur die manuelle Auswahl.
 - Schutzaktionen warten grundsätzlich bis kurz vor dem Gültigkeitsbeginn einer Warnung (siehe
   oben) -- Meldungen ganz ohne Zeitangabe (kommt selten vor) lösen weiterhin sofort aus, da es
   dann nichts zum Abwarten gibt.

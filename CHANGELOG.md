@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.0-beta.27 (2026-09-04)
+
+- Drittes unterstütztes Wetterstations-Modul: elueckel/Symcon_Meteobridge_Meteohub
+  (Meteobridge/Meteohub-Datenlogger, deckt als Aggregator zusätzlich weitere
+  Marken wie DAVIS Vantage Vue ab) -- GUID/Idents "Wind_Gust_KmH"/"Rain_Rate"
+  direkt gegen den echten Quellcode verifiziert, mangels Testgerät nicht live
+  geprüft (wie zuvor die anderen beiden Module).
+- Letzter Rückfall für die automatische Wetterstations-Suche: findet sich
+  keines der drei bekannten Module, wird systemweit nach Variablen mit dem
+  Symcon-Standardprofil ("~WindSpeed.kmh"/"~WindSpeed.ms"/"~Rainfall")
+  gesucht -- deckt z. B. eine KNX-Wetterstation ab, wenn deren Variablen
+  bereits profiliert sind. Nur bei GENAU einem eindeutigen Treffer je
+  Wind/Regen übernommen, sonst wird nichts geraten; ein bereits manuell
+  gesetztes Feld bleibt unangetastet.
+- Wichtiger Korrektheits-Fix: Windgeschwindigkeiten werden jetzt unabhängig
+  vom Quellprofil normiert (m/s wird automatisch mit Faktor 3.6 zu km/h
+  umgerechnet, erkannt am Symcon-Variablenprofil). Live-Fund beim Bau der
+  Meteobridge-Anbindung: Wolbolar/IPSymconWeatherStation liefert seine
+  "Windgust"-Variable durchgängig in m/s, nicht km/h -- ohne Umrechnung
+  hätte ein echter Sturm dort unbemerkt bleiben können (Rohwert stumm
+  gegen den km/h-Schwellwert verglichen). Betrifft auch den manuellen
+  Wind-Auswahlpfad aus beta.26 (z. B. KNX-Windsensoren liefern häufig m/s).
+  Neue Funktion `readWindSpeedKmh()`, dediziert getestet.
+
 ## 0.1.0-beta.26 (2026-09-04)
 
 - Zweites unterstütztes Wetterstations-Modul: Wolbolar/IPSymconWeatherStation

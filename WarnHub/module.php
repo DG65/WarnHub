@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.26';
-    private const NEWS_VERSION = '0.1.0-beta.26';
+    private const DOC_VERSION = '0.1.0-beta.27';
+    private const NEWS_VERSION = '0.1.0-beta.27';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -206,6 +206,15 @@ class WarnHub extends IPSModule
     // Regenrate) statt "Windböe"/"Regenrate" -- deshalb per Ident, nicht per
     // Anzeigename gesucht (siehe findChildVariableByIdent()).
     private const WEATHERSTATION_WU_GUID = '{FBDB2770-0232-43D2-F40B-1240CEAF6CD4}';
+
+    // Drittes unterstütztes Wetterstations-Modul: elueckel/Symcon_Meteobridge_Meteohub
+    // (Meteobridge/Meteohub-Datenlogger, z. B. für DAVIS Vantage Vue und
+    // viele weitere Marken -- ein Aggregator, deckt dadurch mit einem
+    // einzigen Discovery-Pfad zusätzlich mehrere Fabrikate ab). GUID +
+    // Idents direkt gegen den echten Quellcode verifiziert, 04.09.2026 --
+    // ebenfalls kein eigenes Testgerät verfügbar. Ident "Wind_Gust_KmH"
+    // (Profil bereits ~WindSpeed.kmh, keine Umrechnung nötig) und "Rain_Rate".
+    private const METEOBRIDGE_GUID = '{24A6FC41-748D-4843-BEF9-0606DBB95CD3}';
 
     // ISO-3166-1-alpha-2-Ländercode (wie von Nominatim reverse geliefert) ->
     // Länder-Slug der Meteoalarm-Feeds (feeds.meteoalarm.org). Live gegen
@@ -541,10 +550,11 @@ class WarnHub extends IPSModule
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Wetterstation suchen (Froggit/Sainlogic/ELV & Co.)',
+                    'caption' => '🔎 Wetterstation suchen (Froggit/Sainlogic/ELV/Meteobridge & Co.)',
                     'onClick' => 'echo WHUB_DiscoverWetterstation($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
+                ['type' => 'Label', 'caption' => 'Findet Froggit (auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware), Sainlogic/ELV (Wunderground-Protokoll) sowie Meteobridge/Meteohub (deckt als Datenlogger-Aggregator zusätzlich weitere Marken wie DAVIS ab). Findet sich keines davon, wird zuletzt systemweit nach Variablen mit dem passenden Symcon-Standardprofil gesucht (z. B. eine bereits profilierte KNX-Wetterstation) -- nur bei einem eindeutigen Treffer übernommen.'],
+                ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation ohne zugewiesenes Profil, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
                 ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)'],
                 ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)'],
                 ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
@@ -1011,6 +1021,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Warnungs-Historie: bis zu 500 vergangene Warnungen/Entwarnungen über die neue Funktion WHUB_GetHistory() abrufbar -- für eigene Auswertungen/Skripte, auch wenn Push zwischenzeitlich ausgeschaltet war'],
                 ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach im Objektbaum in den Bereich des WebFronts verlinken, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation: zweites unterstütztes Modul (Sainlogic/ELV via Wunderground-Protokoll) sowie zwei manuelle Wind-/Regen-Auswahlfelder für JEDES andere Fabrikat (KNX, Netatmo, TFA, Homematic, ...) -- keine automatische Erkennung möglich, da diese Module/KNX keine einheitliche Benennung verwenden, aber jede beliebige Variable im System lässt sich direkt auswählen'],
+                ['type' => 'Label', 'caption' => '• Eigene Wetterstation: drittes unterstütztes Modul (Meteobridge/Meteohub, deckt als Aggregator zusätzlich weitere Marken wie DAVIS ab) sowie ein letzter Rückfall bei der Suche über das Symcon-Standardprofil (findet z. B. eine bereits profilierte KNX-Wetterstation automatisch). Wichtiger Fix: Windgeschwindigkeiten in m/s (kommt bei manchen Modulen/KNX vor) werden jetzt korrekt in km/h umgerechnet -- vorher hätte eine m/s-Variable stumm gegen den km/h-Schwellwert verglichen werden können'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1591,22 +1602,30 @@ class WarnHub extends IPSModule
     }
 
     /**
-     * Sucht eine Wetterstation im Objektbaum -- unterstützt zwei bekannte
+     * Sucht eine Wetterstation im Objektbaum -- unterstützt drei bekannte
      * Module: zuerst Froggit (Ecowitt-Protokoll, deckt laut Store-Angaben
      * auch als Froggit/Sainlogic/HP1000SE/WH3000SE vertriebene
      * Ecowitt-Hardware ab, Felder "Windböe"/"Regenrate" per Anzeigename),
      * dann Wolbolar/IPSymconWeatherStation (Sainlogic/Froggit/ELV über das
-     * Wunderground-Protokoll, GUID/Idents "Windgust"/"rainin" direkt gegen
-     * den echten Quellcode verifiziert -- mangels eigenem Testgerät wie bei
-     * Telegram/Pushover NICHT live gegengeprüft). Übernimmt eine gefundene
+     * Wunderground-Protokoll, Idents "Windgust"/"rainin"), dann elueckel/
+     * Symcon_Meteobridge_Meteohub (Meteobridge/Meteohub-Datenlogger, deckt
+     * als Aggregator zusätzlich weitere Marken wie DAVIS ab, Idents
+     * "Wind_Gust_KmH"/"Rain_Rate"). Alle drei GUIDs/Idents direkt gegen den
+     * echten Quellcode verifiziert -- mangels eigenem Testgerät wie bei
+     * Telegram/Pushover NICHT live gegengeprüft. Übernimmt eine gefundene
      * Instanz nur, wenn sie tatsächlich beide benötigten Felder besitzt --
      * sonst kein Treffer, statt eine ungeeignete Instanz zu übernehmen.
-     * Andere Fabrikate (KNX, Netatmo, TFA, Homematic, ...) haben keine
-     * einheitliche Benennung -- dafür gibt es die beiden manuellen
-     * Wind-/Regen-Auswahlfelder weiter unten im Formular. Schreibt wie die
-     * übrigen Discover*()-Methoden nur in die offene Formularmaske,
-     * „Übernehmen" bleibt der bewusste letzte Schritt. Dietmars Wunsch
-     * 04.09.2026: "Du darfst die auch gerne selbst finden."
+     * Findet keines der drei Module etwas, folgt als letzter Rückfall eine
+     * systemweite Suche nach dem passenden Standard-Symcon-Profil (siehe
+     * discoverWetterstationVariablesByProfile()) -- deckt z. B. eine
+     * KNX-Wetterstation ab, wenn deren Variablen bereits profiliert sind.
+     * Andere Fabrikate ganz ohne erkennbares Profil (KNX, Netatmo, TFA,
+     * Homematic, ...) haben keine einheitliche Benennung -- dafür gibt es
+     * die beiden manuellen Wind-/Regen-Auswahlfelder weiter unten im
+     * Formular. Schreibt wie die übrigen Discover*()-Methoden nur in die
+     * offene Formularmaske, „Übernehmen" bleibt der bewusste letzte
+     * Schritt. Dietmars Wunsch 04.09.2026: "Du darfst die auch gerne selbst
+     * finden."
      */
     public function DiscoverWetterstation(): string
     {
@@ -1632,7 +1651,67 @@ class WarnHub extends IPSModule
             return sprintf('✅ Wetterstation "%s" gefunden (Sainlogic/ELV, Windgust/rainin vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
-        return 'ℹ️ Keine unterstützte Wetterstations-Instanz gefunden (Froggit/Sainlogic/ELV) -- bei anderen Fabrikaten (z. B. KNX, Netatmo) unten die Wind-/Regen-Variable manuell auswählen.';
+        $candidatesMhs = $this->findInstancesByModuleNameSubstring(self::METEOBRIDGE_GUID, 'meteobridge');
+        foreach (array_keys($candidatesMhs) as $instanceID) {
+            $windGust = $this->findChildVariableByIdent($instanceID, 'Wind_Gust_KmH');
+            $rainRate = $this->findChildVariableByIdent($instanceID, 'Rain_Rate');
+            if ($windGust === null || $rainRate === null) {
+                continue;
+            }
+            $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
+            return sprintf('✅ Wetterstation "%s" gefunden (Meteobridge/Meteohub, Wind_Gust_KmH/Rain_Rate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+        }
+
+        // Letzter Rückfall: kein bekanntes Modul gefunden -- systemweit nach
+        // Variablen mit dem passenden Standard-Symcon-Profil suchen (deckt
+        // z. B. eine KNX-Wetterstation ab, WENN der Nutzer ihren
+        // Gruppenadress-Variablen bereits "~WindSpeed.kmh"/"~WindSpeed.ms"
+        // bzw. "~Rainfall" zugewiesen hat -- KNX selbst vergibt das nicht
+        // automatisch). Nur bei GENAU einem eindeutigen Treffer übernommen,
+        // sonst lieber der Nutzer-Auswahl überlassen als etwas zu raten;
+        // ein bereits von Hand gesetztes Feld wird nie überschrieben.
+        $byProfile = $this->discoverWetterstationVariablesByProfile();
+        $foundWind = $byProfile['wind'] !== null && $this->ReadPropertyInteger('WetterstationWindVariableID') === 0;
+        $foundRegen = $byProfile['regen'] !== null && $this->ReadPropertyInteger('WetterstationRegenVariableID') === 0;
+        if ($foundWind) {
+            $this->UpdateFormField('WetterstationWindVariableID', 'value', $byProfile['wind']);
+        }
+        if ($foundRegen) {
+            $this->UpdateFormField('WetterstationRegenVariableID', 'value', $byProfile['regen']);
+        }
+        if ($foundWind || $foundRegen) {
+            return sprintf(
+                '✅ Kein bekanntes Wetterstations-Modul, aber %s über das Standard-Profil im System gefunden und in die manuelle Auswahl übernommen -- bitte prüfen und unten „Übernehmen" klicken.',
+                $foundWind && $foundRegen ? 'Wind- UND Regen-Variable' : ($foundWind ? 'eine Wind-Variable' : 'eine Regen-Variable')
+            );
+        }
+
+        return 'ℹ️ Keine unterstützte Wetterstations-Instanz gefunden (Froggit/Sainlogic/ELV/Meteobridge) -- bei anderen Fabrikaten (z. B. KNX, Netatmo) unten die Wind-/Regen-Variable manuell auswählen.';
+    }
+
+    /**
+     * @return array{wind:?int,regen:?int}
+     */
+    private function discoverWetterstationVariablesByProfile(): array
+    {
+        $windCandidates = [];
+        $regenCandidates = [];
+        foreach (@IPS_GetVariableList() ?: [] as $variableID) {
+            $var = @IPS_GetVariable($variableID);
+            if (!is_array($var)) {
+                continue;
+            }
+            $profile = (string) $var['VariableProfile'];
+            if ($profile === '~WindSpeed.kmh' || $profile === '~WindSpeed.ms') {
+                $windCandidates[] = $variableID;
+            } elseif ($profile === '~Rainfall') {
+                $regenCandidates[] = $variableID;
+            }
+        }
+        return [
+            'wind' => count($windCandidates) === 1 ? $windCandidates[0] : null,
+            'regen' => count($regenCandidates) === 1 ? $regenCandidates[0] : null,
+        ];
     }
 
     /**
@@ -2223,26 +2302,51 @@ class WarnHub extends IPSModule
      * Ermittelt die Wind- ODER Regen-Quellvariable: eine manuell gesetzte
      * Variable (beliebiges Fabrikat, z. B. KNX) hat Vorrang; sonst wird die
      * konfigurierte Wetterstations-Instanz nach dem Froggit-Anzeigenamen
-     * ODER dem Wolbolar-WeatherStation-Ident durchsucht (siehe
-     * DiscoverWetterstation()). $identSuffix bleibt bei der bisherigen,
-     * instanzbasierten Kennung ("<instanceID>"), damit sich beim Upgrade
-     * NICHTS an bereits gesehenen Warnungs-Identifiern ändert -- nur der neue
-     * manuelle Pfad bekommt einen eigenen, unterscheidbaren Suffix.
+     * ODER einem der bekannten Fremdmodul-Idents durchsucht (siehe
+     * DiscoverWetterstation() -- Wolbolar/WeatherStation, Meteobridge/
+     * Meteohub). $identSuffix bleibt bei der bisherigen, instanzbasierten
+     * Kennung ("<instanceID>"), damit sich beim Upgrade NICHTS an bereits
+     * gesehenen Warnungs-Identifiern ändert -- nur der neue manuelle Pfad
+     * bekommt einen eigenen, unterscheidbaren Suffix.
      *
+     * @param string[] $idents
      * @return array{0:?int,1:string} [VariableID oder null, Identifier-Suffix]
      */
-    private function resolveWetterstationSource(int $manualVarID, int $instanceID, string $exactName, string $ident): array
+    private function resolveWetterstationSource(int $manualVarID, int $instanceID, string $exactName, array $idents): array
     {
         if ($manualVarID > 0 && @IPS_VariableExists($manualVarID)) {
             return [$manualVarID, 'var' . $manualVarID];
         }
         if ($instanceID > 0 && @IPS_InstanceExists($instanceID)) {
-            $found = $this->findChildVariableByExactName($instanceID, $exactName) ?? $this->findChildVariableByIdent($instanceID, $ident);
+            $found = $this->findChildVariableByExactName($instanceID, $exactName);
+            foreach ($idents as $ident) {
+                $found ??= $this->findChildVariableByIdent($instanceID, $ident);
+            }
             if ($found !== null) {
                 return [$found, (string) $instanceID];
             }
         }
         return [null, ''];
+    }
+
+    /**
+     * Liest eine Windgeschwindigkeits-Variable normiert in km/h -- je nach
+     * Quellmodul trägt sie das offizielle Symcon-Systemprofil
+     * "~WindSpeed.kmh" ODER "~WindSpeed.ms" (z. B. nutzt Wolbolar/
+     * IPSymconWeatherStation durchgängig m/s). Ohne diese Umrechnung würde
+     * eine m/s-Variable stumm gegen einen km/h-Schwellwert verglichen --
+     * ein Sturm könnte so unbemerkt bleiben. Live-Fund 04.09.2026 beim Bau
+     * der manuellen Wind-Auswahl (KNX & Co. könnten ebenfalls m/s liefern).
+     */
+    private function readWindSpeedKmh(int $variableID): float
+    {
+        $value = (float) @GetValue($variableID);
+        $var = @IPS_GetVariable($variableID);
+        $profile = is_array($var) ? (string) $var['VariableProfile'] : '';
+        if ($profile === '~WindSpeed.ms') {
+            return $value * 3.6;
+        }
+        return $value;
     }
 
     private function fetchWetterstation(): array
@@ -2252,13 +2356,13 @@ class WarnHub extends IPSModule
             $this->ReadPropertyInteger('WetterstationWindVariableID'),
             $instanceID,
             'Windböe',
-            'Windgust'
+            ['Windgust', 'Wind_Gust_KmH']
         );
         [$regenrateID, $regenIdentSuffix] = $this->resolveWetterstationSource(
             $this->ReadPropertyInteger('WetterstationRegenVariableID'),
             $instanceID,
             'Regenrate',
-            'rainin'
+            ['rainin', 'Rain_Rate']
         );
         if ($windboeID === null && $regenrateID === null) {
             return [];
@@ -2282,7 +2386,7 @@ class WarnHub extends IPSModule
         $circle = ['lat' => $loc['lat'], 'lon' => $loc['lon'], 'radiusKm' => 3.0];
 
         if ($windboeID !== null) {
-            $windboe = (float) @GetValue($windboeID);
+            $windboe = $this->readWindSpeedKmh($windboeID);
             if ($windboe >= $windboeSchwelle) {
                 $out[] = [
                     'identifier' => 'wetterstation-windboe-' . $windIdentSuffix,
