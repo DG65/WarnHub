@@ -1,0 +1,12 @@
+{
+  "id": "{584C68EE-2104-4E89-B0A1-79250761B30D}",
+  "author": "DG65",
+  "name": "WarnHub",
+  "url": "https://github.com/DG65/WarnHub",
+  "compatibility": {
+    "version": "9.0"
+  },
+  "version": "0.1.0-beta.1",
+  "build": 1,
+  "date": 1788595200
+}

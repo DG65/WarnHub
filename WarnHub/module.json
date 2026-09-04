@@ -1,0 +1,14 @@
+{
+  "id": "{97621F9C-C61B-4A7F-9B03-C34BC58B04A6}",
+  "name": "WarnHub",
+  "type": 3,
+  "vendor": "",
+  "aliases": [
+    "Warn- und Alarmmeldungen (Deutschland)"
+  ],
+  "url": "https://github.com/DG65/WarnHub",
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "WHUB"
+}
