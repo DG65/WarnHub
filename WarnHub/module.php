@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.33';
+    private const DOC_VERSION = '0.1.0-beta.34';
     private const NEWS_VERSION = '0.1.0-beta.33';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
@@ -1191,6 +1191,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Gewerbliche Nutzung oder Fragen zur Lizenz? Einfach melden: dietmar@gureth.eu'],
                 ['type' => 'Label', 'caption' => 'Gefällt dir das Modul und du möchtest trotzdem etwas dalassen? Über eine kleine Spende freue ich mich -- völlig freiwillig, keine Gegenleistung nötig.'],
                 ['type' => 'Button', 'caption' => '☕  Spenden via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => 'Gewidmet Sepp Lausch, der zeitgleich an einer eigenen Symcon-Warnmeldungs-Anbindung arbeitet -- der freundschaftliche Wetteifer hat WarnHub sichtlich gutgetan. 😉'],
             ],
         ];
     }

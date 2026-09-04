@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.34 (2026-09-05)
+
+- Danksagung an Sepp Lausch ergänzt (README "Danksagung"-Abschnitt und
+  Formular-Panel "Über dieses Modul") -- Erinnerung an einen freundschaftlichen
+  Wetteifer, da Sepp Lausch zeitgleich an einer eigenen Symcon-Warnmeldungs-
+  Anbindung arbeitet(e). Reiner Text ohne Funktionsänderung, deshalb kein
+  eigener NewsBanner-Eintrag. Dietmars Wunsch 04.09.2026 ("Machen wir C.").
+
 ## 0.1.0-beta.33 (2026-09-05)
 
 - Eigene Wetterstation sendet jetzt auch eine echte "✅ Entwarnung"-Push,

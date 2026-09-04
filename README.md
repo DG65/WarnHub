@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.33-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.34-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -290,3 +290,8 @@ Ohne echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
 PolyForm Noncommercial 1.0.0 -- private/nicht-kommerzielle Nutzung ist frei, gewerbliche
 Nutzung erfordert eine gesonderte Lizenz vom Rechteinhaber (DG65). Vollständiger Text:
 [LICENSE](LICENSE). Spenden sind willkommen: [paypal.me/DietmarGureth](https://paypal.me/DietmarGureth).
+
+## Danksagung
+
+Gewidmet Sepp Lausch, der zeitgleich an einer eigenen Symcon-Warnmeldungs-Anbindung
+arbeitet -- der freundschaftliche Wetteifer hat WarnHub sichtlich gutgetan. 😉
