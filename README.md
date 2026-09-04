@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.28-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.29-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -82,7 +82,9 @@ Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch (
 aktivierte Standorte an -- kein manuelles Heraussuchen der Variablen-IDs nötig. Über einen
 "Push nur an"-Namensfilter lässt sich außerdem festlegen, dass ein Standort nur bestimmte
 Push-Ziele benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig
-genutzten Standorten).
+genutzten Standorten). Die Benachrichtigung selbst lässt sich für eine Weile pausieren
+("Ruhephase", z. B. Urlaub oder Nachtruhe) -- Erkennung und Schutzaktionen laufen dabei
+unverändert weiter.
 
 Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen **aktivierten**
 Push-Zielen -- WebFront- und Kachel-Visualisierung-Instanzen sowie, falls installiert,
@@ -157,6 +159,12 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
 - `WHUB_GetHistory($id, $limit = 100): string` -- JSON-Liste der zuletzt gepushten
   Warnungen UND Entwarnungen (newest first, bis zu 500 Einträge gespeichert, unabhängig
   davon, ob Push gerade aktiv war) -- für eigene Auswertungen/Skripte.
+- `WHUB_SnoozePush($id, $minuten): string` -- pausiert die Push-Benachrichtigung für die
+  angegebene Dauer (z. B. Urlaub, Feier, Nachtruhe). Erkennung, Warnungs-Historie und
+  Schutzaktionen laufen unverändert weiter -- nur die Zustellung selbst pausiert.
+  `WHUB_TestPush()` bleibt davon ausgenommen. Im Formular als Schaltflächen (1/4/24 Std.)
+  verfügbar.
+- `WHUB_CancelSnooze($id): string` -- hebt eine laufende Push-Pause vorzeitig auf.
 
 ## IPSView & eigene Dashboards
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta.29 (2026-09-04)
+
+- Push-Ruhephase (Snooze): `WHUB_SnoozePush($id, $minuten)`/`WHUB_CancelSnooze($id)`
+  pausieren die Push-Zustellung für eine wählbare Dauer (Formular: 1/4/24
+  Std.-Schaltflächen) -- z. B. Urlaub, Feier, Nachtruhe. Pausiert bewusst
+  NUR die Benachrichtigung: Erkennung, Warnungs-Historie und
+  Schutzaktionen laufen unverändert weiter (ein Sturm fährt die Markise
+  im Urlaub trotzdem ein, nur das Handy bleibt still). `WHUB_TestPush()`
+  ist bewusst ausgenommen -- ein expliziter manueller Test soll immer
+  ankommen, auch während einer Pause. Neue Statuszeile im Formular sowie
+  ein 🔕-Hinweis in StatusText und beiden WebFront-Kacheln, solange eine
+  Pause aktiv ist. Dietmars Wunsch 04.09.2026 ("Snooze/Ruhephase" als von
+  mir vorgeschlagene, nicht sicherheitsrelevante Ergänzung).
+
 ## 0.1.0-beta.28 (2026-09-04)
 
 - Windböe-Schwellwert der eigenen Wetterstation: drei konfigurierbare

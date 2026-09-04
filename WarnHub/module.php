@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.28';
-    private const NEWS_VERSION = '0.1.0-beta.28';
+    private const DOC_VERSION = '0.1.0-beta.29';
+    private const NEWS_VERSION = '0.1.0-beta.29';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -349,6 +349,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeInteger('LastPollTs', 0);
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
         $this->RegisterAttributeString('WarnHistory', '[]');
+        $this->RegisterAttributeInteger('PushSnoozeUntilTs', 0);
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
@@ -416,12 +417,16 @@ class WarnHub extends IPSModule
             : (count($active) > 0
                 ? sprintf('%d aktive Warnung(en)', count($active))
                 : 'Keine aktive Warnung.');
+        $snoozed = $this->isPushSnoozed();
+        if ($snoozed) {
+            $statusText .= sprintf(' 🔕 Push pausiert bis %s Uhr.', date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
+        }
         @$this->SetValue('AktiveWarnungen', count($active));
         @$this->SetValue('HoechsterSchweregrad', $highest);
         @$this->SetValue('StatusText', $statusText);
         @$this->SetValue('LetztePruefung', $lastTs);
-        @$this->SetValue('KachelStatus', $this->renderKachelStatus($active, $lastTs));
-        @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs));
+        @$this->SetValue('KachelStatus', $this->renderKachelStatus($active, $lastTs, $snoozed));
+        @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs, $snoozed));
     }
 
     // ----------------------------------------------------------------
@@ -626,6 +631,21 @@ class WarnHub extends IPSModule
                         ]]],
                         ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '80px', 'edit' => ['type' => 'CheckBox']],
+                    ],
+                ],
+                ['type' => 'Label', 'caption' => 'Ruhephase: pausiert NUR die Benachrichtigung selbst -- Erkennung und Schutzaktionen laufen unverändert weiter (z. B. im Urlaub fährt die Markise bei Sturm trotzdem ein, nur das Handy bleibt still). Ein Klick auf "🧪 Testbenachrichtigung senden" oben kommt auch während einer Pause an.'],
+                [
+                    'type' => 'Label',
+                    'name' => 'SnoozeStatusLabel',
+                    'caption' => $this->snoozeStatusLine(),
+                ],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Button', 'caption' => '1 Std. pausieren', 'onClick' => 'echo WHUB_SnoozePush($id, 60);'],
+                        ['type' => 'Button', 'caption' => '4 Std. pausieren', 'onClick' => 'echo WHUB_SnoozePush($id, 240);'],
+                        ['type' => 'Button', 'caption' => '24 Std. pausieren', 'onClick' => 'echo WHUB_SnoozePush($id, 1440);'],
+                        ['type' => 'Button', 'caption' => '🔔 Pause aufheben', 'onClick' => 'echo WHUB_CancelSnooze($id);'],
                     ],
                 ],
             ],
@@ -967,6 +987,19 @@ class WarnHub extends IPSModule
         return sprintf('✅ %d von %d gefundenen Push-Ziel(en) aktiv -- Push-Benachrichtigungen gehen dorthin.', $active, count($rows));
     }
 
+    private function isPushSnoozed(): bool
+    {
+        return $this->ReadAttributeInteger('PushSnoozeUntilTs') > time();
+    }
+
+    private function snoozeStatusLine(): string
+    {
+        if (!$this->isPushSnoozed()) {
+            return 'ℹ️ Push-Benachrichtigung läuft normal (nicht pausiert).';
+        }
+        return sprintf('🔕 Push-Benachrichtigung pausiert bis %s Uhr -- Erkennung und Schutzaktionen laufen unverändert weiter, nur die Benachrichtigung selbst ist stumm.', date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
+    }
+
     private function getPollStatusLine(): string
     {
         $lastTs = $this->ReadAttributeInteger('LastPollTs');
@@ -1042,6 +1075,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation: zweites unterstütztes Modul (Sainlogic/ELV via Wunderground-Protokoll) sowie zwei manuelle Wind-/Regen-Auswahlfelder für JEDES andere Fabrikat (KNX, Netatmo, TFA, Homematic, ...) -- keine automatische Erkennung möglich, da diese Module/KNX keine einheitliche Benennung verwenden, aber jede beliebige Variable im System lässt sich direkt auswählen'],
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation: drittes unterstütztes Modul (Meteobridge/Meteohub, deckt als Aggregator zusätzlich weitere Marken wie DAVIS ab) sowie ein letzter Rückfall bei der Suche über das Symcon-Standardprofil (findet z. B. eine bereits profilierte KNX-Wetterstation automatisch). Wichtiger Fix: Windgeschwindigkeiten in m/s (kommt bei manchen Modulen/KNX vor) werden jetzt korrekt in km/h umgerechnet -- vorher hätte eine m/s-Variable stumm gegen den km/h-Schwellwert verglichen werden können'],
                 ['type' => 'Label', 'caption' => '• Windböe: drei Schwellwerte (Moderate/Severe/Extreme, Standard 40/65/90 km/h, an DWDs eigene Warnstufen angelehnt) statt einem pauschalen Wert -- eine Markise ist windempfindlicher als ein Raffstore. Jede Schutzaktions-Zeile wählt über ihr bestehendes "Ab Schweregrad"-Feld selbst, ab welcher Stufe sie reagiert; neu ins Popup "Welchen Schwellwert wähle ich?" im Datenquellen-Panel'],
+                ['type' => 'Label', 'caption' => '• Push-Ruhephase: Benachrichtigung für 1/4/24 Std. pausierbar (z. B. Urlaub, Feier, Nachtruhe) -- Erkennung, Warnungs-Historie und Schutzaktionen laufen unverändert weiter, nur das Handy bleibt still. Ein manueller Testklick auf "Testbenachrichtigung senden" kommt trotzdem an'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2965,6 +2999,36 @@ class WarnHub extends IPSModule
     }
 
     /**
+     * Pausiert NUR die Push-Zustellung für die angegebene Dauer (z. B.
+     * Urlaub, Feier, Nachtruhe) -- Erkennung, Warnungs-Historie und
+     * Schutzaktionen laufen unverändert weiter, ein Sturm wird also
+     * weiterhin z. B. die Markise einfahren, nur das Handy bleibt still.
+     * WHUB_TestPush() bleibt bewusst ausgenommen (ein expliziter manueller
+     * Test soll immer ankommen, auch während einer Pause). Dietmars Wunsch
+     * 04.09.2026 ("Snooze/Ruhephase").
+     */
+    public function SnoozePush(int $minuten): string
+    {
+        if ($minuten <= 0) {
+            return '⚠️ Dauer muss größer als 0 sein.';
+        }
+        $bis = time() + $minuten * 60;
+        $this->WriteAttributeInteger('PushSnoozeUntilTs', $bis);
+        @$this->UpdateFormField('SnoozeStatusLabel', 'caption', $this->snoozeStatusLine());
+        return sprintf('🔕 Push-Benachrichtigung pausiert bis %s Uhr.', date('d.m. H:i', $bis));
+    }
+
+    public function CancelSnooze(): string
+    {
+        if (!$this->isPushSnoozed()) {
+            return 'ℹ️ Push-Benachrichtigung war nicht pausiert.';
+        }
+        $this->WriteAttributeInteger('PushSnoozeUntilTs', 0);
+        @$this->UpdateFormField('SnoozeStatusLabel', 'caption', $this->snoozeStatusLine());
+        return '🔔 Pause aufgehoben -- Push-Benachrichtigung läuft wieder normal.';
+    }
+
+    /**
      * Löst zu Testzwecken alle AKTIVEN Schutzaktionen aus, die für den
      * angegebenen Alarmtyp gelten (angekreuzte Kategorie ODER gar keine
      * angekreuzt, siehe CATEGORY_FIELDS) -- SOFORT und unabhängig von einer
@@ -3003,7 +3067,11 @@ class WarnHub extends IPSModule
         $fired = json_decode($this->ReadAttributeString('FiredActions'), true) ?: [];
         $actions = array_filter($this->decodeSchutzaktionen(), fn ($a) => $a['Aktiv']);
         $pushSound = $this->ReadPropertyString('PushSound');
-        $pushAktiv = $this->ReadPropertyBoolean('PushAktiv');
+        // Snooze pausiert NUR die tatsächliche Zustellung -- Erkennung,
+        // Warnungs-Historie und Schutzaktionen laufen unverändert weiter
+        // (Dietmars Wunsch 04.09.2026: z. B. im Urlaub weiterhin
+        // automatisch schützen, nur nicht ständig benachrichtigt werden).
+        $pushAktiv = $this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed();
 
         $stillPresent = [];
         $active = [];
@@ -3329,7 +3397,7 @@ CSS;
      * ("eine oder auch mehrere Kacheln"). Ohne echtes WebFront nicht selbst
      * gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis.
      */
-    private function renderKachelStatus(array $active, int $lastTs): string
+    private function renderKachelStatus(array $active, int $lastTs, bool $snoozed = false): string
     {
         $count = count($active);
         if ($count === 0) {
@@ -3343,6 +3411,9 @@ CSS;
             $title = $count === 1 ? '1 aktive Warnung' : $count . ' aktive Warnungen';
         }
         $sub = htmlspecialchars($this->relativeMinutesText($lastTs));
+        if ($snoozed) {
+            $sub .= ' · 🔕 Push pausiert';
+        }
 
         return $this->tileStyleBlock() . <<<HTML
 <div class="whub-status">
@@ -3364,9 +3435,12 @@ HTML;
      * darüber ein Hinweis "+N weitere". Ohne echtes WebFront nicht selbst
      * gegenprüfbar -- Rückmeldungen willkommen.
      */
-    private function renderKachelUebersicht(array $active, int $lastTs): string
+    private function renderKachelUebersicht(array $active, int $lastTs, bool $snoozed = false): string
     {
         $time = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr' : '--:--';
+        if ($snoozed) {
+            $time = '🔕 ' . $time;
+        }
         $body = '';
 
         if (count($active) === 0) {
