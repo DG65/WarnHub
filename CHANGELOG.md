@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.0-beta.2 (2026-09-04)
+
+- Formular-Reihenfolge korrigiert: "Wozu dieses Modul?" → "Neu in Version X.Y" →
+  "Dokumentation & Hilfe" stehen jetzt VOR den Fachpanels (Standorte/Datenquellen/
+  Benachrichtigung/Schutzaktionen), wie in der übrigen DG65-Modulfamilie üblich. Die
+  Prüfung-&-Status-Anzeige ("Jetzt prüfen") ist jetzt ein eigenes, erklärtes Panel ganz am
+  Ende der Konfiguration (nach den Fachpanels, vor Feedback/Über dieses Modul).
+- Standort zusätzlich per Karte auswählbar (`SelectLocation`-Formularelement).
+- WebFront-Erkennung überarbeitet: löst die WebFront-Modul-GUID jetzt zur Laufzeit über den
+  Modulnamen auf (robuster als eine fest hinterlegte GUID) und zeigt gefundene Instanzen als
+  bearbeitbare, standardmäßig aktivierte Liste -- einzelne Instanzen lassen sich gezielt
+  abwählen, eine erneute Suche ergänzt nur neue Funde.
+- Schutzaktionen: neuer Objektbaum-Suchlauf findet automatisch Instanzen/Variablen mit
+  "Raffstore"/"Jalousie"/"Garage"/"Sirene" im Namen und schlägt sie voraktiviert vor
+  (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- ebenfalls per Abwahl statt
+  manueller Neuanlage bedienbar.
+
 ## 0.1.0-beta.1 (2026-09-04)
 
 - Erste Version: Warn- und Alarmmeldungen für Deutschland über NINA-Aggregation

@@ -123,10 +123,19 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.1';
+    private const DOC_VERSION = '0.1.0-beta.2';
+    private const NEWS_VERSION = '0.1.0-beta.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
+
+    // Stichwörter für die automatische Schutzaktionen-Suche im Objektbaum
+    // (Instanz-/Variablenname enthält eins der Wörter -> Aktionstyp-Vorschlag).
+    private const DISCOVERY_KEYWORDS = [
+        'raffstore' => ['raffstore', 'jalousie'],
+        'garage' => ['garage', 'garagentor'],
+        'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn'],
+    ];
 
     private const SEVERITY_RANK = ['Unknown' => 0, 'Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
     private const SEVERITY_ICON = ['Unknown' => 'ℹ️', 'Minor' => 'ℹ️', 'Moderate' => '⚠️', 'Severe' => '🚨', 'Extreme' => '🆘'];
@@ -157,6 +166,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
         $this->RegisterPropertyString('Schutzaktionen', '[]');
+        $this->RegisterPropertyString('WebFronts', '[]');
 
         $this->RegisterTimer('PollTimer', 0, 'WHUB_Poll($_IPS[\'TARGET\']);');
         $this->RegisterTimer('SirenOffTimer', 0, 'WHUB_CheckSirenOff($_IPS[\'TARGET\']);');
@@ -167,6 +177,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeInteger('LastPollTs', 0);
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
+        $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeBoolean('ForumHintGone', false);
     }
 
@@ -194,20 +205,28 @@ class WarnHub extends IPSModule
     {
         $form = ['elements' => [], 'actions' => [], 'status' => []];
 
+        // Reihenfolge nach Verbund-Konvention: 1. Wozu, 2. Neu in Version X.Y,
+        // 3. Dokumentation & Hilfe -- ERST DANACH die Fachpanels.
         $intro = $this->PurposeIntro();
         if ($intro !== null) {
             $form['elements'][] = $intro;
         }
-
+        $news = $this->NewsBanner();
+        if ($news !== null) {
+            $form['elements'][] = $news;
+        }
         $form['elements'][] = [
-            'type' => 'Label',
-            'name' => 'PollStatusLabel',
-            'caption' => $this->getPollStatusLine(),
-        ];
-        $form['elements'][] = [
-            'type' => 'Button',
-            'caption' => '🔎 Jetzt prüfen',
-            'onClick' => 'echo WHUB_Poll($id);',
+            'type' => 'ExpansionPanel',
+            'caption' => '📖  Dokumentation & Hilfe',
+            'expanded' => false,
+            'items' => [
+                ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
+                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei) und meldet nur, was innerhalb des selbst definierten Umkreises liegt.'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de) und optional die direkten DWD-Wetterwarnungen (opendata.dwd.de).'],
+                ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
+                ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei WebFronts/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+            ],
         ];
 
         $form['elements'][] = [
@@ -245,6 +264,12 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_LookupCoordinates($id, $GeoLookupOrt);',
                 ],
                 ['type' => 'Label', 'caption' => 'Ermittelt Breiten-/Längengrad über OpenStreetMap Nominatim (kostenlos, kein Zugangsschlüssel) und zeigt sie zum Übertragen in die Tabelle oben an -- schreibt nichts automatisch in eine Zeile.'],
+                ['type' => 'SelectLocation', 'name' => 'KartenStandort', 'caption' => 'Oder auf der Karte auswählen'],
+                [
+                    'type' => 'Button',
+                    'caption' => '📍 Kartenpunkt als Standort übernehmen',
+                    'onClick' => 'echo WHUB_AddStandortFromMap($id, $KartenStandort);',
+                ],
             ],
         ];
 
@@ -264,9 +289,27 @@ class WarnHub extends IPSModule
             'caption' => '🔔  Benachrichtigung',
             'expanded' => true,
             'items' => [
-                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an alle WebFront-Instanzen (auch Handy)'],
+                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte WebFront-Instanzen (auch Handy)'],
                 ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton', 'options' => $this->soundOptions()],
+                [
+                    'type' => 'Button',
+                    'caption' => '🔎 WebFront-Instanzen suchen',
+                    'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
+                ],
                 ['type' => 'Label', 'caption' => $this->webfrontStatusLine()],
+                ['type' => 'Label', 'caption' => 'Gefundene WebFront-Instanzen sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Instanzen hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
+                [
+                    'type' => 'List',
+                    'name' => 'WebFronts',
+                    'rowCount' => 4,
+                    'add' => false,
+                    'delete' => true,
+                    'columns' => [
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '260px'],
+                        ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px'],
+                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '80px', 'edit' => ['type' => 'CheckBox']],
+                    ],
+                ],
             ],
         ];
 
@@ -288,6 +331,12 @@ class WarnHub extends IPSModule
                         ],
                     ],
                 ],
+                [
+                    'type' => 'Button',
+                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Garage/Sirene durchsuchen',
+                    'onClick' => 'echo WHUB_DiscoverSchutzaktionen($id);',
+                ],
+                ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
                 [
                     'type' => 'List',
                     'name' => 'Schutzaktionen',
@@ -312,14 +361,20 @@ class WarnHub extends IPSModule
 
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
-            'caption' => '📖  Dokumentation & Hilfe',
-            'expanded' => false,
+            'caption' => '🔎  Prüfung & Status',
+            'expanded' => true,
             'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
-                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei) und meldet nur, was innerhalb des selbst definierten Umkreises liegt.'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de) und optional die direkten DWD-Wetterwarnungen (opendata.dwd.de).'],
-                ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
-                ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
+                ['type' => 'Label', 'caption' => 'WarnHub fragt die oben konfigurierten Datenquellen automatisch im eingestellten Abfragetakt ab und gleicht sie gegen die Standorte/Schutzaktionen weiter oben ab. Der Knopf unten löst das Ganze zusätzlich sofort aus (z. B. um die Einrichtung direkt zu testen), ohne auf den nächsten automatischen Durchlauf zu warten.'],
+                [
+                    'type' => 'Label',
+                    'name' => 'PollStatusLabel',
+                    'caption' => $this->getPollStatusLine(),
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => '🔎 Jetzt prüfen',
+                    'onClick' => 'echo WHUB_Poll($id);',
+                ],
             ],
         ];
 
@@ -372,13 +427,94 @@ class WarnHub extends IPSModule
         return array_map(fn ($s) => ['caption' => $s, 'value' => $s], $sounds);
     }
 
+    /**
+     * Löst die WebFront-Modul-GUID zur LAUFZEIT über den Modulnamen auf, statt
+     * sich allein auf eine hart hinterlegte GUID zu verlassen. Hintergrund
+     * (Praxis-Fund 04.09.2026): die aus dem offiziellen Symcon-Kernmodul
+     * "Benachrichtigung" entnommene GUID {3565B1F2-...} lieferte auf einer
+     * echten Installation trotz vorhandener, aktiv genutzter WebFront-Instanz
+     * null Treffer -- Ursache nicht abschließend geklärt (evtl. Versions-
+     * unterschied), aber die Namenssuche ist robuster als jede feste GUID und
+     * bleibt auch bei einer künftigen Symcon-Änderung korrekt.
+     */
+    private function resolveWebFrontModuleGuid(): ?string
+    {
+        foreach (@IPS_GetModuleList() ?: [] as $moduleID) {
+            $m = @IPS_GetModule($moduleID);
+            if (is_array($m) && strcasecmp((string) ($m['ModuleName'] ?? ''), 'WebFront') === 0) {
+                return $moduleID;
+            }
+        }
+        // Fallback auf die verifizierte, aber ggf. versionsabhängige GUID.
+        if (count(@IPS_GetInstanceListByModuleID(WHUB_WEBFRONT_GUID) ?: []) > 0) {
+            return WHUB_WEBFRONT_GUID;
+        }
+        return null;
+    }
+
+    /** @return array<int,array{InstanceID:int,Name:string,Aktiv:bool}> */
+    private function decodeWebFronts(): array
+    {
+        $raw = json_decode($this->ReadPropertyString('WebFronts'), true);
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $w) {
+            $out[] = [
+                'InstanceID' => (int) ($w['InstanceID'] ?? 0),
+                'Name' => (string) ($w['Name'] ?? ''),
+                'Aktiv' => (bool) ($w['Aktiv'] ?? true),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Sucht WebFront-Instanzen und ergänzt NUR neu gefundene (per
+     * InstanceID abgeglichen) -- bestehende Zeilen samt eigener
+     * Aktiv/Inaktiv-Entscheidung bleiben unangetastet. Schreibt wie
+     * AddStandortFromSystemLocation() nur in die offene Formularmaske,
+     * "Übernehmen" bleibt der bewusste letzte Schritt.
+     */
+    public function DiscoverWebFronts(): string
+    {
+        $guid = $this->resolveWebFrontModuleGuid();
+        if ($guid === null) {
+            return '⚠️ Keine WebFront-Instanz im Objektbaum gefunden.';
+        }
+        $found = @IPS_GetInstanceListByModuleID($guid) ?: [];
+        $rows = $this->decodeWebFronts();
+        $known = array_column($rows, null, 'InstanceID');
+        $added = 0;
+        foreach ($found as $instanceID) {
+            if (isset($known[$instanceID])) {
+                continue;
+            }
+            $rows[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Aktiv' => true];
+            $added++;
+        }
+        $this->UpdateFormField('WebFronts', 'values', json_encode($rows));
+        if ($added === 0 && count($rows) > 0) {
+            return sprintf('ℹ️ Keine neuen WebFront-Instanzen gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
+        }
+        if ($added === 0) {
+            return '⚠️ Keine WebFront-Instanz im Objektbaum gefunden.';
+        }
+        return sprintf('✅ %d neue WebFront-Instanz(en) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
+    }
+
     private function webfrontStatusLine(): string
     {
-        $count = count(@IPS_GetInstanceListByModuleID(WHUB_WEBFRONT_GUID) ?: []);
-        if ($count === 0) {
-            return 'ℹ️ Keine WebFront-Instanz gefunden -- Push-Benachrichtigungen können erst ankommen, sobald mindestens eine WebFront-Instanz (Konsole > Instanzen) existiert.';
+        $rows = $this->decodeWebFronts();
+        $active = count(array_filter($rows, fn ($w) => $w['Aktiv']));
+        if (count($rows) === 0) {
+            return 'ℹ️ Noch keine WebFront-Instanz gesucht -- oben "🔎 WebFront-Instanzen suchen" klicken.';
         }
-        return sprintf('✅ %d WebFront-Instanz(en) gefunden -- Push-Benachrichtigungen gehen automatisch an alle.', $count);
+        if ($active === 0) {
+            return sprintf('⚠️ %d WebFront-Instanz(en) gefunden, aber keine aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.', count($rows));
+        }
+        return sprintf('✅ %d von %d gefundenen WebFront-Instanz(en) aktiv -- Push-Benachrichtigungen gehen dorthin.', $active, count($rows));
     }
 
     private function getPollStatusLine(): string
@@ -424,6 +560,31 @@ class WarnHub extends IPSModule
     {
         $this->WriteAttributeBoolean('PurposeIntroGone', true);
         $this->UpdateFormField('PurposeIntroPanel', 'visible', false);
+    }
+
+    private function NewsBanner(): ?array
+    {
+        if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
+            return null;
+        }
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'expanded' => true,
+            'caption' => '🆕  Neu in Version ' . self::NEWS_VERSION,
+            'items' => [
+                ['type' => 'Label', 'caption' => 'Erste Version von WarnHub:'],
+                ['type' => 'Label', 'caption' => '• Warn- und Alarmmeldungen für Deutschland (NINA-Aggregation + optionale direkte DWD-Wetterwarnungen), geometrisch auf den eigenen Umkreis gefiltert'],
+                ['type' => 'Label', 'caption' => '• Beliebig viele Standorte, wahlweise aus Symcons eigenem Standort, Adress-/PLZ-Suche oder Karte übernommen'],
+                ['type' => 'Label', 'caption' => '• Automatische Push-Benachrichtigung an gefundene, aktivierte WebFront-Instanzen'],
+                ['type' => 'Label', 'caption' => '• Optionale Schutzaktionen (Raffstore/Rollladen, Garagentor, akustischer Alarm, eigenes Skript), inkl. automatischer Objektbaum-Suche nach passenden Geräten'],
+                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
+            ],
+        ];
+    }
+
+    public function AckNews()
+    {
+        $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
+        $this->UpdateFormField('NewsPanel', 'visible', false);
     }
 
     private function ForumHint(): ?array
@@ -515,6 +676,119 @@ class WarnHub extends IPSModule
         return $out;
     }
 
+    private function collectObjectIDsRecursive(int $rootID = 0): array
+    {
+        $out = [];
+        foreach (@IPS_GetChildrenIDs($rootID) ?: [] as $id) {
+            $out[] = $id;
+            $out = array_merge($out, $this->collectObjectIDsRecursive($id));
+        }
+        return $out;
+    }
+
+    private function isActionableVariable(int $variableID): bool
+    {
+        $v = @IPS_GetVariable($variableID);
+        return is_array($v) && (int) ($v['VariableAction'] ?? 0) !== 0;
+    }
+
+    /** Erste schaltbare (mit Aktion versehene) Kind-Variable einer gematchten Instanz. */
+    private function findActionableChildVariable(int $instanceID): ?int
+    {
+        foreach (@IPS_GetChildrenIDs($instanceID) ?: [] as $childID) {
+            $obj = @IPS_GetObject($childID);
+            if (is_array($obj) && (int) $obj['ObjectType'] === 2 && $this->isActionableVariable($childID)) {
+                return $childID;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Durchsucht den GESAMTEN Objektbaum nach Instanzen/Variablen, deren Name
+     * "Raffstore"/"Jalousie" (Typ raffstore), "Garage" (Typ garage) oder
+     * "Sirene"/"Hupe"/"Buzzer"/"Signalhorn" (Typ sirene) enthält, und ergänzt
+     * für jeden NEUEN Treffer (nach Ziel-Variable dedupliziert) eine
+     * VORAKTIVIERTE Schutzaktions-Zeile -- explizit auf Dietmars Wunsch
+     * (04.09.2026): "gleich mitaufnehmen und aktivieren, deaktivieren geht
+     * immer". Bestehende Zeilen (inkl. eigener Aktiv/Inaktiv-Entscheidung)
+     * bleiben unangetastet. Schreibt wie DiscoverWebFronts() nur in die
+     * offene Formularmaske.
+     */
+    public function DiscoverSchutzaktionen(): string
+    {
+        $rows = $this->decodeSchutzaktionen();
+        $knownVarIDs = array_column($rows, 'ZielVariableID');
+        $added = 0;
+
+        $typeDefaults = [
+            'raffstore' => ['Kategorie' => 'sturm', 'MinSeverity' => 3, 'AutoOff' => 0],
+            'garage' => ['Kategorie' => 'alle', 'MinSeverity' => 3, 'AutoOff' => 0],
+            'sirene' => ['Kategorie' => 'alle', 'MinSeverity' => 4, 'AutoOff' => 60],
+        ];
+
+        foreach ($this->collectObjectIDsRecursive(0) as $id) {
+            $obj = @IPS_GetObject($id);
+            if (!is_array($obj)) {
+                continue;
+            }
+            $type = (int) $obj['ObjectType'];
+            if ($type !== 1 && $type !== 2) {
+                continue; // nur Instanzen (1) und Variablen (2)
+            }
+            $haystack = mb_strtolower((string) $obj['ObjectName']);
+
+            foreach (self::DISCOVERY_KEYWORDS as $actionType => $keywords) {
+                $matched = false;
+                foreach ($keywords as $kw) {
+                    if (mb_strpos($haystack, $kw) !== false) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if (!$matched) {
+                    continue;
+                }
+
+                $variableID = null;
+                if ($type === 2 && $this->isActionableVariable($id)) {
+                    $variableID = $id;
+                } elseif ($type === 1) {
+                    $variableID = $this->findActionableChildVariable($id);
+                }
+                if ($variableID === null || in_array($variableID, $knownVarIDs, true)) {
+                    continue 2; // nächstes Objekt, nicht mit einer anderen Stichwortgruppe erneut versuchen
+                }
+
+                $defaults = $typeDefaults[$actionType];
+                $rows[] = [
+                    'Name' => (string) $obj['ObjectName'],
+                    'Aktiv' => true,
+                    'Typ' => $actionType,
+                    'Kategorie' => $defaults['Kategorie'],
+                    'MinSeverity' => $defaults['MinSeverity'],
+                    'StandortFilter' => '',
+                    'ZielVariableID' => $variableID,
+                    'ZielWert' => 0.0,
+                    'ZielSkriptID' => 0,
+                    'AutoOffSekunden' => $defaults['AutoOff'],
+                ];
+                $knownVarIDs[] = $variableID;
+                $added++;
+                continue 2;
+            }
+        }
+
+        $this->UpdateFormField('Schutzaktionen', 'values', json_encode($rows));
+        if ($added === 0) {
+            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Garage/Sirene im Objektbaum gefunden.';
+        }
+        return sprintf(
+            '✅ %d neue Schutzaktion(en) gefunden und aktiviert (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken.',
+            $added
+        );
+    }
+
     /** Einmalige Abfrage, kein Formular-Feld wird automatisch befüllt -- siehe SUITE.md-Muster "nur in die offene Maske, Übernehmen bleibt bewusster letzter Schritt" (hier: gar nicht erst schreiben, nur anzeigen). */
     public function LookupCoordinates(string $Ort): string
     {
@@ -587,6 +861,32 @@ class WarnHub extends IPSModule
         ];
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($loc['lat'], 5), round($loc['lon'], 5));
+    }
+
+    /** $KartenStandort kommt vom 'SelectLocation'-Formularfeld -- laut SDK-Doku ein JSON-Objekt {latitude, longitude}, hier defensiv sowohl als String als auch als bereits dekodiertes Array akzeptiert. */
+    public function AddStandortFromMap($KartenStandort): string
+    {
+        $loc = is_array($KartenStandort) ? $KartenStandort : json_decode((string) $KartenStandort, true);
+        if (!is_array($loc) || !isset($loc['latitude'], $loc['longitude'])) {
+            return '⚠️ Kein Kartenpunkt ausgewählt.';
+        }
+        $lat = (float) $loc['latitude'];
+        $lon = (float) $loc['longitude'];
+        if ($lat === 0.0 && $lon === 0.0) {
+            return '⚠️ Bitte zuerst einen Punkt auf der Karte auswählen.';
+        }
+        $rows = $this->decodeStandorte();
+        $rows[] = [
+            'Name' => 'Neuer Standort (Karte)',
+            'Ort' => '',
+            'Lat' => round($lat, 5),
+            'Lon' => round($lon, 5),
+            'RadiusKm' => 10.0,
+            'MinSeverity' => 2,
+            'Aktiv' => true,
+        ];
+        $this->UpdateFormField('Standorte', 'values', json_encode($rows));
+        return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($lat, 5), round($lon, 5));
     }
 
     // ----------------------------------------------------------------
@@ -1159,20 +1459,23 @@ class WarnHub extends IPSModule
         return mb_substr($text, 0, 256);
     }
 
+    /** Pusht an alle in der (nutzerbearbeitbaren) WebFronts-Liste aktivierten Instanzen -- siehe DiscoverWebFronts(). */
     private function pushToAllWebfronts(string $title, string $text, string $sound): int
     {
         if (!function_exists('WFC_PushNotification')) {
             $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
             return 0;
         }
-        $instances = @IPS_GetInstanceListByModuleID(WHUB_WEBFRONT_GUID) ?: [];
         $sent = 0;
-        foreach ($instances as $instanceID) {
-            $ok = @WFC_PushNotification($instanceID, $title, $text, $sound, 0);
+        foreach ($this->decodeWebFronts() as $w) {
+            if (!$w['Aktiv']) {
+                continue;
+            }
+            $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, 0);
             if ($ok) {
                 $sent++;
             } else {
-                $this->LogError('pushToAllWebfronts', 'Push an WebFront-Instanz ' . $instanceID . ' fehlgeschlagen.');
+                $this->LogError('pushToAllWebfronts', 'Push an WebFront-Instanz ' . $w['InstanceID'] . ' fehlgeschlagen.');
             }
         }
         return $sent;
