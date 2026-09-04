@@ -12,6 +12,24 @@
  *   php .tools/test-live-fetch.php
  */
 
+// Steuerbare Stubs fuer die Standort-Herkunfts-Tests (Block "Symcon-Systemstandort" unten).
+$GLOBALS['whub_test_instancesByModule'] = [];
+$GLOBALS['whub_test_properties'] = [];
+$GLOBALS['whub_test_kernelVersion'] = 9.0;
+
+function IPS_GetInstanceListByModuleID(string $guid): array
+{
+    return $GLOBALS['whub_test_instancesByModule'][$guid] ?? [];
+}
+function IPS_GetKernelVersion(): float
+{
+    return $GLOBALS['whub_test_kernelVersion'];
+}
+function IPS_GetProperty(int $id, string $name)
+{
+    return $GLOBALS['whub_test_properties'][$id][$name] ?? '';
+}
+
 class IPSModule
 {
     public int $InstanceID = 999999;
@@ -182,6 +200,37 @@ if ($result['activeCount'] > 0) {
 } else {
     echo "  Info: aktuell keine passende aktive Warnung für Wernigerode (Wetterlage kann sich geändert haben) -- kein Fehlschlag.\n";
 }
+
+echo "== Symcon-Systemstandort (Location Control) -- gestubbt, kein Netz nötig ==\n";
+const LOC_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
+
+// Fall 1: keine Standort-Instanz vorhanden
+$GLOBALS['whub_test_instancesByModule'] = [];
+check('kein Standort-Instanz -> AddStandortFromSystemLocation meldet Fehlschlag',
+    str_starts_with(callPrivate($hub, 'AddStandortFromSystemLocation'), '⚠️'));
+
+// Fall 2: Standort-Instanz vorhanden, aber nicht konfiguriert (0/0)
+$GLOBALS['whub_test_instancesByModule'] = [LOC_GUID => [55555]];
+$GLOBALS['whub_test_properties'] = [55555 => ['Location' => json_encode(['latitude' => 0, 'longitude' => 0])]];
+check('Standort-Instanz mit 0/0 -> ebenfalls Fehlschlag (nicht konfiguriert)',
+    str_starts_with(callPrivate($hub, 'AddStandortFromSystemLocation'), '⚠️'));
+
+// Fall 3: echte Koordinaten (Symcon >= 5.0, kombinierte Location-Property)
+$GLOBALS['whub_test_properties'] = [55555 => ['Location' => json_encode(['latitude' => 48.4700, 'longitude' => 7.9400])]];
+$hub->SetProp('Standorte', '[]');
+$msg = callPrivate($hub, 'AddStandortFromSystemLocation');
+check('echte Koordinaten -> Erfolgsmeldung', str_starts_with($msg, '✅'));
+$rowsAfter = json_decode($hub->ReadPropertyString('Standorte') === '[]' ? '[]' : $hub->ReadPropertyString('Standorte'), true);
+// AddStandortFromSystemLocation schreibt bewusst NUR in die offene Formularmaske
+// (UpdateFormField), nicht in die Property -- die Property bleibt bis "Übernehmen" unverändert.
+check('Property bleibt bis "Übernehmen" unverändert (schreibt nur in die offene Maske)', $hub->ReadPropertyString('Standorte') === '[]');
+
+// Fall 4: alte Symcon-Version (<5.0) mit getrennten Latitude/Longitude-Properties
+$GLOBALS['whub_test_kernelVersion'] = 4.4;
+$GLOBALS['whub_test_properties'] = [55555 => ['Latitude' => 52.5200, 'Longitude' => 13.4050]];
+$msg2 = callPrivate($hub, 'AddStandortFromSystemLocation');
+check('Fallback für Symcon < 5.0 (getrennte Latitude/Longitude) funktioniert', str_starts_with($msg2, '✅') && str_contains($msg2, '52.52'));
+$GLOBALS['whub_test_kernelVersion'] = 9.0;
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

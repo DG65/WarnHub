@@ -217,6 +217,12 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'Jeder Standort erhält Warnungen nur, wenn eine Meldung innerhalb des angegebenen Umkreises liegt und mindestens den gewählten Schweregrad erreicht. Mehrere Standorte sind möglich (z. B. eigener Wohnort + Zweitwohnsitz/Angehörige).'],
                 [
+                    'type' => 'Button',
+                    'caption' => '📍 Standort aus Symcon-Systemeinstellungen übernehmen',
+                    'onClick' => 'echo WHUB_AddStandortFromSystemLocation($id);',
+                ],
+                ['type' => 'Label', 'caption' => 'Übernimmt Breiten-/Längengrad aus der Symcon-Kerninstanz "Standort" (Kern-Instanzen) als neue Zeile -- fügt sie nur der offenen Tabelle hinzu, "Übernehmen" bleibt trotzdem nötig.'],
+                [
                     'type' => 'List',
                     'name' => 'Standorte',
                     'rowCount' => 5,
@@ -529,6 +535,58 @@ class WarnHub extends IPSModule
         $lon = round((float) $json[0]['lon'], 5);
         $name = (string) ($json[0]['display_name'] ?? $ort);
         return sprintf('✅ %s → Lat %s / Lon %s -- bitte in die Standorte-Tabelle oben übertragen.', $name, $lat, $lon);
+    }
+
+    // Symcon-Kernmodul "Standort" (Kern-Instanzen > Standort) -- GUID gegen die
+    // etablierte Community-Bibliothek demel42/CommonStubs verifiziert
+    // (github.com/demel42/CommonStubs, common.php::GetSystemLocation()), nicht
+    // angenommen. Seit Symcon 5.0 liegen Lat/Lon in einer einzigen
+    // JSON-kodierten 'Location'-Property statt zwei Einzelfeldern.
+    private const LOCATION_CONTROL_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
+
+    private function getSystemLocation(): ?array
+    {
+        $ids = @IPS_GetInstanceListByModuleID(self::LOCATION_CONTROL_GUID) ?: [];
+        if (count($ids) === 0) {
+            return null;
+        }
+        $id = $ids[0];
+        if (function_exists('IPS_GetKernelVersion') && IPS_GetKernelVersion() < 5.0) {
+            $lat = (float) @IPS_GetProperty($id, 'Latitude');
+            $lon = (float) @IPS_GetProperty($id, 'Longitude');
+        } else {
+            $loc = json_decode((string) @IPS_GetProperty($id, 'Location'), true);
+            if (!is_array($loc)) {
+                return null;
+            }
+            $lat = (float) ($loc['latitude'] ?? 0);
+            $lon = (float) ($loc['longitude'] ?? 0);
+        }
+        if ($lat === 0.0 && $lon === 0.0) {
+            return null; // Standort-Instanz existiert, ist aber nicht konfiguriert
+        }
+        return ['lat' => $lat, 'lon' => $lon];
+    }
+
+    /** Nur in die offene Formularmaske schreiben, "Übernehmen" bleibt der bewusste letzte Schritt -- Muster wie MeterHubVirtual::AddDevice(). */
+    public function AddStandortFromSystemLocation(): string
+    {
+        $loc = $this->getSystemLocation();
+        if ($loc === null) {
+            return '⚠️ Kein konfigurierter Symcon-Standort gefunden (Kern-Instanzen > Standort anlegen/ausfüllen, oder Koordinaten hier manuell eintragen).';
+        }
+        $rows = $this->decodeStandorte();
+        $rows[] = [
+            'Name' => 'Mein Standort (aus Symcon)',
+            'Ort' => '',
+            'Lat' => round($loc['lat'], 5),
+            'Lon' => round($loc['lon'], 5),
+            'RadiusKm' => 20.0,
+            'MinSeverity' => 2,
+            'Aktiv' => true,
+        ];
+        $this->UpdateFormField('Standorte', 'values', json_encode($rows));
+        return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($loc['lat'], 5), round($loc['lon'], 5));
     }
 
     // ----------------------------------------------------------------
