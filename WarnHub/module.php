@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.18';
-    private const NEWS_VERSION = '0.1.0-beta.18';
+    private const DOC_VERSION = '0.1.0-beta.19';
+    private const NEWS_VERSION = '0.1.0-beta.19';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -218,6 +218,23 @@ class WarnHub extends IPSModule
     ];
     private const GEOSPHERE_AT_WARNLEVEL_SEVERITY = [1 => 'Moderate', 2 => 'Severe', 3 => 'Extreme'];
 
+    // BAFU-Hochwasserdaten über LINDAS (lindas.admin.ch, Schweizer Linked-
+    // Data-Infrastruktur des Bundes) -- live geprüft 04.09.2026 (182 Stationen
+    // mit numerischem dangerLevel, Query-Antwortzeit < 1s). Anders als
+    // PEGELONLINE/BfS ist "dangerLevel" hier eine ECHTE amtliche Klassifikation
+    // (BAFUs offizielle 5-stufige Gefahrenstufen-Skala für Hochwasser,
+    // hydrodaten.admin.ch/de/die-5-gefahrenstufen-fuer-hochwasser), keine
+    // Schwellwert-Eigenkonstruktion -- nur WELCHE Stufe WarnHub meldet, ist
+    // einstellbar. Default-Endpunkt liefert ohne Accept-Header CSV (live
+    // verifiziert), deshalb bewusst CSV statt JSON geparst -- keine Änderung
+    // an der gemeinsamen httpGet()-Funktion nötig (kein Custom-Header-Support).
+    private const BAFU_HYDRO_SPARQL_ENDPOINT = 'https://lindas.admin.ch/query';
+    private const BAFU_HYDRO_LEVEL_LABEL = [
+        1 => 'keine oder geringe Gefahr', 2 => 'mässige Gefahr', 3 => 'erhebliche Gefahr',
+        4 => 'grosse Gefahr', 5 => 'sehr grosse Gefahr',
+    ];
+    private const BAFU_HYDRO_LEVEL_SEVERITY = [2 => 'Moderate', 3 => 'Severe', 4 => 'Severe', 5 => 'Extreme'];
+
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
     // (Deutsch, DWD/MoWaS-Vokabular -- siehe reale Beispiele in .tools/test-geo.php).
     private const CATEGORY_KEYWORDS = [
@@ -261,6 +278,8 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyFloat('BfsOdlSchwellwert', 0.3);
         $this->RegisterPropertyBoolean('QuelleMeteoalarm', false);
         $this->RegisterPropertyBoolean('QuelleGeosphereAt', false);
+        $this->RegisterPropertyBoolean('QuelleBafuHydroCh', false);
+        $this->RegisterPropertyInteger('BafuHydroSchwelle', 3);
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyFloat('WetterstationWindboeSchwelle', 70.0);
         $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
@@ -326,7 +345,7 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG) sowie optional die eigene Wetterstation als unabhängiges Sicherheitsnetz.'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG), optional amtliche Hochwasser-Gefahrenstufen für die Schweiz (BAFU/LINDAS) sowie optional die eigene Wetterstation als unabhängiges Sicherheitsnetz.'],
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
@@ -418,6 +437,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung oben bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
                 ['type' => 'CheckBox', 'name' => 'QuelleGeosphereAt', 'caption' => 'Zusätzlich direkte GeoSphere-Austria-Warnungen (warnungen.zamg.at) -- koordinatengenau für österreichische Standorte, präziser als Meteoalarm'],
                 ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für österreichische Standorte automatisch von Meteoalarm (koordinatengenau statt Namensabgleich) -- analog zur direkten DWD-Anbindung, die für deutsche Standorte den entsprechenden NINA-Kanal ersetzt. Amtliche Quelle (GeoSphere Austria/ZAMG), kein Zugangsschlüssel nötig.'],
+                ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
+                ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
+                ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar. Deckt Schweizer Standorte ab -- für Deutschland liefert PEGELONLINE oben bereits Pegelstände.'],
                 ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                 [
                     'type' => 'SelectInstance',
@@ -842,6 +864,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Schutzaktionen feuern nicht mehr sofort bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf) -- eine morgens eintreffende, erst für den Nachmittag gültige Warnung fährt die Markise nicht mehr schon morgens ein. Die Push-Benachrichtigung bleibt weiterhin sofort'],
                 ['type' => 'Label', 'caption' => '• Meteoalarm deckt neben Deutschland auch Österreich und die Schweiz ab -- WarnHub eignet sich damit für den gesamten deutschsprachigen Raum (D-A-CH), nicht nur für Deutschland'],
                 ['type' => 'Label', 'caption' => '• Neue Datenquelle für Österreich: direkte GeoSphere-Austria-Anbindung (warnungen.zamg.at) -- koordinatengenau statt Namensabgleich, übernimmt für österreichische Standorte automatisch von Meteoalarm, sobald aktiviert'],
+                ['type' => 'Label', 'caption' => '• Neue Datenquelle für die Schweiz: amtliche Hochwasser-Gefahrenstufen (BAFU/LINDAS) -- echte behördliche Klassifikation (1-5), nicht nur ein eigener Schwellwert'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2323,6 +2346,98 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  BAFU-Hochwasserdaten über LINDAS -- siehe Konstanten-Kommentar oben.
+    //  Global wie PEGELONLINE: EIN Abruf für alle Schweizer Messstationen,
+    //  die geometrische Umkreis-Prüfung in processWarnings() erledigt den
+    //  Rest (kein Standort-Filter nötig, andere Standorte sind ohnehin nie
+    //  in Kreis-Reichweite einer Schweizer Station).
+    // ----------------------------------------------------------------
+
+    private function fetchBafuHydroCh(): array
+    {
+        $schwelle = $this->ReadPropertyInteger('BafuHydroSchwelle');
+        if ($schwelle < 2 || $schwelle > 5) {
+            $schwelle = 3;
+        }
+        $query = 'PREFIX s: <http://schema.org/> '
+            . 'PREFIX hd: <https://environment.ld.admin.ch/foen/hydro/dimension/> '
+            . 'PREFIX geosparql: <http://www.opengis.net/ont/geosparql#> '
+            . 'PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> '
+            . 'SELECT ?id ?name ?dangerLevel ?measurementTime ?wkt '
+            . 'FROM <https://lindas.admin.ch/foen/hydro> '
+            . 'WHERE { '
+            . '  ?st a <http://example.com/HydroMeasuringStation> ; s:identifier ?id ; s:name ?name . '
+            . '  ?obs hd:station ?st ; hd:measurementTime ?measurementTime ; hd:dangerLevel ?dangerLevel . '
+            . '  FILTER(isNumeric(?dangerLevel) && xsd:integer(?dangerLevel) >= ' . $schwelle . ') '
+            . '  OPTIONAL { ?st geosparql:hasGeometry/geosparql:asWKT ?wkt } '
+            . '}';
+        $url = self::BAFU_HYDRO_SPARQL_ENDPOINT . '?' . http_build_query(['query' => $query]);
+        $body = $this->httpGet($url, 20, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        if ($body === null) {
+            $this->LogError('fetchBafuHydroCh', 'LINDAS-Abfrage nicht erreichbar.');
+            return [];
+        }
+        return $this->parseBafuHydroCsv($body);
+    }
+
+    /** Vom HTTP-Abruf getrennt, damit sich die CSV-Auswertung ohne Netzzugriff testen lässt. */
+    private function parseBafuHydroCsv(string $csv): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', trim($csv));
+        if ($lines === false || count($lines) < 2) {
+            return [];
+        }
+        $header = str_getcsv(array_shift($lines), ',', '"', '\\');
+        $out = [];
+        foreach ($lines as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            $row = array_combine($header, str_getcsv($line, ',', '"', '\\'));
+            if ($row === false) {
+                continue;
+            }
+            $level = (int) ($row['dangerLevel'] ?? 0);
+            // Stufe 1 ("keine oder geringe Gefahr") ist nie berichtenswert --
+            // eigener Sicherheitsnetz-Filter, unabhängig vom serverseitigen
+            // SPARQL-Schwellwert (der Formular-Schwellwert erlaubt ohnehin nur 2-5).
+            if ($level < 2) {
+                continue;
+            }
+            $wkt = (string) ($row['wkt'] ?? '');
+            if (!preg_match('/POINT\(([\-0-9.]+)\s+([\-0-9.]+)\)/', $wkt, $m)) {
+                continue; // keine Koordinate -- keine geratene Platzierung
+            }
+            $lon = (float) $m[1];
+            $lat = (float) $m[2];
+            $name = (string) ($row['name'] ?? 'Messstation');
+            $label = self::BAFU_HYDRO_LEVEL_LABEL[$level] ?? ('Stufe ' . $level);
+            $out[] = [
+                'identifier' => 'bafu-hydro-' . ($row['id'] ?? $name),
+                'source' => 'bafu_hydro_ch',
+                'msgType' => 'Alert',
+                'event' => 'Hochwasser',
+                'headline' => sprintf('Hochwassergefahr: %s (Gefahrenstufe %d)', $name, $level),
+                'description' => sprintf(
+                    'Amtliche Gefahrenstufe %d von 5 (%s) an Messstation %s -- offizielle BAFU-Skala, keine Eigenkonstruktion.',
+                    $level,
+                    $label,
+                    $name
+                ),
+                'instruction' => '',
+                'severity' => self::BAFU_HYDRO_LEVEL_SEVERITY[$level] ?? 'Moderate',
+                'effective' => (string) ($row['measurementTime'] ?? '') ?: null,
+                'onset' => null,
+                'expires' => null,
+                'areaDesc' => $name,
+                'rings' => [],
+                'circles' => [['lat' => $lat, 'lon' => $lon, 'radiusKm' => 5.0]],
+            ];
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
     //  Abfragezyklus: Poll, Matching, Push, Schutzaktionen
     // ----------------------------------------------------------------
 
@@ -2358,6 +2473,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleGeosphereAt')) {
             $warnings = array_merge($warnings, $this->fetchGeosphereAt());
+        }
+        if ($this->ReadPropertyBoolean('QuelleBafuHydroCh')) {
+            $warnings = array_merge($warnings, $this->fetchBafuHydroCh());
         }
         if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
             $warnings = array_merge($warnings, $this->fetchWetterstation());

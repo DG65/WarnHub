@@ -309,5 +309,21 @@ if (count($geosphereResult) > 0) {
     echo "  Info: [{$w['severity']}] {$w['event']} -- {$w['headline']}\n";
 }
 
+echo "== Live-Abruf BAFU-Hochwasserdaten (lindas.admin.ch, Schweiz) ==\n";
+$hub->SetProp('BafuHydroSchwelle', 2); // niedrigste sinnvolle Schwelle -- möglichst viele echte Treffer für den Test
+$bafuResult = callPrivate($hub, 'fetchBafuHydroCh');
+check('fetchBafuHydroCh() liefert ein Array (auch bei 0 aktuell erhöhten Pegeln kein Fehler)', is_array($bafuResult));
+echo '  Info: ' . count($bafuResult) . " Schweizer Messstation(en) aktuell ab Gefahrenstufe 2.\n";
+if (count($bafuResult) > 0) {
+    $w = $bafuResult[0];
+    foreach (['identifier', 'source', 'event', 'severity', 'headline', 'circles'] as $field) {
+        check("erste BAFU-Hydro-Warnung hat Feld '$field'", array_key_exists($field, $w));
+    }
+    check('source ist "bafu_hydro_ch"', $w['source'] === 'bafu_hydro_ch');
+    check('event ist "Hochwasser"', $w['event'] === 'Hochwasser');
+    check('Kreis-Koordinate liegt im plausiblen Schweizer Bereich (Lat 45-48, Lon 5-11)', $w['circles'][0]['lat'] > 45 && $w['circles'][0]['lat'] < 48 && $w['circles'][0]['lon'] > 5 && $w['circles'][0]['lon'] < 11);
+    echo "  Info: [{$w['severity']}] {$w['headline']}\n";
+}
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

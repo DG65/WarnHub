@@ -180,6 +180,8 @@ check('Standorte: Live-Standort-Spalte "QuellVarLon" vorhanden', findByName($dec
 check('Standorte: "Push nur an"-Filterspalte "PushZielFilter" vorhanden (mehrere Personen/WebFronts)', findByName($decoded['elements'], 'PushZielFilter') !== null);
 check('"QuelleMeteoalarm"-Checkbox vorhanden (europaweite Wetterwarnungen)', findByName($decoded['elements'], 'QuelleMeteoalarm') !== null);
 check('"QuelleGeosphereAt"-Checkbox vorhanden (koordinatengenaue Österreich-Warnungen)', findByName($decoded['elements'], 'QuelleGeosphereAt') !== null);
+check('"QuelleBafuHydroCh"-Checkbox vorhanden (Schweizer Hochwassergefahr)', findByName($decoded['elements'], 'QuelleBafuHydroCh') !== null);
+check('Schwellwert-Feld "BafuHydroSchwelle" vorhanden', findByName($decoded['elements'], 'BafuHydroSchwelle') !== null);
 
 $schutzaktionenListe = findByName($decoded['elements'], 'Schutzaktionen');
 $typSpalte = null;

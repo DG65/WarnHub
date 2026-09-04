@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-beta.19 (2026-09-04)
+
+- Neue Datenquelle für die Schweiz: amtliche BAFU-Hochwasser-Gefahrenstufen
+  über LINDAS (lindas.admin.ch, Linked-Data-Infrastruktur des Bundes, live
+  gegen ~180 echte Messstationen geprüft). Anders als PEGELONLINE/BfS/
+  eigene Wetterstation eine ECHTE behördliche Klassifikation (BAFUs
+  offizielle 5-stufige Gefahrenstufen-Skala), keine Eigenkonstruktion --
+  nur die Meldeschwelle ist einstellbar. Global wie PEGELONLINE: ein
+  Abruf für alle Stationen, das bestehende geometrische Umkreis-Matching
+  erledigt den Rest. Dietmars ausdrücklicher Wunsch 04.09.2026.
+- Recherchiert, aber bewusst nicht gebaut: der Hagelschutz-Warndienst der
+  VKF (hagelschutz-einfach-automatisch.ch) hat zwar eine gut dokumentierte
+  REST-API (Poll-Endpunkt ohne Login, nur deviceId+hwtypeId), ist aber an
+  eine physische, bei einem konkreten Schweizer Gebäude registrierte
+  Hardware ("Signalbox") gebunden -- kein Software-Zugang, den man sich
+  einfach beschaffen kann. unwetter.ch (privater Warndienst) hat gar keine
+  Entwickler-Schnittstelle, nur SMS/E-Mail an Endkunden.
+
 ## 0.1.0-beta.18 (2026-09-04)
 
 - Neue Datenquelle für Österreich: direkte Anbindung der GeoSphere Austria

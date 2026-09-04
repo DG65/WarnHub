@@ -1,14 +1,15 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.18-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.19-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
 
 Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz -- amtliche Quellen für
 Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegelstände, Radioaktivität),
-europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die
+direkte amtliche Quellen für Österreich (GeoSphere Austria) und die Schweiz
+(BAFU-Hochwasser-Gefahrenstufen), europaweite Wetterwarnungen für 39 Länder sowie optional die
 eigene Wetterstation als unabhängiges Sicherheitsnetz -- gefiltert auf den selbst definierten
 Umkreis um eigene (auch mobile) Standorte, mit Push-Benachrichtigung an
 WebFront-/Kachel-Visualisierung-Geräte und optionalen Schutzaktionen.
@@ -37,6 +38,10 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   österreichischen Wetterbehörde (ZAMG), koordinatengenau statt Namensabgleich. Übernimmt für
   österreichische Standorte automatisch von Meteoalarm, sobald aktiviert (analog dazu, wie die
   direkte DWD-Anbindung den entsprechenden NINA-Kanal für deutsche Standorte ersetzt).
+- **BAFU-Hochwasserdaten** (`lindas.admin.ch`, Schweiz) -- optional, amtliche 5-stufige
+  Gefahrenstufen-Skala des Bundesamts für Umwelt für Fliessgewässer und Seen. Anders als
+  PEGELONLINE/BfS/eigene Wetterstation eine echte behördliche Klassifikation, keine
+  Eigenkonstruktion -- nur die Schwelle, ab der WarnHub meldet, ist einstellbar.
 - **Eigene Wetterstation** (aktuell Froggit) -- optional, unabhängig von allen übrigen
   Quellen: löst aus, sobald die lokal gemessene Windböe oder Regenrate den eigenen
   Schwellwert überschreitet. Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein
@@ -152,6 +157,11 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   deshalb als kleinen Kreis exakt an dieser Koordinate. Ein Standort direkt an einer
   Gemeindegrenze kann eine Warnung im nur wenige hundert Meter entfernten Nachbarort dadurch
   knapp verpassen.
+- BAFU-Hochwasserdaten decken nur Fliessgewässer und Seen von nationalem Interesse mit eigener
+  Messstation ab (rund 180 Stationen schweizweit) -- kleinere Bäche ohne Station liefern keinen
+  Wert. Die Schweiz kennt aktuell keine vergleichbare amtliche, öffentlich zugängliche API für
+  allgemeine Unwetterwarnungen (Sturm/Hagel/Starkregen) -- dafür bleibt Meteoalarm vorerst die
+  einzig verfügbare Quelle.
 
 ## Lizenz
 
