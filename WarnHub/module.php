@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.21';
-    private const NEWS_VERSION = '0.1.0-beta.21';
+    private const DOC_VERSION = '0.1.0-beta.22';
+    private const NEWS_VERSION = '0.1.0-beta.22';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -329,11 +329,34 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeBoolean('ForumHintGone', false);
+
+        // Für IPSView & Co.: WarnHub ist ohne eigene Statusvariablen komplett
+        // "headless" (nur Push + Konsolen-Statuszeile) -- IPSView baut eigene
+        // Views aber ausschließlich aus VORHANDENEN Symcon-Objekt-IDs
+        // zusammen (Live-Fund 04.09.2026, Dietmars Instanz #17903 hat KEINE
+        // eigene Push-/Geräteregistrierung, nur einen View-Cache), es gibt
+        // also keinen eigenen IPSView-Push-Mechanismus zum Andocken. Diese
+        // vier Variablen sind der Anknüpfungspunkt für ein selbst gebautes
+        // IPSView-Dashboard (oder jede andere Symcon-Visualisierung).
+        if (!IPS_VariableProfileExists('WHUB.Schweregrad')) {
+            IPS_CreateVariableProfile('WHUB.Schweregrad', VARIABLETYPE_INTEGER);
+            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 0, 'Keine aktive Warnung', 'ℹ️', 0x00C853);
+            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 1, 'Minor', 'ℹ️', 0x00C853);
+            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 2, 'Moderate', '⚠️', 0xFFD600);
+            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 3, 'Severe', '🚨', 0xFF6D00);
+            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 4, 'Extreme', '🆘', 0xD50000);
+        }
     }
 
     public function ApplyChanges()
     {
         parent::ApplyChanges();
+
+        $this->MaintainVariable('AktiveWarnungen', 'Aktive Warnungen', VARIABLETYPE_INTEGER, '', 1, true);
+        $this->MaintainVariable('HoechsterSchweregrad', 'Höchster Schweregrad', VARIABLETYPE_INTEGER, 'WHUB.Schweregrad', 2, true);
+        $this->MaintainVariable('StatusText', 'Status', VARIABLETYPE_STRING, '', 3, true);
+        $this->MaintainVariable('LetztePruefung', 'Letzte Prüfung', VARIABLETYPE_INTEGER, '~UnixTimestamp', 4, true);
+        $this->refreshStatusVariables();
 
         $hasSource = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
         if (!$hasSource) {
@@ -345,6 +368,32 @@ class WarnHub extends IPSModule
         $minutes = max(1, $this->ReadPropertyInteger('PollIntervalMinutes'));
         $this->SetTimerInterval('PollTimer', $minutes * 60 * 1000);
         $this->SetStatus(102);
+    }
+
+    /**
+     * Aktualisiert die vier IPSView-tauglichen Statusvariablen aus dem
+     * zuletzt bekannten Prüfungsstand (Attribute LastActiveWarningsJson/
+     * LastPollTs) -- sowohl direkt nach ApplyChanges() (sofortiges Anzeigen
+     * des letzten Standes, kein Warten auf den nächsten Poll-Zyklus) als
+     * auch am Ende jedes echten Poll() (siehe dort).
+     */
+    private function refreshStatusVariables(): void
+    {
+        $active = json_decode($this->ReadAttributeString('LastActiveWarningsJson'), true) ?: [];
+        $highest = 0;
+        foreach ($active as $w) {
+            $highest = max($highest, self::SEVERITY_RANK[$w['severity'] ?? 'Unknown'] ?? 0);
+        }
+        $lastTs = $this->ReadAttributeInteger('LastPollTs');
+        $statusText = $lastTs === 0
+            ? 'Noch keine Prüfung durchgeführt.'
+            : (count($active) > 0
+                ? sprintf('%d aktive Warnung(en)', count($active))
+                : 'Keine aktive Warnung.');
+        @$this->SetValue('AktiveWarnungen', count($active));
+        @$this->SetValue('HoechsterSchweregrad', $highest);
+        @$this->SetValue('StatusText', $statusText);
+        @$this->SetValue('LetztePruefung', $lastTs);
     }
 
     // ----------------------------------------------------------------
@@ -582,6 +631,21 @@ class WarnHub extends IPSModule
                         ['caption' => 'Auto-Aus (s)', 'name' => 'AutoOffSekunden', 'width' => '100px', 'add' => 60, 'edit' => ['type' => 'NumberSpinner', 'minValue' => 0]],
                     ],
                 ],
+                ['type' => 'Label', 'caption' => 'Je Alarmtyp testen: löst SOFORT alle aktiven Schutzaktionen aus, die für den gewählten Alarmtyp gelten (angekreuzte Kategorie ODER gar keine angekreuzt) -- unabhängig von einer echten Warnung, vom Standort-Filter und vom Mindest-Schweregrad. Prüft nur, ob die Aktion tatsächlich das Richtige tut (z. B. fährt die Markise wirklich ein?), nicht die Warnungserkennung selbst. Ohne echte Warnung ist keine automatische Rückstellung geplant -- danach von Hand zurückstellen.'],
+                [
+                    'type' => 'RowLayout',
+                    'items' => (function () {
+                        $buttons = [];
+                        foreach (self::CATEGORY_FIELDS as $key => $f) {
+                            $buttons[] = [
+                                'type' => 'Button',
+                                'caption' => $f[1] . ' testen',
+                                'onClick' => "echo WHUB_TestSchutzaktionen(\$id, '" . $key . "');",
+                            ];
+                        }
+                        return $buttons;
+                    })(),
+                ],
             ],
         ];
 
@@ -601,6 +665,7 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Jetzt prüfen',
                     'onClick' => 'echo WHUB_Poll($id);',
                 ],
+                ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'],
                 ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'],
                 [
                     'type' => 'Button',
@@ -918,6 +983,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Neue Datenquelle für die Schweiz: amtliche Hochwasser-Gefahrenstufen (BAFU/LINDAS) -- echte behördliche Klassifikation (1-5), nicht nur ein eigener Schwellwert'],
                 ['type' => 'Label', 'caption' => '• BETA (ungetestet): eigene VKF-Hagelschutz-Signalbox (Schweiz) als Datenquelle -- eigenes Panel, Rückmeldungen willkommen'],
                 ['type' => 'Label', 'caption' => '• Mehrkanal-Push: neben WebFront/Kachel-Visualisierung jetzt auch Telegram (offizielles Symcon-Modul) und Pushover (Community-Modul) als Push-Ziele -- einfach "🔎 Push-Ziele suchen" erneut klicken, vorhandene Telegram-Bot-/Pushover-Instanzen werden automatisch gefunden'],
+                ['type' => 'Label', 'caption' => '• IPSView-tauglich: vier neue Statusvariablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) für ein eigenes Dashboard -- WarnHub war bisher komplett "headless" (nur Push + Konsole)'],
+                ['type' => 'Label', 'caption' => '• Schutzaktionen lassen sich jetzt je Alarmtyp einzeln testen ("🌪️ Sturm testen" usw.) -- löst sofort alle passenden aktiven Aktionen aus, unabhängig von einer echten Warnung, praktisch um z. B. die Raffstore-Ansteuerung ohne Warten auf den nächsten Sturm zu prüfen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2592,6 +2659,7 @@ class WarnHub extends IPSModule
 
         $this->WriteAttributeInteger('LastPollTs', time());
         $this->WriteAttributeString('LastActiveWarningsJson', json_encode($result['active']));
+        $this->refreshStatusVariables();
         @$this->UpdateFormField('PollStatusLabel', 'caption', $this->getPollStatusLine());
 
         $icon = $result['activeCount'] > 0 ? '⚠️' : '✅';
@@ -2621,6 +2689,38 @@ class WarnHub extends IPSModule
             return sprintf('⚠️ Test fehlgeschlagen -- an keines der %d aktivierten Ziele konnte zugestellt werden (siehe Systemprotokoll).', count($active));
         }
         return sprintf('✅ Testbenachrichtigung an %d von %d aktivierten Ziel(en) gesendet.', $sent, count($active));
+    }
+
+    /**
+     * Löst zu Testzwecken alle AKTIVEN Schutzaktionen aus, die für den
+     * angegebenen Alarmtyp gelten (angekreuzte Kategorie ODER gar keine
+     * angekreuzt, siehe CATEGORY_FIELDS) -- SOFORT und unabhängig von einer
+     * echten Warnung, vom Standort-Filter und vom Mindest-Schweregrad. Reiner
+     * Aktor-Test ("tut die Aktion tatsächlich das Richtige?"), analog zu
+     * TestPush() für den Push-Zustellweg -- prüft NICHT die
+     * Warnungserkennung/-zuordnung selbst, die läuft nur über einen echten
+     * Poll(). Dietmars ausdrücklicher Wunsch 04.09.2026, je Alarmtyp einzeln
+     * prüfbar, nicht nur pauschal alle Schutzaktionen auf einmal.
+     */
+    public function TestSchutzaktionen(string $kategorie): string
+    {
+        if (!isset(self::CATEGORY_FIELDS[$kategorie])) {
+            return '⚠️ Unbekannter Alarmtyp "' . $kategorie . '".';
+        }
+        $label = self::CATEGORY_FIELDS[$kategorie][1];
+        $matching = array_values(array_filter(
+            $this->decodeSchutzaktionen(),
+            fn ($a) => $a['Aktiv'] && (count($a['Kategorien']) === 0 || in_array($kategorie, $a['Kategorien'], true))
+        ));
+        if (count($matching) === 0) {
+            return sprintf('⚠️ Keine aktive Schutzaktion für "%s" gefunden.', $label);
+        }
+        $names = [];
+        foreach ($matching as $action) {
+            $this->fireProtectiveAction($action);
+            $names[] = $action['Name'] !== '' ? $action['Name'] : ('Ziel-Variable #' . $action['ZielVariableID']);
+        }
+        return sprintf('✅ %d Schutzaktion(en) für "%s" ausgelöst: %s', count($matching), $label, implode(', ', $names));
     }
 
     private function processWarnings(array $warnings): array

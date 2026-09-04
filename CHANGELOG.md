@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.0-beta.22 (2026-09-04)
+
+- IPSView-taugliche Statusvariablen: WarnHub war bisher komplett "headless"
+  (nur Push + Konsolen-Statuszeile) -- vier neue Variablen (Aktive
+  Warnungen, Höchster Schweregrad mit eigenem WHUB.Schweregrad-Profil,
+  Status, Letzte Prüfung) sind jetzt der Anknüpfungspunkt für ein selbst
+  gebautes Dashboard. Live-Fund 04.09.2026 (Dietmars Instanz #17903):
+  IPSViewConnect hat keinen eigenen Push-/Geräteregistrierungs-Mechanismus,
+  nur einen View-Cache -- IPSView baut Views ausschließlich aus
+  vorhandenen Symcon-Objekt-IDs zusammen, eine gesonderte Einrichtung in
+  WarnHub selbst ist deshalb nicht nötig. Werden sowohl direkt nach
+  "Übernehmen" (letzter bekannter Stand, kein Warten auf den nächsten
+  Poll-Zyklus) als auch nach jedem echten Poll() aktualisiert.
+- `WHUB_TestSchutzaktionen($id, $kategorie)`: Schutzaktionen lassen sich
+  jetzt je Alarmtyp einzeln testen (sechs Schaltflächen im
+  Schutzaktionen-Panel, z. B. "🌪️ Sturm testen") -- löst SOFORT alle
+  aktiven, zum Alarmtyp passenden Aktionen aus, unabhängig von einer
+  echten Warnung, vom Standort-Filter und vom Mindest-Schweregrad. Reiner
+  Aktor-Test ("tut die Aktion tatsächlich das Richtige?"), analog zu
+  `WHUB_TestPush()` für den Push-Zustellweg. Dietmars ausdrücklicher
+  Wunsch 04.09.2026, direkt im Anschluss an die IPSView-Arbeit -- zweiter
+  und dritter Teil von "IPSView, Mehrkanal-Push und eine
+  Warnungs-Historie packen wir nun an."
+
 ## 0.1.0-beta.21 (2026-09-04)
 
 - Mehrkanal-Push: neben WebFront und Kachel-Visualisierung jetzt auch

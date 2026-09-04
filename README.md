@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.21-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.22-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -136,6 +136,19 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   menschenlesbare Zusammenfassung.
 - `WHUB_GetActiveWarnings($id): string` -- JSON-Liste der aktuell zutreffenden Warnungen je
   Standort (für eigene Auswertungen/Kacheln).
+- `WHUB_TestSchutzaktionen($id, $kategorie): string` -- löst zu Testzwecken sofort alle
+  aktiven Schutzaktionen des angegebenen Alarmtyps aus (`sturm`/`hagel`/`starkregen`/
+  `gewitter`/`schnee`/`hitze`), unabhängig von einer echten Warnung, vom Standort-Filter und
+  vom Mindest-Schweregrad -- reiner Aktor-Test. Im Formular als sechs Schaltflächen im
+  Schutzaktionen-Panel verfügbar.
+
+## IPSView & eigene Dashboards
+
+WarnHub legt vier eigene Statusvariablen an (Aktive Warnungen, Höchster Schweregrad, Status,
+Letzte Prüfung) -- Anknüpfungspunkt für ein selbst gebautes Dashboard, z. B. mit IPSView.
+IPSView kennt keinen eigenen Push-Kanal, sondern baut Views ausschließlich aus vorhandenen
+Symcon-Objekt-IDs zusammen -- eine gesonderte Einrichtung in WarnHub selbst ist deshalb nicht
+nötig, die Variablen stehen automatisch im Objektbaum der Instanz.
 
 ## Grenzen
 

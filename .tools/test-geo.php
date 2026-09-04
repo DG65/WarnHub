@@ -15,6 +15,13 @@ class IPSModule
 {
 }
 
+const VARIABLETYPE_STRING = 3;
+const VARIABLETYPE_INTEGER = 1;
+function IPS_VariableProfileExists(string $name): bool
+{
+    return true;
+}
+
 require __DIR__ . '/../WarnHub/module.php';
 
 $failures = 0;

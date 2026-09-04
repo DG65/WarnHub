@@ -109,6 +109,19 @@ class IPSModule
     public function Create()
     {
     }
+    public function MaintainVariable($ident, $name, $type, $profile, $position, $keep = true)
+    {
+    }
+    public function SetValue($ident, $value)
+    {
+    }
+}
+
+const VARIABLETYPE_STRING = 3;
+const VARIABLETYPE_INTEGER = 1;
+function IPS_VariableProfileExists(string $name): bool
+{
+    return true;
 }
 
 require __DIR__ . '/../WarnHub/module.php';
@@ -203,6 +216,27 @@ foreach ($schutzaktionenListe['columns'] ?? [] as $col) {
 }
 $typOptions = array_column($typSpalte['edit']['options'] ?? [], 'value');
 check('Schutzaktionstyp "fenster" (Fenster schließen, z. B. Tesla) steht zur Auswahl', in_array('fenster', $typOptions, true));
+
+$schutzaktionenPanel = null;
+foreach ($decoded['elements'] as $el) {
+    if (str_contains($el['caption'] ?? '', 'Schutzaktionen (Jalousien')) {
+        $schutzaktionenPanel = $el;
+        break;
+    }
+}
+$testRow = null;
+foreach ($schutzaktionenPanel['items'] ?? [] as $item) {
+    if (($item['type'] ?? '') === 'RowLayout') {
+        $testRow = $item;
+        break;
+    }
+}
+check('eine Zeile mit Test-Schaltflächen je Alarmtyp steht im Schutzaktionen-Panel', $testRow !== null);
+$testCaptions = array_column($testRow['items'] ?? [], 'caption');
+check('"testen"-Schaltfläche für jeden der 6 Alarmtypen vorhanden', count(array_filter($testCaptions, fn ($c) => str_contains($c, 'testen'))) === 6);
+$testOnClicks = array_column($testRow['items'] ?? [], 'onClick');
+check('jede Schaltfläche ruft WHUB_TestSchutzaktionen mit ihrem eigenen Kategorie-Schlüssel auf', count(array_filter($testOnClicks, fn ($c) => str_contains($c, "WHUB_TestSchutzaktionen(\$id, 'sturm')"))) === 1
+    && count(array_filter($testOnClicks, fn ($c) => str_contains($c, "WHUB_TestSchutzaktionen(\$id, 'hagel')"))) === 1);
 
 $webfrontsListe = findByName($decoded['elements'], 'WebFronts');
 $pushTypSpalte = null;

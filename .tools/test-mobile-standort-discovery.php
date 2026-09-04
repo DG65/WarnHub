@@ -188,6 +188,12 @@ class IPSModule
     public function Create()
     {
     }
+    public function MaintainVariable($ident, $name, $type, $profile, $position, $keep = true)
+    {
+    }
+    public function SetValue($ident, $value)
+    {
+    }
 }
 function IPS_GetInstanceListByModuleID(string $guid): array
 {
@@ -196,6 +202,13 @@ function IPS_GetInstanceListByModuleID(string $guid): array
 function IPS_GetModuleList(): array
 {
     return [];
+}
+
+const VARIABLETYPE_STRING = 3;
+const VARIABLETYPE_INTEGER = 1;
+function IPS_VariableProfileExists(string $name): bool
+{
+    return true;
 }
 
 require __DIR__ . '/../WarnHub/module.php';
