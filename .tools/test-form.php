@@ -35,6 +35,14 @@ class IPSModule
     {
         $this->props[$n] ??= $v;
     }
+    public function RegisterPropertyFloat($n, $v)
+    {
+        $this->props[$n] ??= $v;
+    }
+    public function ReadPropertyFloat($n)
+    {
+        return (float) ($this->props[$n] ?? 0);
+    }
     public function ReadPropertyString($n)
     {
         return (string) ($this->props[$n] ?? '');

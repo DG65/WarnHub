@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta.9 (2026-09-04)
+
+- Zwei neue, optionale Datenquellen (beide standardmäßig AUS):
+  - **PEGELONLINE (WSV)** -- warnt bei Pegeln über dem mittleren Hochwasser (MHW) bzw. dem
+    bisherigen historischen Höchstwert (HSW) in der Nähe eines Standorts. Klassifiziert
+    automatisch als Kategorie "Starkregen/Hochwasser".
+  - **BfS Ortsdosisleistung (Radioaktivität)** -- warnt bei Überschreitung eines selbst
+    einstellbaren Schwellwerts (Standard 0,3 µSv/h) an einer Messstelle in der Nähe. Beide
+    Quellen liefern nur Rohdaten, keine amtliche Warnstufen-Klassifikation -- das wird im
+    Formular und im Meldungstext explizit so benannt.
+  - Waldbrandgefahrenindex (DWD) und Sturmflutvorhersage (BSH) bewusst noch nicht
+    eingebaut -- beide APIs sind deutlich komplexer (gezippte CSV je Station bzw.
+    mehrstufige OGC-Features-API), folgen als nächster Schritt.
+
 ## 0.1.0-beta.8 (2026-09-04)
 
 - Fix (zweiter, vermutlich entscheidender Baustein): Kachel-Visualisierung-Push nutzt jetzt

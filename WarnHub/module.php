@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.8';
-    private const NEWS_VERSION = '0.1.0-beta.8';
+    private const DOC_VERSION = '0.1.0-beta.9';
+    private const NEWS_VERSION = '0.1.0-beta.9';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -187,6 +187,9 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyString('Standorte', '[]');
         $this->RegisterPropertyBoolean('QuelleNina', true);
         $this->RegisterPropertyBoolean('QuelleDwd', true);
+        $this->RegisterPropertyBoolean('QuellePegelonline', false);
+        $this->RegisterPropertyBoolean('QuelleBfsOdl', false);
+        $this->RegisterPropertyFloat('BfsOdlSchwellwert', 0.3);
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
@@ -247,7 +250,8 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei) und meldet nur, was innerhalb des selbst definierten Umkreises liegt.'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de) und optional die direkten DWD-Wetterwarnungen (opendata.dwd.de).'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de), optional Pegelstände (PEGELONLINE/WSV) und optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung).'],
+                ['type' => 'Label', 'caption' => 'Bei PEGELONLINE und BfS ODL-Info gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser) bzw. eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
                 ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
@@ -310,6 +314,9 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'CheckBox', 'name' => 'QuelleNina', 'caption' => 'NINA-Aggregation (MoWaS/Katwarn/Biwapp/DWD/Hochwasser/Polizei, warnung.bund.de)'],
                 ['type' => 'CheckBox', 'name' => 'QuelleDwd', 'caption' => 'Zusätzlich direkte DWD-Wetterwarnungen (mehr Detail als die NINA-Zusammenfassung)'],
+                ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => 'Pegelstände (PEGELONLINE/WSV) -- warnt bei Pegeln über dem mittleren bzw. bisherigen Höchstwasser in der Nähe eines Standorts'],
+                ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => 'Radioaktivität (BfS Ortsdosisleistung) -- eigener Schwellwert, keine amtliche Meldestufe'],
+                ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => 'Schwellwert Radioaktivität (µSv/h)', 'digits' => 3, 'minValue' => 0.05],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
         ];
@@ -1421,6 +1428,132 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  PEGELONLINE (WSV -- Bund) -- Wasserstände aller Bundeswasserstraßen-
+    //  Pegel. Live-verifiziert 04.09.2026 (786 Stationen): KEIN offizielles
+    //  Meldestufen-Konzept in dieser API, nur ein Vergleich des aktuellen
+    //  Werts gegen zwei charakteristische Wasserstände je Pegel: MNW/MHW
+    //  (mittleres Niedrig-/Hochwasser, "normaler" Schwankungsbereich) und
+    //  NSW/HSW (bisheriger Niedrigst-/Höchstwert seit Messbeginn). 'high' bei
+    //  MNW/MHW ist ein alltäglicher Vorgang (Herbst-/Frühjahrshochwasser),
+    //  'high' bei NSW/HSW bedeutet: aktueller Pegel auf/über dem bisherigen
+    //  historischen Höchststand -- deutlich seltener und ernster.
+    // ----------------------------------------------------------------
+
+    private const PEGELONLINE_URL = 'https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?includeTimeseries=true&includeCurrentMeasurement=true';
+
+    /** @return array<int,array<string,mixed>> */
+    private function fetchPegelonline(): array
+    {
+        $stations = $this->httpGetJson(self::PEGELONLINE_URL);
+        if (!is_array($stations)) {
+            return [];
+        }
+        $out = [];
+        foreach ($stations as $station) {
+            foreach (($station['timeseries'] ?? []) as $ts) {
+                if (($ts['shortname'] ?? '') !== 'W') {
+                    continue; // nur Wasserstand, nicht Wassertemperatur o. ä.
+                }
+                $cm = $ts['currentMeasurement'] ?? null;
+                if (!is_array($cm)) {
+                    continue;
+                }
+                $mnwMhw = (string) ($cm['stateMnwMhw'] ?? 'unknown');
+                $nswHsw = (string) ($cm['stateNswHsw'] ?? 'unknown');
+                if ($mnwMhw !== 'high' && $nswHsw !== 'high') {
+                    continue; // kein erhöhter Pegel -- kein Eintrag (kein "Cancel" nötig, siehe processWarnings()-Bereinigung)
+                }
+                $name = (string) ($station['longname'] ?? $station['shortname'] ?? 'Pegel');
+                $water = (string) ($station['water']['longname'] ?? '');
+                $valueCm = (float) ($cm['value'] ?? 0);
+                $severity = $nswHsw === 'high' ? 'Extreme' : 'Moderate';
+                $out[] = [
+                    'identifier' => 'pegelonline-' . (string) ($station['uuid'] ?? $name),
+                    'source' => 'pegelonline',
+                    'msgType' => 'Alert',
+                    'event' => 'Hochwasser',
+                    'headline' => sprintf('Erhöhter Pegel %s%s', $name, $water !== '' ? " ($water)" : ''),
+                    'description' => sprintf(
+                        'Aktueller Wasserstand %s cm -- %s',
+                        rtrim(rtrim(number_format($valueCm, 0, ',', '.'), '0'), ','),
+                        $nswHsw === 'high'
+                            ? 'liegt auf/über dem bisherigen Höchstwert (HSW) seit Messbeginn.'
+                            : 'liegt über dem mittleren Hochwasser (MHW) -- ein für die Jahreszeit ggf. normaler Vorgang.'
+                    ),
+                    'instruction' => '',
+                    'severity' => $severity,
+                    'effective' => $cm['timestamp'] ?? null,
+                    'onset' => null,
+                    'expires' => null,
+                    'areaDesc' => $name,
+                    'rings' => [],
+                    'circles' => [['lat' => (float) ($station['latitude'] ?? 0), 'lon' => (float) ($station['longitude'] ?? 0), 'radiusKm' => 3.0]],
+                ];
+            }
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
+    //  BfS ODL-Info (Ortsdosisleistung/Radioaktivität) -- 1.676 Messstellen
+    //  bundesweit, stündlich. Live-verifiziert 04.09.2026: normaler
+    //  Schwankungsbereich ca. 0,05-0,23 µSv/h je nach Untergrund/Höhenlage.
+    //  Die API liefert NUR Rohwerte, KEINE amtliche Meldeschwelle -- der
+    //  Vergleichswert ist deshalb bewusst ein einstellbarer eigener
+    //  Schwellwert, nicht als amtliche Alarmstufe ausgegeben.
+    // ----------------------------------------------------------------
+
+    private const BFS_ODL_URL = 'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=opendata:odlinfo_odl_1h_latest&outputFormat=application/json';
+
+    /** @return array<int,array<string,mixed>> */
+    private function fetchBfsOdl(): array
+    {
+        $geo = $this->httpGetJson(self::BFS_ODL_URL);
+        if (!is_array($geo) || !isset($geo['features'])) {
+            return [];
+        }
+        $threshold = $this->ReadPropertyFloat('BfsOdlSchwellwert');
+        if ($threshold <= 0) {
+            $threshold = 0.3;
+        }
+        $out = [];
+        foreach ($geo['features'] as $feature) {
+            $props = $feature['properties'] ?? [];
+            $value = (float) ($props['value'] ?? 0);
+            if ($value < $threshold) {
+                continue;
+            }
+            $coords = $feature['geometry']['coordinates'] ?? null;
+            if (!is_array($coords) || count($coords) < 2) {
+                continue;
+            }
+            $name = (string) ($props['name'] ?? $props['id'] ?? 'Messstelle');
+            $out[] = [
+                'identifier' => 'bfsodl-' . (string) ($props['id'] ?? $name),
+                'source' => 'bfs_odl',
+                'msgType' => 'Alert',
+                'event' => 'Erhöhte Radioaktivität',
+                'headline' => sprintf('Erhöhte Ortsdosisleistung: %s', $name),
+                'description' => sprintf(
+                    '%s µSv/h an Messstelle %s (eigener Schwellwert %s µSv/h -- keine amtliche Alarmstufe, die Rohdaten kennen keine offizielle Meldeschwelle).',
+                    number_format($value, 3, ',', '.'),
+                    $name,
+                    number_format($threshold, 3, ',', '.')
+                ),
+                'instruction' => '',
+                'severity' => 'Severe',
+                'effective' => $props['end_measure'] ?? null,
+                'onset' => null,
+                'expires' => null,
+                'areaDesc' => $name,
+                'rings' => [],
+                'circles' => [['lat' => (float) $coords[1], 'lon' => (float) $coords[0], 'radiusKm' => 10.0]],
+            ];
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
     //  Abfragezyklus: Poll, Matching, Push, Schutzaktionen
     // ----------------------------------------------------------------
 
@@ -1444,6 +1577,12 @@ class WarnHub extends IPSModule
         }
         if ($dwdDirectActive) {
             $warnings = array_merge($warnings, $this->fetchDwdCap());
+        }
+        if ($this->ReadPropertyBoolean('QuellePegelonline')) {
+            $warnings = array_merge($warnings, $this->fetchPegelonline());
+        }
+        if ($this->ReadPropertyBoolean('QuelleBfsOdl')) {
+            $warnings = array_merge($warnings, $this->fetchBfsOdl());
         }
 
         $result = $this->processWarnings($warnings);

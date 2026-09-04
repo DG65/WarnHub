@@ -48,6 +48,14 @@ class IPSModule
     {
         $this->props[$n] ??= $v;
     }
+    public function RegisterPropertyFloat(string $n, float $v): void
+    {
+        $this->props[$n] ??= $v;
+    }
+    public function ReadPropertyFloat(string $n): float
+    {
+        return (float) ($this->props[$n] ?? 0);
+    }
     public function ReadPropertyString(string $n): string
     {
         return (string) ($this->props[$n] ?? '');
@@ -231,6 +239,32 @@ $GLOBALS['whub_test_properties'] = [55555 => ['Latitude' => 52.5200, 'Longitude'
 $msg2 = callPrivate($hub, 'AddStandortFromSystemLocation');
 check('Fallback für Symcon < 5.0 (getrennte Latitude/Longitude) funktioniert', str_starts_with($msg2, '✅') && str_contains($msg2, '52.52'));
 $GLOBALS['whub_test_kernelVersion'] = 9.0;
+
+echo "== Live-Abruf PEGELONLINE (wsv.de) ==\n";
+$pegelWarnings = callPrivate($hub, 'fetchPegelonline');
+check('fetchPegelonline() liefert ein Array (auch bei 0 aktuell erhöhten Pegeln kein Fehler)', is_array($pegelWarnings));
+echo "  Info: " . count($pegelWarnings) . " Pegel aktuell über MHW/HSW.\n";
+if (count($pegelWarnings) > 0) {
+    $w = $pegelWarnings[0];
+    foreach (['identifier', 'source', 'msgType', 'event', 'headline', 'severity', 'circles'] as $field) {
+        check("erste Pegel-Warnung hat Feld '$field'", array_key_exists($field, $w));
+    }
+    check('erste Pegel-Warnung hat genau einen Kreis (Stationsposition)', count($w['circles']) === 1);
+    check('Pegel-Warnung klassifiziert automatisch als Kategorie "starkregen" (Schlüsselwort "Hochwasser")', callPrivate($hub, 'classifyEventCategory', [$w['event'], $w['headline']]) === 'starkregen');
+}
+
+echo "== Live-Abruf BfS ODL-Info (imis.bfs.de) ==\n";
+$hub->SetProp('BfsOdlSchwellwert', 0.3);
+$odlWarnings = callPrivate($hub, 'fetchBfsOdl');
+check('fetchBfsOdl() liefert ein Array (auch bei 0 Überschreitungen kein Fehler)', is_array($odlWarnings));
+echo "  Info: " . count($odlWarnings) . " Messstellen aktuell über dem Schwellwert 0,3 µSv/h.\n";
+if (count($odlWarnings) > 0) {
+    $w = $odlWarnings[0];
+    foreach (['identifier', 'source', 'msgType', 'event', 'headline', 'severity', 'circles'] as $field) {
+        check("erste ODL-Warnung hat Feld '$field'", array_key_exists($field, $w));
+    }
+    check('erste ODL-Warnung hat Severity "Severe"', $w['severity'] === 'Severe');
+}
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
