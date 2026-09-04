@@ -444,9 +444,17 @@ class WarnHub extends IPSModule
      */
     private function resolveWebFrontModuleGuid(): ?string
     {
-        foreach (@IPS_GetModuleList() ?: [] as $moduleID) {
+        $allModules = @IPS_GetModuleList() ?: [];
+        $sampleNames = [];
+        foreach ($allModules as $moduleID) {
             $m = @IPS_GetModule($moduleID);
-            if (is_array($m) && strcasecmp((string) ($m['ModuleName'] ?? ''), 'WebFront') === 0) {
+            $name = is_array($m) ? (string) ($m['ModuleName'] ?? '') : '';
+            if ($name !== '' && count($sampleNames) < 200) {
+                $sampleNames[] = $name;
+            }
+            // Substring statt exaktem Vergleich -- manche Symcon-Stände/Sprachen
+            // könnten den Namen leicht abweichend führen (z. B. Zusatzwort).
+            if ($name !== '' && stripos($name, 'webfront') !== false) {
                 return $moduleID;
             }
         }
@@ -454,6 +462,18 @@ class WarnHub extends IPSModule
         if (count(@IPS_GetInstanceListByModuleID(WHUB_WEBFRONT_GUID) ?: []) > 0) {
             return WHUB_WEBFRONT_GUID;
         }
+        // Nichts gefunden -- Diagnose dauerhaft loggen (nicht nur SendDebug,
+        // das Debug-Fenster ist meist nicht offen, wenn's auffällt), damit
+        // sich die tatsächliche Modulliste dieser Installation nachvollziehen
+        // lässt, statt im Dunkeln zu raten.
+        IPS_LogMessage(
+            'WarnHub #' . $this->InstanceID,
+            sprintf(
+                'resolveWebFrontModuleGuid: kein Modul mit "webfront" im Namen unter %d installierten Modulen gefunden. Beispiele: %s',
+                count($allModules),
+                implode(', ', array_slice($sampleNames, 0, 30))
+            )
+        );
         return null;
     }
 
