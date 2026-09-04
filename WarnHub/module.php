@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.9';
-    private const NEWS_VERSION = '0.1.0-beta.9';
+    private const DOC_VERSION = '0.1.0-beta.10';
+    private const NEWS_VERSION = '0.1.0-beta.10';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -254,6 +254,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE und BfS ODL-Info gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser) bzw. eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
+                ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie oder einer Geofency-Bridge -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
                 ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
@@ -270,6 +271,8 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_AddStandortFromSystemLocation($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Übernimmt Breiten-/Längengrad aus der Symcon-Kerninstanz "Standort" (Kern-Instanzen) als neue Zeile -- fügt sie nur der offenen Tabelle hinzu, "Übernehmen" bleibt trotzdem nötig.'],
+                ['type' => 'Label', 'caption' => 'Mobiler Standort (z. B. aus Tessie- oder einer Geofency-Bridge-Variable): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
+                ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
                 [
                     'type' => 'List',
                     'name' => 'Standorte',
@@ -277,12 +280,15 @@ class WarnHub extends IPSModule
                     'add' => true,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'PLZ/Ort (Info)', 'name' => 'Ort', 'width' => '180px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Breitengrad (Lat)', 'name' => 'Lat', 'width' => '130px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
-                        ['caption' => 'Längengrad (Lon)', 'name' => 'Lon', 'width' => '130px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
-                        ['caption' => 'Umkreis (km)', 'name' => 'RadiusKm', 'width' => '110px', 'add' => 10.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1, 'minValue' => 0]],
-                        ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '150px', 'add' => 2, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => 'PLZ/Ort (Info)', 'name' => 'Ort', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => 'Breitengrad (Lat)', 'name' => 'Lat', 'width' => '120px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
+                        ['caption' => 'Längengrad (Lon)', 'name' => 'Lon', 'width' => '120px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
+                        ['caption' => 'Live-Standort Lat (0=fest)', 'name' => 'QuellVarLat', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => 'Live-Standort Lon (0=fest)', 'name' => 'QuellVarLon', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => 'Umkreis (km)', 'name' => 'RadiusKm', 'width' => '100px', 'add' => 10.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1, 'minValue' => 0]],
+                        ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 2, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
+                        ['caption' => 'Push nur an (Name, Komma; leer=alle)', 'name' => 'PushZielFilter', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
                     ],
                 ],
@@ -710,12 +716,51 @@ class WarnHub extends IPSModule
                 'Ort' => (string) ($s['Ort'] ?? ''),
                 'Lat' => (float) ($s['Lat'] ?? 0),
                 'Lon' => (float) ($s['Lon'] ?? 0),
+                'QuellVarLat' => (int) ($s['QuellVarLat'] ?? 0),
+                'QuellVarLon' => (int) ($s['QuellVarLon'] ?? 0),
                 'RadiusKm' => (float) ($s['RadiusKm'] ?? 10),
                 'MinSeverity' => (int) ($s['MinSeverity'] ?? 2),
+                'PushZielFilter' => (string) ($s['PushZielFilter'] ?? ''),
                 'Aktiv' => (bool) ($s['Aktiv'] ?? true),
             ];
         }
         return $out;
+    }
+
+    /**
+     * Liefert die tatsächlich zu verwendende Position eines Standorts. Sind
+     * QuellVarLat/QuellVarLon gesetzt (z. B. auf eine Tessie- oder
+     * Geofency-Bridge-Variable), wird deren AKTUELLER Wert gelesen statt der
+     * festen Lat/Lon-Spalten -- damit "wandert" ein Standort mit dem
+     * tatsächlichen Aufenthaltsort mit (Dietmars Idee 04.09.2026: zwei Autos/
+     * Personen sollen ihre je eigenen, aktuellen Warnungen bekommen statt
+     * einer festen Heimatkoordinate). Die Lat/Lon-Spalten bleiben dabei der
+     * Fallback, falls die Variable (noch) nicht existiert.
+     */
+    private function resolveStandortCoords(array $standort): array
+    {
+        $lat = $standort['Lat'];
+        $lon = $standort['Lon'];
+        if ($standort['QuellVarLat'] > 0 && @IPS_VariableExists($standort['QuellVarLat'])) {
+            $lat = (float) GetValue($standort['QuellVarLat']);
+        }
+        if ($standort['QuellVarLon'] > 0 && @IPS_VariableExists($standort['QuellVarLon'])) {
+            $lon = (float) GetValue($standort['QuellVarLon']);
+        }
+        return ['lat' => $lat, 'lon' => $lon];
+    }
+
+    /**
+     * "Push nur an ..."-Filter eines Standorts (Komma-getrennte WebFront-
+     * Namen) in eine vergleichbare Namensliste zerlegt -- leer = kein Filter
+     * (an alle aktivierten Ziele, bisheriges Verhalten). Namensbasiert statt
+     * ID-basiert, um demselben Muster wie Schutzaktionen::StandortFilter zu
+     * folgen (dort ebenfalls ein Freitext-Namensabgleich, kein Auswahlfeld).
+     */
+    private function parsePushZielNames(string $filter): array
+    {
+        $names = array_filter(array_map('trim', explode(',', $filter)), fn ($n) => $n !== '');
+        return array_map('mb_strtolower', $names);
     }
 
     /** @return array<int,array{Name:string,Aktiv:bool,Typ:string,Kategorien:array<int,string>,MinSeverity:int,StandortFilter:string,ZielVariableID:int,ZielWert:float,ZielSkriptID:int,AutoOffSekunden:int}> */
@@ -1641,10 +1686,12 @@ class WarnHub extends IPSModule
 
             foreach ($standorte as $standort) {
                 $pairKey = $w['identifier'] . '|' . $standort['Name'];
+                $coords = $this->resolveStandortCoords($standort);
+                $pushZiele = $this->parsePushZielNames($standort['PushZielFilter']);
 
                 $hasGeo = count($w['rings']) > 0 || count($w['circles']) > 0;
                 $distanceKm = $hasGeo
-                    ? WHUB_Geo::distanceToAny($standort['Lat'], $standort['Lon'], $w['rings'], $w['circles'])
+                    ? WHUB_Geo::distanceToAny($coords['lat'], $coords['lon'], $w['rings'], $w['circles'])
                     : null;
                 $matches = $hasGeo && $distanceKm !== null && $distanceKm <= $standort['RadiusKm'];
                 if (!$matches) {
@@ -1661,7 +1708,8 @@ class WarnHub extends IPSModule
                             $this->pushToAllWebfronts(
                                 '✅ Entwarnung',
                                 $this->truncateBytes($standort['Name'] . ': ' . $w['headline'] . ' aufgehoben.', 256),
-                                $pushSound
+                                $pushSound,
+                                $pushZiele
                             );
                         }
                         $cancelled++;
@@ -1689,7 +1737,8 @@ class WarnHub extends IPSModule
                         $this->pushToAllWebfronts(
                             $this->buildPushTitle($w['severity'], $w['event']),
                             $this->buildPushText($standort['Name'], $w),
-                            $pushSound
+                            $pushSound,
+                            $pushZiele
                         );
                     }
                     $newlyPushed++;
@@ -1794,12 +1843,24 @@ class WarnHub extends IPSModule
         return $this->truncateBytes($text, 256);
     }
 
-    /** Pusht an alle aktivierten Ziele -- je nach Typ per WFC_PushNotification (WebFront) oder VISU_PostNotificationEx (Kachel-Visualisierung), siehe discoverPushTargets(). */
-    private function pushToAllWebfronts(string $title, string $text, string $sound): int
+    /**
+     * Pusht an alle aktivierten Ziele -- je nach Typ per WFC_PushNotification
+     * (WebFront) oder VISU_PostNotificationEx (Kachel-Visualisierung), siehe
+     * discoverPushTargets(). $onlyNames (bereits über parsePushZielNames()
+     * kleingeschrieben) schränkt optional auf namentlich genannte Ziele ein
+     * -- leer = an alle aktivierten Ziele (bisheriges Verhalten), genutzt für
+     * Standorte mit eigenem "Push nur an ..."-Filter (z. B. ein mobiler
+     * Standort soll nur das zugehörige Handy benachrichtigen, nicht auch das
+     * der anderen Person).
+     */
+    private function pushToAllWebfronts(string $title, string $text, string $sound, array $onlyNames = []): int
     {
         $sent = 0;
         foreach ($this->decodeWebFronts() as $w) {
             if (!$w['Aktiv']) {
+                continue;
+            }
+            if (count($onlyNames) > 0 && !in_array(mb_strtolower(trim($w['Name'])), $onlyNames, true)) {
                 continue;
             }
             // Kachel-Visualisierung: VISU_PostNotificationEx (Icon+Sound

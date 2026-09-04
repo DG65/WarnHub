@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-beta.10 (2026-09-04)
+
+- Standorte können jetzt an zwei Variablen (Lat/Lon) gebunden werden, statt
+  fester Koordinaten -- z. B. an eine Tessie- oder eine Geofency-Bridge-
+  Variable. WarnHub liest bei jeder Prüfung die dann AKTUELLE Position; die
+  Tabellenspalten Lat/Lon bleiben Startwert/Fallback, falls die Variable
+  (noch) nicht existiert. Grundlage für "immer die richtige Warnung am
+  tatsächlichen Aufenthaltsort", unabhängig von einer festen Heimatkoordinate.
+- Neuer Spaltenfilter "Push nur an" je Standort (Komma-getrennte WebFront-
+  Namen, leer = wie bisher an alle aktivierten Ziele): löst den Fall von
+  mehreren gleichzeitig genutzten Standorten/Personen/Fahrzeugen (z. B. 2
+  Teslas + 2 Geofency-Instanzen + 2 WebFronts), bei dem bislang JEDE
+  Warnung an ALLE WebFronts ging, unabhängig davon, wen sie eigentlich
+  betraf.
+
 ## 0.1.0-beta.9 (2026-09-04)
 
 - Zwei neue, optionale Datenquellen (beide standardmäßig AUS):
