@@ -6,7 +6,7 @@ declare(strict_types=1);
 // echten Symcon-Kernmoduls "Benachrichtigung"
 // (github.com/symcon/Benachrichtigung/blob/main/Notification/module.php,
 // Zeile mit WFC_PushNotification). NICHT verwechseln mit der
-// Konfigurator-/Kachel-GUID {B5B875BB-...}, die braucht VISU_PostNotification
+// Konfigurator-/Kachel-GUID {B5B875BB-...}, die braucht VISU_PostNotificationEx
 // statt WFC_PushNotification.
 define('WHUB_WEBFRONT_GUID', '{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}');
 
@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.7';
-    private const NEWS_VERSION = '0.1.0-beta.7';
+    private const DOC_VERSION = '0.1.0-beta.8';
+    private const NEWS_VERSION = '0.1.0-beta.8';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -146,7 +146,7 @@ class WarnHub extends IPSModule
     // Quellcode des Symcon-Kernmoduls "Benachrichtigung" verifiziert
     // (github.com/symcon/Benachrichtigung, Notification/module.php) -- dort
     // dispatcht dieselbe Stelle, die WFC_PushNotification für WHUB_WEBFRONT_GUID
-    // aufruft, für DIESE GUID stattdessen an VISU_PostNotification().
+    // aufruft, für DIESE GUID stattdessen an VISU_PostNotificationEx().
     private const KACHEL_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
 
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
@@ -492,7 +492,7 @@ class WarnHub extends IPSModule
     /**
      * Push-Ziele: sowohl klassische WebFront-Konfigurator-Instanzen
      * (WFC_PushNotification) als auch Kachel-Visualisierung-Instanzen
-     * (VISU_PostNotification) -- Praxis-Fund 04.09.2026: Dietmars einzige
+     * (VISU_PostNotificationEx) -- Praxis-Fund 04.09.2026: Dietmars einzige
      * genutzte Oberfläche ist eine Kachel-Visualisierung ("Dietmar", unter
      * "Visualisierung Instanzen"), kein klassisches WebFront -- beide
      * Symcon-Oberflächen bieten eigene, INKOMPATIBLE Push-Funktionen (gegen
@@ -1471,8 +1471,8 @@ class WarnHub extends IPSModule
             return '⚠️ Kein aktiviertes Push-Ziel -- oben in "🔔 Benachrichtigung" mindestens eine Instanz aktivieren.';
         }
         $sent = $this->pushToAllWebfronts(
-            '🧪 WarnHub Testbenachrichtigung',
-            'Wenn diese Meldung ankommt, funktioniert der Zustellweg. Keine echte Warnung.',
+            $this->truncateBytes('🧪 WarnHub Test', 32),
+            $this->truncateBytes('Wenn diese Meldung ankommt, funktioniert der Zustellweg. Keine echte Warnung.', 256),
             $this->ReadPropertyString('PushSound')
         );
         if ($sent === 0) {
@@ -1521,7 +1521,7 @@ class WarnHub extends IPSModule
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
                                 '✅ Entwarnung',
-                                mb_substr($standort['Name'] . ': ' . $w['headline'] . ' aufgehoben.', 0, 256),
+                                $this->truncateBytes($standort['Name'] . ': ' . $w['headline'] . ' aufgehoben.', 256),
                                 $pushSound
                             );
                         }
@@ -1607,12 +1607,40 @@ class WarnHub extends IPSModule
         ];
     }
 
+    /**
+     * WFC_PushNotification/VISU_PostNotificationEx begrenzen Titel/Text laut
+     * offizieller Doku auf 32/256 Zeichen -- ob intern in Zeichen oder BYTES
+     * geprüft wird, ist nirgends dokumentiert. Kürzt deshalb vorsichtshalber
+     * nach Bytes (UTF-8-sicher, schneidet nie mitten in einem Mehrbyte-
+     * Zeichen ab): ein Emoji im Titel (4 Byte) plus Umlaute im Ereignisnamen
+     * können sonst die Byte-Grenze überschreiten, obwohl mb_substr() nach
+     * Zeichen längst darunter läge (Dietmars hartnäckiger Live-Fund
+     * 04.09.2026 -- Test-Push scheiterte trotz korrektem TargetID weiter).
+     */
+    private function truncateBytes(string $str, int $maxBytes): string
+    {
+        if (strlen($str) <= $maxBytes) {
+            return $str;
+        }
+        $result = '';
+        $bytes = 0;
+        foreach (mb_str_split($str) as $char) {
+            $charBytes = strlen($char);
+            if ($bytes + $charBytes > $maxBytes) {
+                break;
+            }
+            $result .= $char;
+            $bytes += $charBytes;
+        }
+        return $result;
+    }
+
     private function buildPushTitle(string $severity, string $event): string
     {
         $icon = self::SEVERITY_ICON[$severity] ?? '⚠️';
         $label = mb_convert_case(mb_strtolower(trim($event) !== '' ? $event : 'Warnung'), MB_CASE_TITLE);
         $title = $icon . ' ' . $label;
-        return mb_substr($title, 0, 32);
+        return $this->truncateBytes($title, 32);
     }
 
     private function buildPushText(string $standortName, array $w): string
@@ -1624,10 +1652,10 @@ class WarnHub extends IPSModule
         if ($w['expires'] !== null) {
             $text .= ' Gültig bis ' . $this->formatDateDe($w['expires']) . ' Uhr.';
         }
-        return mb_substr($text, 0, 256);
+        return $this->truncateBytes($text, 256);
     }
 
-    /** Pusht an alle aktivierten Ziele -- je nach Typ per WFC_PushNotification (WebFront) oder VISU_PostNotification (Kachel-Visualisierung), siehe discoverPushTargets(). */
+    /** Pusht an alle aktivierten Ziele -- je nach Typ per WFC_PushNotification (WebFront) oder VISU_PostNotificationEx (Kachel-Visualisierung), siehe discoverPushTargets(). */
     private function pushToAllWebfronts(string $title, string $text, string $sound): int
     {
         $sent = 0;
@@ -1635,20 +1663,22 @@ class WarnHub extends IPSModule
             if (!$w['Aktiv']) {
                 continue;
             }
-            // TargetID: Live-verifiziert an Dietmars Installation (04.09.2026,
-            // über den nativen "Instanzfunktionen ausführen"-Dialog in der
-            // Konsole) -- für VISU_PostNotification muss TargetID die
-            // ZIEL-VISUALISIERUNG SELBST sein (also dieselbe ID wie
-            // $w['InstanceID']), nicht WarnHubs eigene InstanceID und nicht 0.
-            // Der zuvor angenommene Wert ($this->InstanceID, nach dem Vorbild
-            // des offiziellen Kernmoduls "Benachrichtigung") funktionierte bei
-            // Kachel-Visualisierung-Zielen nachweislich NICHT.
+            // Kachel-Visualisierung: VISU_PostNotificationEx (Icon+Sound
+            // GETRENNT) statt der einfachen VISU_PostNotification -- Live-
+            // Fund 04.09.2026, zwei unabhängige reale Referenzen (Wilkware/
+            // WeatherWarning-Modul + ein von Dietmar gefundenes Müllabfuhr-
+            // Erinnerungsskript) nutzen beide ausschließlich die Ex-Variante
+            // mit TargetID=0; jeder bisherige Versuch mit der einfachen
+            // Funktion (egal welche TargetID) schlug bei Dietmar fehl. Sound-
+            // Werteliste laut offizieller Doku IDENTISCH zu WFC_PushNotification
+            // (alarm/bell/boom/...), Icon separat und nicht sicherheitsrelevant
+            // für die Zustellung selbst.
             if ($w['Typ'] === 'kachel') {
-                if (!function_exists('VISU_PostNotification')) {
-                    $this->LogError('pushToAllWebfronts', 'VISU_PostNotification ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
+                if (!function_exists('VISU_PostNotificationEx')) {
+                    $this->LogError('pushToAllWebfronts', 'VISU_PostNotificationEx ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
                     continue;
                 }
-                $ok = @VISU_PostNotification($w['InstanceID'], $title, $text, $sound, $w['InstanceID']);
+                $ok = @VISU_PostNotificationEx($w['InstanceID'], $title, $text, 'Alert', $sound, 0);
             } else {
                 if (!function_exists('WFC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');

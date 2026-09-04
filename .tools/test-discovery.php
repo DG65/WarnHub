@@ -328,5 +328,21 @@ $hub2->SetProp('Schutzaktionen', $valuesJson3);
 $msg4 = $hub2->DiscoverSchutzaktionen();
 check('erneute Suche nach "Übernehmen" findet keine neuen Treffer mehr (kein Duplikat)', str_contains($msg4, 'Keine neuen'));
 
+echo "== Byte-sichere Titel-/Text-Kürzung ==\n";
+$hub3 = new WarnHub();
+$hub3->Create();
+// Emoji (4 Byte in UTF-8) + Umlaute: Dietmars hartnäckiger Live-Fund
+// 04.09.2026 -- ein Titel kann unter 32 ZEICHEN liegen, aber trotzdem über
+// 32 BYTES, wenn Symcons eigene Längenprüfung (undokumentiert) in Bytes
+// statt Zeichen rechnet.
+$emoji = '🧪 WarnHub Testbenachrichtigung'; // 30 Zeichen, aber 33 Byte
+check('Test-Ausgangswert liegt unter der Zeichen-, aber über der Byte-Grenze (belegt das eigentliche Problem)', mb_strlen($emoji) <= 32 && strlen($emoji) > 32);
+$truncated = callPrivate($hub3, 'truncateBytes', [$emoji, 32]);
+check('truncateBytes() hält die 32-Byte-Grenze ein', strlen($truncated) <= 32);
+check('truncateBytes() erzeugt gültiges UTF-8 (kein Byte mitten im Mehrbyte-Zeichen abgeschnitten)', mb_check_encoding($truncated, 'UTF-8'));
+check('truncateBytes() lässt kurze Strings unverändert', callPrivate($hub3, 'truncateBytes', ['kurz', 32]) === 'kurz');
+$umlaut = str_repeat('ö', 20); // jedes 'ö' = 2 Byte -> 40 Byte bei 20 Zeichen
+check('truncateBytes() kürzt auch reine Umlaut-Strings byte-sicher (16 Zeichen bei 32-Byte-Limit, da "ö" = 2 Byte)', mb_strlen(callPrivate($hub3, 'truncateBytes', [$umlaut, 32])) === 16);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

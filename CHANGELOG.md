@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta.8 (2026-09-04)
+
+- Fix (zweiter, vermutlich entscheidender Baustein): Kachel-Visualisierung-Push nutzt jetzt
+  `VISU_PostNotificationEx` (Icon und Sound als getrennte Parameter) statt der einfachen
+  `VISU_PostNotification` -- zwei unabhängige reale Referenzen (Wilkware/WeatherWarning-Modul,
+  ein von Dietmar gefundenes Müllabfuhr-Erinnerungsskript) nutzen ausschließlich die
+  Ex-Variante, jeder bisherige Versuch mit der einfachen Funktion schlug bei Dietmar fehl.
+- Fix: Titel-/Text-Kürzung auf die von Symcon dokumentierten 32/256 Zeichen war
+  zeichenbasiert (`mb_substr`) -- ob Symcons eigene Längenprüfung intern in Zeichen oder
+  BYTES rechnet, ist nirgends dokumentiert. Ein Emoji im Titel (4 Byte in UTF-8) plus
+  Umlaute im Ereignisnamen konnten die Byte-Grenze überschreiten, obwohl die Zeichenzahl
+  längst darunter lag -- neue `truncateBytes()` kürzt jetzt byte-sicher (UTF-8-Grenzen
+  respektierend). Betraf auch den Test-Push-Knopf selbst (33 statt erlaubter 32 Byte).
+
 ## 0.1.0-beta.7 (2026-09-04)
 
 - Fix (hoffentlich final): Push an Kachel-Visualisierung-Instanzen schlug trotz des
