@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0-beta.6 (2026-09-04)
+
+- Schutzaktionen: „Auslöser" ist jetzt eine Mehrfachauswahl zum Ankreuzen (🌪️ Sturm, 🧊 Hagel,
+  🌧️ Starkregen, ⚡ Gewitter, ❄️ Schnee, 🥵 Hitze) statt einer Einzelauswahl -- eine Markise kann
+  jetzt in EINER Zeile bei Sturm UND Hagel einfahren, statt mehrerer Zeilen zu brauchen
+  (Dietmars ausdrücklicher Wunsch). Kein Kästchen angekreuzt = gilt weiterhin für jede
+  Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise bereits Sturm +
+  Hagel an.
+- Fix: Treffer über eine Kind-Variable (z. B. "Hupe" unter mehreren Fahrzeug-Instanzen) waren
+  in der Liste nicht mehr unterscheidbar, weil nur der Variablenname übernommen wurde. Der
+  Name der tatsächlich besitzenden Instanz wird jetzt vorangestellt ("Schneeflocke – Hupe"),
+  auch wenn beliebig viele Zwischenkategorien dazwischenliegen.
+
 ## 0.1.0-beta.5 (2026-09-04)
 
 - Fix: Push an Kachel-Visualisierung-Instanzen schlug immer fehl (Live-Test, Dietmar). Ursache:

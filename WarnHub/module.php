@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.5';
-    private const NEWS_VERSION = '0.1.0-beta.5';
+    private const DOC_VERSION = '0.1.0-beta.6';
+    private const NEWS_VERSION = '0.1.0-beta.6';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -133,6 +133,7 @@ class WarnHub extends IPSModule
     // (Instanz-/Variablenname enthält eins der Wörter -> Aktionstyp-Vorschlag).
     private const DISCOVERY_KEYWORDS = [
         'raffstore' => ['raffstore', 'jalousie'],
+        'markise' => ['markise', 'sonnenschutz'],
         'garage' => ['garage', 'garagentor'],
         'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn'],
     ];
@@ -157,6 +158,22 @@ class WarnHub extends IPSModule
         'gewitter'   => ['gewitter', 'blitz'],
         'schnee'     => ['schnee', 'glätte', 'glaette', 'glatteis', 'eis'],
         'hitze'      => ['hitze'],
+    ];
+
+    // Kategorie-Kästchen der Schutzaktionen-Liste: Kategorie-Schlüssel (siehe
+    // CATEGORY_KEYWORDS) -> [Property-Feldname, Spalten-Beschriftung]. Mehrere
+    // Kästchen gleichzeitig ankreuzbar (Dietmars ausdrücklicher Wunsch
+    // 04.09.2026 -- eine Markise soll mit EINEM Klick pro Auslöser statt
+    // mehrerer Zeilen für Sturm+Hagel+... konfigurierbar sein). Kein Kästchen
+    // angekreuzt = Aktion gilt für JEDE Kategorie (Ersatz für das frühere
+    // "alle"-Select).
+    private const CATEGORY_FIELDS = [
+        'sturm'      => ['KatSturm', '🌪️ Sturm'],
+        'hagel'      => ['KatHagel', '🧊 Hagel'],
+        'starkregen' => ['KatStarkregen', '🌧️ Starkregen'],
+        'gewitter'   => ['KatGewitter', '⚡ Gewitter'],
+        'schnee'     => ['KatSchnee', '❄️ Schnee'],
+        'hitze'      => ['KatHitze', '🥵 Hitze'],
     ];
 
     // ----------------------------------------------------------------
@@ -233,7 +250,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de) und optional die direkten DWD-Wetterwarnungen (opendata.dwd.de).'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -329,7 +346,7 @@ class WarnHub extends IPSModule
 
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Garagentor, Sirenen, Skripte)',
+            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Sirenen, Skripte)',
             'expanded' => false,
             'items' => [
                 ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
@@ -339,15 +356,16 @@ class WarnHub extends IPSModule
                     'popup' => [
                         'caption' => 'Felder je Aktionstyp',
                         'items' => [
-                            ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren, bitte am eigenen Aktor prüfen).'],
+                            ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-/Markisen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren/eingefahren, bitte am eigenen Aktor prüfen).'],
                             ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
                             ['type' => 'Label', 'caption' => 'Skript ausführen: Ziel-Skript statt Ziel-Variable/Zielwert.'],
+                            ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise bereits Sturm + Hagel an.'],
                         ],
                     ],
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Garage/Sirene durchsuchen',
+                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Sirene durchsuchen',
                     'onClick' => 'echo WHUB_DiscoverSchutzaktionen($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
@@ -361,7 +379,7 @@ class WarnHub extends IPSModule
                         ['caption' => 'Name', 'name' => 'Name', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
                         ['caption' => 'Typ', 'name' => 'Typ', 'width' => '190px', 'add' => 'raffstore', 'edit' => ['type' => 'Select', 'options' => $this->actionTypeOptions()]],
-                        ['caption' => 'Auslöser', 'name' => 'Kategorie', 'width' => '150px', 'add' => 'alle', 'edit' => ['type' => 'Select', 'options' => $this->categoryOptions()]],
+                        ...array_map(fn ($f) => ['caption' => $f[1], 'name' => $f[0], 'width' => '75px', 'add' => false, 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
                         ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
                         ['caption' => 'Nur Standort (leer=alle)', 'name' => 'StandortFilter', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ['caption' => 'Ziel-Variable', 'name' => 'ZielVariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
@@ -423,23 +441,11 @@ class WarnHub extends IPSModule
         ];
     }
 
-    private function categoryOptions(): array
-    {
-        return [
-            ['caption' => 'Alle Kategorien', 'value' => 'alle'],
-            ['caption' => 'Sturm/Wind', 'value' => 'sturm'],
-            ['caption' => 'Hagel', 'value' => 'hagel'],
-            ['caption' => 'Starkregen/Hochwasser', 'value' => 'starkregen'],
-            ['caption' => 'Gewitter', 'value' => 'gewitter'],
-            ['caption' => 'Schnee/Glätte', 'value' => 'schnee'],
-            ['caption' => 'Hitze', 'value' => 'hitze'],
-        ];
-    }
-
     private function actionTypeOptions(): array
     {
         return [
             ['caption' => 'Raffstore/Rollladen hochfahren', 'value' => 'raffstore'],
+            ['caption' => 'Markise einfahren', 'value' => 'markise'],
             ['caption' => 'Garagentor schließen', 'value' => 'garage'],
             ['caption' => 'Akustischer Alarm', 'value' => 'sirene'],
             ['caption' => 'Skript ausführen', 'value' => 'skript'],
@@ -705,7 +711,7 @@ class WarnHub extends IPSModule
         return $out;
     }
 
-    /** @return array<int,array{Name:string,Aktiv:bool,Typ:string,Kategorie:string,MinSeverity:int,StandortFilter:string,ZielVariableID:int,ZielWert:float,ZielSkriptID:int,AutoOffSekunden:int}> */
+    /** @return array<int,array{Name:string,Aktiv:bool,Typ:string,Kategorien:array<int,string>,MinSeverity:int,StandortFilter:string,ZielVariableID:int,ZielWert:float,ZielSkriptID:int,AutoOffSekunden:int}> */
     private function decodeSchutzaktionen(): array
     {
         $raw = json_decode($this->ReadPropertyString('Schutzaktionen'), true);
@@ -714,11 +720,23 @@ class WarnHub extends IPSModule
         }
         $out = [];
         foreach ($raw as $a) {
+            $kategorien = [];
+            foreach (self::CATEGORY_FIELDS as $key => [$field, $label]) {
+                if ((bool) ($a[$field] ?? false)) {
+                    $kategorien[] = $key;
+                }
+            }
+            // Rückwärtskompatibilität zur alten Einzelauswahl ("Kategorie"-
+            // String, vor 04.09.2026) -- nur relevant für Zeilen, die vor der
+            // Umstellung auf Mehrfachauswahl gespeichert wurden.
+            if (count($kategorien) === 0 && isset($a['Kategorie']) && $a['Kategorie'] !== 'alle' && $a['Kategorie'] !== '') {
+                $kategorien[] = (string) $a['Kategorie'];
+            }
             $out[] = [
                 'Name' => (string) ($a['Name'] ?? ''),
                 'Aktiv' => (bool) ($a['Aktiv'] ?? true),
                 'Typ' => (string) ($a['Typ'] ?? 'raffstore'),
-                'Kategorie' => (string) ($a['Kategorie'] ?? 'alle'),
+                'Kategorien' => $kategorien, // leer = gilt für jede Kategorie
                 'MinSeverity' => (int) ($a['MinSeverity'] ?? 3),
                 'StandortFilter' => (string) ($a['StandortFilter'] ?? ''),
                 'ZielVariableID' => (int) ($a['ZielVariableID'] ?? 0),
@@ -759,6 +777,26 @@ class WarnHub extends IPSModule
     }
 
     /**
+     * Läuft vom Objekt $id aus den Baum nach oben bis zur ersten echten
+     * INSTANZ (ObjectType 1) -- überspringt beliebig viele Zwischenkategorien
+     * dazwischen, statt nur den direkten Elternknoten zu nehmen (der oft nur
+     * eine Kategorie wie "Steuerung" ist, nicht das eigentliche Gerät).
+     * Tiefenbegrenzung als Schutz gegen einen unerwartet zirkulären Baum.
+     */
+    private function findOwningInstanceName(int $id): string
+    {
+        $currentID = @IPS_GetParent($id) ?: 0;
+        for ($depth = 0; $currentID > 0 && $depth < 10; $depth++) {
+            $obj = @IPS_GetObject($currentID);
+            if (is_array($obj) && (int) $obj['ObjectType'] === 1) {
+                return (string) (@IPS_GetName($currentID) ?: '');
+            }
+            $currentID = @IPS_GetParent($currentID) ?: 0;
+        }
+        return '';
+    }
+
+    /**
      * Durchsucht den GESAMTEN Objektbaum nach Instanzen/Variablen, deren Name
      * "Raffstore"/"Jalousie" (Typ raffstore), "Garage" (Typ garage) oder
      * "Sirene"/"Hupe"/"Buzzer"/"Signalhorn" (Typ sirene) enthält, und ergänzt
@@ -771,14 +809,26 @@ class WarnHub extends IPSModule
      */
     public function DiscoverSchutzaktionen(): string
     {
-        $rows = $this->decodeSchutzaktionen();
+        // Arbeitet bewusst auf dem ROHEN Property-Format (KatSturm/KatHagel/...
+        // als einzelne Bool-Felder je Zeile, wie es die Formular-Checkboxen
+        // erwarten) statt auf decodeSchutzaktionen()s normalisierter
+        // 'Kategorien'-Liste, die nur für die interne Zuordnungslogik gedacht ist.
+        $rows = json_decode($this->ReadPropertyString('Schutzaktionen'), true);
+        if (!is_array($rows)) {
+            $rows = [];
+        }
         $knownVarIDs = array_column($rows, 'ZielVariableID');
         $added = 0;
 
+        // Mehrere Kategorie-Kästchen gleichzeitig je Typ -- Windauslöser
+        // (Raffstore/Markise) decken beide realistischen Gefahren in EINER
+        // Zeile ab (Dietmars ausdrücklicher Wunsch 04.09.2026: "abhaken"
+        // statt mehrerer Zeilen).
         $typeDefaults = [
-            'raffstore' => ['Kategorie' => 'sturm', 'MinSeverity' => 3, 'AutoOff' => 0],
-            'garage' => ['Kategorie' => 'alle', 'MinSeverity' => 3, 'AutoOff' => 0],
-            'sirene' => ['Kategorie' => 'alle', 'MinSeverity' => 4, 'AutoOff' => 60],
+            'raffstore' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 3, 'AutoOff' => 0],
+            'markise' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 3, 'AutoOff' => 0],
+            'garage' => ['Kategorien' => [], 'MinSeverity' => 3, 'AutoOff' => 0], // leer = jede Kategorie
+            'sirene' => ['Kategorien' => [], 'MinSeverity' => 4, 'AutoOff' => 60],
         ];
 
         foreach ($this->collectObjectIDsRecursive(0) as $id) {
@@ -814,12 +864,27 @@ class WarnHub extends IPSModule
                     continue 2; // nächstes Objekt, nicht mit einer anderen Stichwortgruppe erneut versuchen
                 }
 
+                // Kommt der Treffer über eine namenlos-generische Kind-Variable
+                // (z. B. "Hupe" unter mehreren Fahrzeug-Instanzen -- Dietmars
+                // Live-Fund 04.09.2026: mehrere gleichnamige Zeilen ließen sich
+                // nicht mehr unterscheiden), Namen der ECHTEN besitzenden
+                // Instanz voranstellen -- nicht nur den direkten Elternknoten,
+                // der oft nur eine Zwischenkategorie ("Steuerung" o. ä.) ist
+                // (Dietmars Nachfrage 04.09.2026, zurecht: "bis zur eigentlichen
+                // Instanz?").
+                $displayName = (string) $obj['ObjectName'];
+                if ($type === 2) {
+                    $ownerName = $this->findOwningInstanceName($id);
+                    if ($ownerName !== '') {
+                        $displayName = $ownerName . ' – ' . $displayName;
+                    }
+                }
+
                 $defaults = $typeDefaults[$actionType];
-                $rows[] = [
-                    'Name' => (string) $obj['ObjectName'],
+                $row = [
+                    'Name' => $displayName,
                     'Aktiv' => true,
                     'Typ' => $actionType,
-                    'Kategorie' => $defaults['Kategorie'],
                     'MinSeverity' => $defaults['MinSeverity'],
                     'StandortFilter' => '',
                     'ZielVariableID' => $variableID,
@@ -827,6 +892,10 @@ class WarnHub extends IPSModule
                     'ZielSkriptID' => 0,
                     'AutoOffSekunden' => $defaults['AutoOff'],
                 ];
+                foreach (self::CATEGORY_FIELDS as $key => [$field, $label]) {
+                    $row[$field] = in_array($key, $defaults['Kategorien'], true);
+                }
+                $rows[] = $row;
                 $knownVarIDs[] = $variableID;
                 $added++;
                 continue 2;
@@ -836,7 +905,7 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Schutzaktionen', 'values', json_encode($rows));
         $this->UpdateFormField('Schutzaktionen', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Garage/Sirene im Objektbaum gefunden.';
+            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Markise/Garage/Sirene im Objektbaum gefunden.';
         }
         return sprintf(
             '✅ %d neue Schutzaktion(en) gefunden und aktiviert (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken.',
@@ -1491,7 +1560,8 @@ class WarnHub extends IPSModule
                     if ($action['StandortFilter'] !== '' && $action['StandortFilter'] !== $standort['Name']) {
                         continue;
                     }
-                    if ($action['Kategorie'] !== 'alle' && $action['Kategorie'] !== $category) {
+                    // Leere Kategorien-Auswahl = Aktion gilt für JEDE Kategorie.
+                    if (count($action['Kategorien']) > 0 && !in_array($category, $action['Kategorien'], true)) {
                         continue;
                     }
                     if ($this->severityRank($w['severity']) < $action['MinSeverity']) {
@@ -1627,7 +1697,7 @@ class WarnHub extends IPSModule
                 return;
             }
 
-            // raffstore / garage: Zielwert exakt wie vom Nutzer angegeben setzen
+            // raffstore / markise / garage: Zielwert exakt wie vom Nutzer angegeben setzen
             $ok = @RequestAction($action['ZielVariableID'], $action['ZielWert']);
             if (!$ok) {
                 $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '": RequestAction fehlgeschlagen.');

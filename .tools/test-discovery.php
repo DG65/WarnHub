@@ -25,16 +25,27 @@ const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
 //    |   +- 12 Instanz "Sirene Außen" -> 121 Var "Ein/Aus" (aktionsfähig)
 //    |   +- 13 Instanz "Garagentor" -> 131 Var "Status" (NICHT aktionsfähig), 132 Var "Steuerung" (aktionsfähig)
 //    |   +- 14 Instanz "Wetterstation" (kein Treffer)
+//    |   +- 15 Instanz "Markise Terrasse" -> 151 Var "Position" (aktionsfähig)
+//    |   +- 16 Instanz "Schneeflocke" (Auto) -> 161 Var "Hupe" (aktionsfähig, direktes Kind)
+//    |   +- 17 Instanz "Kohlekasten" (Auto) -> 171 Var "Hupe" (aktionsfähig, direktes Kind)
+//    |   +- 18 Instanz "Trabbi" (Auto) -> 180 Kategorie "Steuerung" -> 181 Var "Hupe"
+//    |         (aktionsfähig, ZWEI Ebenen tief -- prüft das Hochlaufen bis
+//    |         zur echten Instanz, nicht nur bis zum direkten Elternknoten)
 //    +- 20 Instanz "WebFront Familie" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 21 Instanz "WebFront Gast" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 22 Instanz "Dietmar" (Kachel-Visualisierung, NUR über Namenssuche auffindbar)
 $GLOBALS['whub_test_tree'] = [
     0 => [10, 20, 21, 22],
-    10 => [11, 12, 13, 14],
+    10 => [11, 12, 13, 14, 15, 16, 17, 18],
     11 => [111],
     12 => [121],
     13 => [131, 132],
     14 => [],
+    15 => [151],
+    16 => [161],
+    17 => [171],
+    18 => [180],
+    180 => [181],
     20 => [],
     21 => [],
     22 => [],
@@ -45,6 +56,11 @@ $GLOBALS['whub_test_objects'] = [
     12 => ['ObjectType' => 1, 'ObjectName' => 'Sirene Außen'],
     13 => ['ObjectType' => 1, 'ObjectName' => 'Garagentor'],
     14 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation'],
+    15 => ['ObjectType' => 1, 'ObjectName' => 'Markise Terrasse'],
+    16 => ['ObjectType' => 1, 'ObjectName' => 'Schneeflocke'],
+    17 => ['ObjectType' => 1, 'ObjectName' => 'Kohlekasten'],
+    18 => ['ObjectType' => 1, 'ObjectName' => 'Trabbi'],
+    180 => ['ObjectType' => 0, 'ObjectName' => 'Steuerung'], // Zwischenkategorie, KEINE Instanz
     20 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Familie'],
     21 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Gast'],
     22 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar'],
@@ -52,12 +68,20 @@ $GLOBALS['whub_test_objects'] = [
     121 => ['ObjectType' => 2, 'ObjectName' => 'Ein/Aus'],
     131 => ['ObjectType' => 2, 'ObjectName' => 'Status'],
     132 => ['ObjectType' => 2, 'ObjectName' => 'Steuerung'],
+    151 => ['ObjectType' => 2, 'ObjectName' => 'Position'],
+    161 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
+    171 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
+    181 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
 ];
 $GLOBALS['whub_test_variables'] = [
     111 => ['VariableAction' => 1],
     121 => ['VariableAction' => 1],
     131 => ['VariableAction' => 0], // reine Anzeige, keine Aktion -- darf NICHT vorgeschlagen werden
     132 => ['VariableAction' => 1],
+    151 => ['VariableAction' => 1],
+    161 => ['VariableAction' => 1],
+    171 => ['VariableAction' => 1],
+    181 => ['VariableAction' => 1],
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     WEBFRONT_GUID => [20, 21],
@@ -85,6 +109,15 @@ function IPS_GetVariable(int $id)
 function IPS_GetName(int $id): string
 {
     return $GLOBALS['whub_test_objects'][$id]['ObjectName'] ?? '';
+}
+function IPS_GetParent(int $id): int
+{
+    foreach ($GLOBALS['whub_test_tree'] as $parentID => $children) {
+        if (in_array($id, $children, true)) {
+            return $parentID;
+        }
+    }
+    return 0;
 }
 function IPS_GetInstanceListByModuleID(string $guid): array
 {
@@ -204,6 +237,12 @@ class IPSModule
 
 require __DIR__ . '/../WarnHub/module.php';
 
+function callPrivate(object $obj, string $method, array $args = [])
+{
+    $ref = new ReflectionMethod($obj, $method);
+    return $ref->invokeArgs($obj, $args);
+}
+
 $failures = 0;
 $checks = 0;
 function check(string $label, bool $ok): void
@@ -252,20 +291,36 @@ echo "== Schutzaktionen-Discovery ==\n";
 $hub2 = new WarnHub();
 $hub2->Create();
 $msg3 = $hub2->DiscoverSchutzaktionen();
-check('meldet 3 neue Schutzaktionen (Raffstore/Sirene/Garage)', str_contains($msg3, '3 neue'));
+check('meldet 7 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe)', str_contains($msg3, '7 neue'));
 [$field3, , $valuesJson3] = $hub2->lastValuesUpdate('Schutzaktionen');
 check('schreibt in das Feld "Schutzaktionen"', $field3 === 'Schutzaktionen');
 $actions = json_decode($valuesJson3, true);
-check('genau 3 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig)', count($actions) === 3);
+check('genau 7 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig)', count($actions) === 7);
+check('Auto-Hupen sind über den Fahrzeugnamen unterscheidbar statt alle nur "Hupe" zu heißen (Dietmars Live-Fund)', in_array('Schneeflocke – Hupe', array_column($actions, 'Name'), true) && in_array('Kohlekasten – Hupe', array_column($actions, 'Name'), true) && !in_array('Hupe', array_column($actions, 'Name'), true));
+check('Zwei Ebenen tief (Trabbi > Steuerung > Hupe) findet trotzdem die ECHTE Instanz "Trabbi", nicht die Zwischenkategorie "Steuerung" (Dietmars Nachfrage 04.09.2026)', in_array('Trabbi – Hupe', array_column($actions, 'Name'), true) && !in_array('Steuerung – Hupe', array_column($actions, 'Name'), true));
 
 $byName = [];
 foreach ($actions as $a) {
     $byName[$a['Name']] = $a;
 }
-check('Raffstore Wohnzimmer -> Typ raffstore, Ziel-Variable 111 (Position)', ($byName['Raffstore Wohnzimmer']['Typ'] ?? null) === 'raffstore' && ($byName['Raffstore Wohnzimmer']['ZielVariableID'] ?? null) === 111);
-check('Sirene Außen -> Typ sirene, MinSeverity 4 (Extrem, vorsichtiger Standard)', ($byName['Sirene Außen']['Typ'] ?? null) === 'sirene' && ($byName['Sirene Außen']['MinSeverity'] ?? null) === 4);
+check('Raffstore Wohnzimmer -> EINE Zeile, Sturm UND Hagel beide angekreuzt, Ziel-Variable 111', ($byName['Raffstore Wohnzimmer']['KatSturm'] ?? false) === true && ($byName['Raffstore Wohnzimmer']['KatHagel'] ?? false) === true && ($byName['Raffstore Wohnzimmer']['ZielVariableID'] ?? null) === 111);
+check('Markise Terrasse -> ebenso Sturm UND Hagel angekreuzt, Ziel-Variable 151', ($byName['Markise Terrasse']['Typ'] ?? null) === 'markise' && ($byName['Markise Terrasse']['KatSturm'] ?? false) === true && ($byName['Markise Terrasse']['KatHagel'] ?? false) === true && ($byName['Markise Terrasse']['ZielVariableID'] ?? null) === 151);
+check('Sirene Außen -> Typ sirene, kein Kästchen angekreuzt (gilt für jede Kategorie), MinSeverity 4', ($byName['Sirene Außen']['Typ'] ?? null) === 'sirene' && ($byName['Sirene Außen']['KatSturm'] ?? false) === false && ($byName['Sirene Außen']['MinSeverity'] ?? null) === 4);
 check('Garagentor -> Typ garage, Ziel-Variable 132 (Steuerung, NICHT die nicht-aktionsfähige Status-Variable 131)', ($byName['Garagentor']['Typ'] ?? null) === 'garage' && ($byName['Garagentor']['ZielVariableID'] ?? null) === 132);
-check('alle drei Treffer standardmäßig aktiv', $byName['Raffstore Wohnzimmer']['Aktiv'] === true && $byName['Sirene Außen']['Aktiv'] === true && $byName['Garagentor']['Aktiv'] === true);
+check('alle sieben Treffer standardmäßig aktiv', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 7);
+
+// Ende-zu-Ende: decodeSchutzaktionen() muss die angekreuzten Kästchen korrekt
+// in die normalisierte 'Kategorien'-Liste übersetzen (für die Zuordnungslogik
+// beim Poll).
+$hub2->SetProp('Schutzaktionen', $valuesJson3);
+$decoded = callPrivate($hub2, 'decodeSchutzaktionen');
+$decodedByName = [];
+foreach ($decoded as $a) {
+    $decodedByName[$a['Name']] = $a;
+}
+sort($decodedByName['Raffstore Wohnzimmer']['Kategorien']);
+check('decodeSchutzaktionen() liest Raffstore-Kästchen korrekt als ["hagel","sturm"]', $decodedByName['Raffstore Wohnzimmer']['Kategorien'] === ['hagel', 'sturm']);
+check('decodeSchutzaktionen() liest "kein Kästchen" korrekt als leere Liste (Sirene)', $decodedByName['Sirene Außen']['Kategorien'] === []);
 
 // Nutzer klickt "Übernehmen" (Property = aktueller Formularstand) -- erst
 // danach kann eine erneute Suche gegen den gespeicherten Stand deduplizieren.
