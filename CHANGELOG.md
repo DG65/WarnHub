@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.25 (2026-09-04)
+
+- Doku-Korrektur zur Installation der beiden WebFront-Kacheln (Formular,
+  README, Forum-Entwurf): richtig ist "im Objektbaum in den Bereich des
+  WebFronts verlinken", nicht "per Drag & Drop in ein WebFront/eine
+  Kachel-Visualisierung ziehen" -- von Dietmar korrigiert, der das an
+  seinem eigenen System tatsächlich so einrichtet.
+
 ## 0.1.0-beta.24 (2026-09-04)
 
 - Zwei fertige WebFront-Kacheln (`~HTMLBox`-Variablen "Kachel (kompakt)" und

@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.24-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.25-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -156,7 +156,7 @@ nötig, die Variablen stehen automatisch im Objektbaum der Instanz.
 ## Fertige WebFront-Kacheln
 
 Zwei weitere Variablen enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig,
-einfach per Drag & Drop in ein WebFront/eine Kachel-Visualisierung ziehen (Anzeigetyp "HTML"):
+einfach im Objektbaum in den Bereich des WebFronts verlinken:
 
 - **Kachel (kompakt)** -- ein Badge mit Farbkreis (Signalfarbe nach höchstem aktivem
   Schweregrad, grün = keine aktive Warnung), Anzahl und "zuletzt geprüft"-Zeitangabe. Für ein

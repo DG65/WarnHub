@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.24';
-    private const NEWS_VERSION = '0.1.0-beta.24';
+    private const DOC_VERSION = '0.1.0-beta.25';
+    private const NEWS_VERSION = '0.1.0-beta.25';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -671,7 +671,7 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_Poll($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'],
-                ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: zwei weitere Variablen ("Kachel (kompakt)", "Kachel (Übersicht)") im Objektbaum enthalten fertiges, eigenständiges HTML -- einfach per Drag & Drop in ein WebFront/eine Kachel-Visualisierung ziehen (Anzeigetyp "HTML"), kein eigenes Bauen nötig. Passen sich automatisch an Hell/Dunkel an. Ohne echtes WebFront hier nicht selbst gegenprüfbar -- Rückmeldungen willkommen.'],
+                ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: zwei weitere Variablen ("Kachel (kompakt)", "Kachel (Übersicht)") im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. Passen sich automatisch an Hell/Dunkel an. Ohne echtes WebFront hier nicht selbst gegenprüfbar -- Rückmeldungen willkommen.'],
                 ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'],
                 ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'],
                 [
@@ -993,7 +993,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• IPSView-tauglich: vier neue Statusvariablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) für ein eigenes Dashboard -- WarnHub war bisher komplett "headless" (nur Push + Konsole)'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen lassen sich jetzt je Alarmtyp einzeln testen ("🌪️ Sturm testen" usw.) -- löst sofort alle passenden aktiven Aktionen aus, unabhängig von einer echten Warnung, praktisch um z. B. die Raffstore-Ansteuerung ohne Warten auf den nächsten Sturm zu prüfen'],
                 ['type' => 'Label', 'caption' => '• Warnungs-Historie: bis zu 500 vergangene Warnungen/Entwarnungen über die neue Funktion WHUB_GetHistory() abrufbar -- für eigene Auswertungen/Skripte, auch wenn Push zwischenzeitlich ausgeschaltet war'],
-                ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach per Drag & Drop ins WebFront ziehen, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
+                ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach im Objektbaum in den Bereich des WebFronts verlinken, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
