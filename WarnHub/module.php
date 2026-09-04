@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.6';
-    private const NEWS_VERSION = '0.1.0-beta.6';
+    private const DOC_VERSION = '0.1.0-beta.7';
+    private const NEWS_VERSION = '0.1.0-beta.7';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -1635,19 +1635,20 @@ class WarnHub extends IPSModule
             if (!$w['Aktiv']) {
                 continue;
             }
-            // TargetID = eigene InstanceID statt 0 -- Live-Fund 04.09.2026:
-            // VISU_PostNotification schlug mit TargetID=0 fehl; die offizielle
-            // Referenzimplementierung (github.com/symcon/Benachrichtigung,
-            // Notification/module.php) übergibt an genau dieser Stelle für
-            // BEIDE Funktionen $this->InstanceID, nicht 0 -- offenbar muss
-            // TargetID ein tatsächlich existierendes, im Ziel navigierbares
-            // Objekt sein statt eines "kein Ziel"-Platzhalters.
+            // TargetID: Live-verifiziert an Dietmars Installation (04.09.2026,
+            // über den nativen "Instanzfunktionen ausführen"-Dialog in der
+            // Konsole) -- für VISU_PostNotification muss TargetID die
+            // ZIEL-VISUALISIERUNG SELBST sein (also dieselbe ID wie
+            // $w['InstanceID']), nicht WarnHubs eigene InstanceID und nicht 0.
+            // Der zuvor angenommene Wert ($this->InstanceID, nach dem Vorbild
+            // des offiziellen Kernmoduls "Benachrichtigung") funktionierte bei
+            // Kachel-Visualisierung-Zielen nachweislich NICHT.
             if ($w['Typ'] === 'kachel') {
                 if (!function_exists('VISU_PostNotification')) {
                     $this->LogError('pushToAllWebfronts', 'VISU_PostNotification ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
                     continue;
                 }
-                $ok = @VISU_PostNotification($w['InstanceID'], $title, $text, $sound, $this->InstanceID);
+                $ok = @VISU_PostNotification($w['InstanceID'], $title, $text, $sound, $w['InstanceID']);
             } else {
                 if (!function_exists('WFC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');

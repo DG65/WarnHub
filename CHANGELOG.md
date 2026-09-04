@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.7 (2026-09-04)
+
+- Fix (hoffentlich final): Push an Kachel-Visualisierung-Instanzen schlug trotz des
+  TargetID-Fixes aus beta.5 weiterhin fehl. Live-verifiziert an Dietmars Installation über
+  Symcons eigenen "Instanzfunktionen ausführen"-Dialog: `VISU_PostNotification` braucht als
+  TargetID die ZIEL-VISUALISIERUNG SELBST (dieselbe ID wie der Push-Empfänger), nicht
+  WarnHubs eigene Instanz-ID -- anders als beim offiziellen Kernmodul-Vorbild, das für
+  `WFC_PushNotification` funktioniert (dort unverändert).
+
 ## 0.1.0-beta.6 (2026-09-04)
 
 - Schutzaktionen: „Auslöser" ist jetzt eine Mehrfachauswahl zum Ankreuzen (🌪️ Sturm, 🧊 Hagel,
