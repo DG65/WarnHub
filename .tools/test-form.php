@@ -226,5 +226,19 @@ foreach ($standortePanel['items'] ?? [] as $item) {
 }
 check('Button "Fahrzeug-/Standort-Variablen suchen" (mobiler Standort) steht im Standorte-Panel', $mobilBtn !== null);
 
+check('Feld "WetterstationInstanceID" (eigene Wetterstation) vorhanden', findByName($decoded['elements'], 'WetterstationInstanceID') !== null);
+check('Schwellwert-Feld "WetterstationWindboeSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationWindboeSchwelle') !== null);
+check('Schwellwert-Feld "WetterstationRegenrateSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationRegenrateSchwelle') !== null);
+$wetterstationBtn = null;
+foreach ($datenquellenPanel['items'] ?? [] as $item) {
+    if (($item['type'] ?? '') === 'Button' && str_contains($item['onClick'] ?? '', 'WHUB_DiscoverWetterstation')) {
+        $wetterstationBtn = $item;
+        break;
+    }
+}
+check('Button "Wetterstation suchen" steht im Datenquellen-Panel', $wetterstationBtn !== null);
+
+check('Feld "SchutzaktionVorlaufMinuten" (Vorlauf vor Gültigkeitsbeginn) im Schutzaktionen-Panel vorhanden', findByName($decoded['elements'], 'SchutzaktionVorlaufMinuten') !== null);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

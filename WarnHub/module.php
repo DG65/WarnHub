@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.16';
-    private const NEWS_VERSION = '0.1.0-beta.16';
+    private const DOC_VERSION = '0.1.0-beta.17';
+    private const NEWS_VERSION = '0.1.0-beta.17';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -179,6 +179,12 @@ class WarnHub extends IPSModule
     // dispatcht dieselbe Stelle, die WFC_PushNotification für WHUB_WEBFRONT_GUID
     // aufruft, für DIESE GUID stattdessen an VISU_PostNotificationEx().
     private const KACHEL_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
+
+    // Froggit-Wetterstation (Modul "Froggit", Vendor HS) -- GUID live an
+    // Dietmars System verifiziert (04.09.2026, Instanz #32052 "Wetterstation").
+    // Für die Discovery zusätzlich Namenssuche als Fallback (andere
+    // Wetterstationsmodule, gleiches Prinzip wie bei WebFront/Kachel-Visu).
+    private const FROGGIT_GUID = '{499F8100-B051-E713-CEC0-499D795B2639}';
 
     // ISO-3166-1-alpha-2-Ländercode (wie von Nominatim reverse geliefert) ->
     // Länder-Slug der Meteoalarm-Feeds (feeds.meteoalarm.org). Live gegen
@@ -241,10 +247,14 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleBfsOdl', false);
         $this->RegisterPropertyFloat('BfsOdlSchwellwert', 0.3);
         $this->RegisterPropertyBoolean('QuelleMeteoalarm', false);
+        $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
+        $this->RegisterPropertyFloat('WetterstationWindboeSchwelle', 70.0);
+        $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
         $this->RegisterPropertyString('Schutzaktionen', '[]');
+        $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
         $this->RegisterPropertyString('WebFronts', '[]');
 
         $this->RegisterTimer('PollTimer', 0, 'WHUB_Poll($_IPS[\'TARGET\']);');
@@ -301,13 +311,14 @@ class WarnHub extends IPSModule
             'expanded' => false,
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
-                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen -- amtlich für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei), optional europaweite Wetterwarnungen für 39 Länder -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im europäischen Ausland).'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de), optional Pegelstände (PEGELONLINE/WSV), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung) und optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder -- wichtig bei mobilen Standorten im Ausland).'],
-                ['type' => 'Label', 'caption' => 'Bei PEGELONLINE und BfS ODL-Info gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser) bzw. eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts. Das ist keine amtliche Alarmstufe.'],
+                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz) sowie optional die eigene Wetterstation als unabhängiges Sicherheitsnetz.'],
+                ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
                 ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie oder Geofency -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Die Objektbaum-Suche im Standorte-Panel findet passende Variablenpaare automatisch und verknüpft sie direkt. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Standorten/Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor -- mobile Standorte (Tessie-Fahrzeugposition, Geofency), WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen. Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Schutzaktionen feuern NICHT schon bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf im Schutzaktionen-Panel) -- eine morgens eintreffende, aber erst für den Nachmittag gültige Warnung fährt die Markise also nicht schon morgens ein. Die Push-Benachrichtigung selbst bleibt davon unberührt und kommt weiterhin sofort.'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Standorten/Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor -- mobile Standorte (Tessie-Fahrzeugposition, Geofency), die eigene Wetterstation (Froggit), WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen. Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -391,6 +402,19 @@ class WarnHub extends IPSModule
                 ],
                 ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
                 ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung oben bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
+                ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
+                [
+                    'type' => 'SelectInstance',
+                    'name' => 'WetterstationInstanceID',
+                    'caption' => 'Instanz der Wetterstation',
+                ],
+                [
+                    'type' => 'Button',
+                    'caption' => '🔎 Wetterstation suchen (Froggit)',
+                    'onClick' => 'echo WHUB_DiscoverWetterstation($id);',
+                ],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindboeSchwelle', 'caption' => 'Schwellwert Windböe (km/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenrateSchwelle', 'caption' => 'Schwellwert Regenrate (mm/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
         ];
@@ -431,6 +455,8 @@ class WarnHub extends IPSModule
             'expanded' => false,
             'items' => [
                 ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, Autofenster schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
+                ['type' => 'Label', 'caption' => 'Warnungen treffen oft Stunden vor ihrem eigentlichen Gültigkeitsbeginn ein -- eine Aktion feuert deshalb NICHT sofort bei Eingang der Meldung, sondern erst kurz vor dem tatsächlichen Beginn (Vorlauf unten, damit z. B. die Markise sicher fertig eingefahren ist). Warnungen ohne eigene Zeitangabe (kommt selten vor) lösen weiterhin sofort aus; bereits laufende/akute Warnungen ebenfalls.'],
+                ['type' => 'NumberSpinner', 'name' => 'SchutzaktionVorlaufMinuten', 'caption' => 'Vorlauf vor Gültigkeitsbeginn (Minuten)', 'minValue' => 0, 'maxValue' => 720],
                 [
                     'type' => 'PopupButton',
                     'caption' => 'Welche Felder brauche ich für welchen Aktionstyp?',
@@ -767,7 +793,7 @@ class WarnHub extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
             'caption' => '👋  Wozu dieses Modul?',
             'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen -- Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei, Pegelstände, Radioaktivität) plus optional europaweite Wetterwarnungen -- und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt, auch mobile Standorte im Ausland.'],
+                ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz -- Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei, Pegelstände, Radioaktivität) plus europaweite Wetterwarnungen (deckt Österreich/Schweiz mit ab) und optional die eigene Wetterstation als Sicherheitsnetz -- und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt, auch mobile Standorte im Ausland.'],
                 ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront- und Kachel-Visualisierung-Geräten (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckPurposeIntro($id);'],
             ],
@@ -796,6 +822,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "Push nur an"-Filter je Standort -- bei mehreren Personen/Fahrzeugen bekommt nicht mehr automatisch jeder die Warnung der anderen Person'],
                 ['type' => 'Label', 'caption' => '• Neue Schutzaktionen: Fenster schließen sowie Kofferraum/Heckklappe schließen (Letzteres mit zwingender Sicherheitsprüfung gegen ein versehentliches Öffnen), beide auch über die automatische Objektbaum-Suche auffindbar'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen ohne eigenen Standort-Filter feuern jetzt automatisch nur noch von festen, nicht von mobilen Standorten aus (Sicherheitssperre)'],
+                ['type' => 'Label', 'caption' => '• Eigene Wetterstation (Froggit) als unabhängige, zusätzliche Warnquelle -- löst auch aus, wenn eine amtliche Warnung ein tatsächlich lokal auftretendes Ereignis nicht meldet. Objektbaum-Suche findet eine passende Station automatisch'],
+                ['type' => 'Label', 'caption' => '• Schutzaktionen feuern nicht mehr sofort bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf) -- eine morgens eintreffende, erst für den Nachmittag gültige Warnung fährt die Markise nicht mehr schon morgens ein. Die Push-Benachrichtigung bleibt weiterhin sofort'],
+                ['type' => 'Label', 'caption' => '• Meteoalarm deckt neben Deutschland auch Österreich und die Schweiz ab -- WarnHub eignet sich damit für den gesamten deutschsprachigen Raum (D-A-CH), nicht nur für Deutschland'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -999,6 +1028,24 @@ class WarnHub extends IPSModule
             $obj = @IPS_GetObject($siblingID);
             if (is_array($obj) && (int) $obj['ObjectType'] === 2 && mb_stripos((string) $obj['ObjectName'], $needle) !== false) {
                 return $siblingID;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Sucht unter $instanceID eine Kind-Variable, deren Name EXAKT (nicht
+     * nur als Substring) $name entspricht -- nötig, weil z. B. Froggit
+     * sowohl "Windböe" (aktuell) als auch "Windböe (Max.) Tag" anbietet;
+     * ein reiner Substring-Treffer würde beide gleichermaßen matchen.
+     */
+    private function findChildVariableByExactName(int $instanceID, string $name): ?int
+    {
+        $needle = mb_strtolower(trim($name));
+        foreach (@IPS_GetChildrenIDs($instanceID) ?: [] as $childID) {
+            $obj = @IPS_GetObject($childID);
+            if (is_array($obj) && (int) $obj['ObjectType'] === 2 && mb_strtolower(trim((string) $obj['ObjectName'])) === $needle) {
+                return $childID;
             }
         }
         return null;
@@ -1339,6 +1386,31 @@ class WarnHub extends IPSModule
     }
 
     /**
+     * Sucht eine Wetterstation im Objektbaum (Froggit-Modul-GUID, sonst
+     * Modulname enthält "froggit") und übernimmt sie NUR, wenn sie
+     * tatsächlich die benötigten Felder "Windböe" und "Regenrate" (exakter
+     * Name) besitzt -- sonst kein Treffer, statt eine irgendwie ähnlich
+     * benannte, aber ungeeignete Instanz zu übernehmen. Schreibt wie die
+     * übrigen Discover*()-Methoden nur in die offene Formularmaske,
+     * „Übernehmen" bleibt der bewusste letzte Schritt. Dietmars Wunsch
+     * 04.09.2026: "Du darfst die auch gerne selbst finden."
+     */
+    public function DiscoverWetterstation(): string
+    {
+        $candidates = $this->findInstancesByModuleNameSubstring(self::FROGGIT_GUID, 'froggit');
+        foreach (array_keys($candidates) as $instanceID) {
+            $windboe = $this->findChildVariableByExactName($instanceID, 'Windböe');
+            $regenrate = $this->findChildVariableByExactName($instanceID, 'Regenrate');
+            if ($windboe === null || $regenrate === null) {
+                continue; // Name passt, aber die entscheidenden Felder fehlen -- kein Treffer
+            }
+            $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
+            return sprintf('✅ Wetterstation "%s" gefunden (Windböe/Regenrate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+        }
+        return 'ℹ️ Keine Wetterstation mit den benötigten Feldern (Windböe, Regenrate) gefunden -- Instanz-ID bei Bedarf oben von Hand eintragen.';
+    }
+
+    /**
      * $KartenStandort kommt vom 'SelectLocation'-Formularfeld als JSON-String
      * {"latitude":..,"longitude":..} (Symcon verlangt bei PREFIX_-Funktionen
      * zwingend einen der Skalar-Typen bool/int/float/string -- Live-Fund
@@ -1391,6 +1463,36 @@ class WarnHub extends IPSModule
     private function severityRank(string $severity): int
     {
         return self::SEVERITY_RANK[$severity] ?? 0;
+    }
+
+    /**
+     * Ob eine Schutzaktion für diese Warnung JETZT auslösen darf --
+     * Dietmars Nachfrage 04.09.2026: eine erst für 16:00 Uhr gültige
+     * Warnung, die schon um 09:00 Uhr eintrifft, soll die Markise nicht
+     * schon um 09:00 Uhr einfahren. Maßgeblich ist 'onset' (Beginn laut
+     * CAP), ersatzweise 'effective'; ohne beides (kommt vor, v. a. bei
+     * synthetischen Quellen wie der eigenen Wetterstation) wird weiterhin
+     * sofort ausgelöst -- es gibt schlicht keinen Zeitpunkt zum Abwarten.
+     * Der globale Vorlauf (SchutzaktionVorlaufMinuten) sorgt dafür, dass
+     * die Aktion VOR dem Ereignis fertig ist, nicht erst exakt zu Beginn.
+     * Bereits laufende/akute Warnungen (onset liegt schon in der
+     * Vergangenheit) lösen wie bisher sofort aus.
+     */
+    private function isActionDueByOnset(array $w): bool
+    {
+        $onsetRaw = $w['onset'] ?? null;
+        if ($onsetRaw === null || $onsetRaw === '') {
+            $onsetRaw = $w['effective'] ?? null;
+        }
+        if ($onsetRaw === null || $onsetRaw === '') {
+            return true;
+        }
+        $onsetTs = strtotime((string) $onsetRaw);
+        if ($onsetTs === false) {
+            return true; // nicht parsebar -- sicherheitshalber sofort statt nie auslösen
+        }
+        $vorlaufMinuten = max(0, $this->ReadPropertyInteger('SchutzaktionVorlaufMinuten'));
+        return time() >= ($onsetTs - $vorlaufMinuten * 60);
     }
 
     private function formatDateDe(?string $iso): string
@@ -1881,6 +1983,97 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  Eigene Wetterstation (Froggit o. ä.) -- Dietmars Wunsch 04.09.2026:
+    //  "die Unwetterwarnungen können sich ja auch irren". Unabhängig von
+    //  NINA/DWD/Meteoalarm: löst eigenständig aus, sobald die LOKAL
+    //  gemessene Windböe oder Regenrate den eigenen Schwellwert
+    //  überschreitet -- als Sicherheitsnetz für Fälle, in denen die
+    //  amtlichen Quellen ein tatsächlich lokal auftretendes Ereignis nicht
+    //  (rechtzeitig) melden. Geokreis um den Symcon-Systemstandort (die
+    //  Wetterstation selbst liefert keine eigenen Koordinaten) -- ohne
+    //  konfigurierten Systemstandort keine geratene Platzierung, siehe unten.
+    // ----------------------------------------------------------------
+
+    private function fetchWetterstation(): array
+    {
+        $instanceID = $this->ReadPropertyInteger('WetterstationInstanceID');
+        if ($instanceID <= 0 || !@IPS_InstanceExists($instanceID)) {
+            return [];
+        }
+        $loc = $this->getSystemLocation();
+        if ($loc === null) {
+            $this->LogError('fetchWetterstation', 'Kein konfigurierter Symcon-Systemstandort -- Wetterstations-Werte können nicht platziert werden (keine geratene Position).');
+            return [];
+        }
+
+        $windboeID = $this->findChildVariableByExactName($instanceID, 'Windböe');
+        $regenrateID = $this->findChildVariableByExactName($instanceID, 'Regenrate');
+        $windboeSchwelle = $this->ReadPropertyFloat('WetterstationWindboeSchwelle');
+        if ($windboeSchwelle <= 0) {
+            $windboeSchwelle = 70.0;
+        }
+        $regenrateSchwelle = $this->ReadPropertyFloat('WetterstationRegenrateSchwelle');
+        if ($regenrateSchwelle <= 0) {
+            $regenrateSchwelle = 25.0;
+        }
+
+        $out = [];
+        $circle = ['lat' => $loc['lat'], 'lon' => $loc['lon'], 'radiusKm' => 3.0];
+
+        if ($windboeID !== null) {
+            $windboe = (float) @GetValue($windboeID);
+            if ($windboe >= $windboeSchwelle) {
+                $out[] = [
+                    'identifier' => 'wetterstation-windboe-' . $instanceID,
+                    'source' => 'wetterstation',
+                    'msgType' => 'Alert',
+                    'event' => 'Sturm (eigene Messung)',
+                    'headline' => sprintf('Eigene Wetterstation: Windböe %s km/h', number_format($windboe, 1, ',', '.')),
+                    'description' => sprintf(
+                        'Lokal gemessene Windböe %s km/h (eigener Schwellwert %s km/h) -- unabhängig von amtlichen Warnungen, eigener Schwellwert, keine amtliche Klassifikation.',
+                        number_format($windboe, 1, ',', '.'),
+                        number_format($windboeSchwelle, 1, ',', '.')
+                    ),
+                    'instruction' => '',
+                    'severity' => 'Severe',
+                    'effective' => null,
+                    'onset' => null,
+                    'expires' => null,
+                    'areaDesc' => 'Eigene Wetterstation',
+                    'rings' => [],
+                    'circles' => [$circle],
+                ];
+            }
+        }
+        if ($regenrateID !== null) {
+            $regenrate = (float) @GetValue($regenrateID);
+            if ($regenrate >= $regenrateSchwelle) {
+                $out[] = [
+                    'identifier' => 'wetterstation-regenrate-' . $instanceID,
+                    'source' => 'wetterstation',
+                    'msgType' => 'Alert',
+                    'event' => 'Starkregen (eigene Messung)',
+                    'headline' => sprintf('Eigene Wetterstation: Regenrate %s mm/h', number_format($regenrate, 1, ',', '.')),
+                    'description' => sprintf(
+                        'Lokal gemessene Regenrate %s mm/h (eigener Schwellwert %s mm/h) -- unabhängig von amtlichen Warnungen, eigener Schwellwert, keine amtliche Klassifikation.',
+                        number_format($regenrate, 1, ',', '.'),
+                        number_format($regenrateSchwelle, 1, ',', '.')
+                    ),
+                    'instruction' => '',
+                    'severity' => 'Severe',
+                    'effective' => null,
+                    'onset' => null,
+                    'expires' => null,
+                    'areaDesc' => 'Eigene Wetterstation',
+                    'rings' => [],
+                    'circles' => [$circle],
+                ];
+            }
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
     //  Meteoalarm (feeds.meteoalarm.org -- europaweite Wetterwarnungen,
     //  39 Länder, Live gegen die echte Feed-Liste geprüft 04.09.2026).
     //  Anders als NINA/DWD/PEGELONLINE/BfS liefern die frei zugänglichen
@@ -2056,6 +2249,9 @@ class WarnHub extends IPSModule
         if ($this->ReadPropertyBoolean('QuelleMeteoalarm')) {
             $warnings = array_merge($warnings, $this->fetchMeteoalarm());
         }
+        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
+            $warnings = array_merge($warnings, $this->fetchWetterstation());
+        }
 
         $result = $this->processWarnings($warnings);
 
@@ -2111,6 +2307,14 @@ class WarnHub extends IPSModule
         foreach ($warnings as $w) {
             $stillPresent[$w['identifier']] = true;
             $category = $this->classifyEventCategory($w['event'], $w['headline']);
+            // Schutzaktionen sollen erst kurz VOR dem tatsächlichen Beginn
+            // einer Warnung feuern, nicht schon in dem Moment, in dem die
+            // Meldung selbst eintrifft (die oft Stunden im Voraus kommt) --
+            // Dietmars Nachfrage 04.09.2026: "würde ... die Markise ... auch
+            // eingefahren werden, auch wenn die Meldung um 09:00 Uhr eingeht"
+            // bei einer erst für 16:00 Uhr gültigen Warnung. Einmal $fired,
+            // bleibt es das dauerhaft -- vorher wird JEDEN Poll neu geprüft.
+            $actionDue = $this->isActionDueByOnset($w);
 
             foreach ($standorte as $standort) {
                 $pairKey = $w['identifier'] . '|' . $standort['Name'];
@@ -2219,6 +2423,9 @@ class WarnHub extends IPSModule
                     $fireKey = $w['identifier'] . '|' . $idx;
                     if (isset($fired[$fireKey])) {
                         continue;
+                    }
+                    if (!$actionDue) {
+                        continue; // noch vor dem Vorlauf-Fenster -- beim nächsten Poll erneut prüfen
                     }
                     $fired[$fireKey] = time();
                     $this->fireProtectiveAction($action);

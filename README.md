@@ -1,15 +1,17 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.16-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.17-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
 
-Warn- und Alarmmeldungen -- amtlich für Deutschland (Katastrophenschutz, Wetter, Hochwasser,
-Polizei, Pegelstände, Radioaktivität), optional europaweite Wetterwarnungen für 39 Länder --
-gefiltert auf den selbst definierten Umkreis um eigene (auch mobile) Standorte, mit
-Push-Benachrichtigung an WebFront-/Kachel-Visualisierung-Geräte und optionalen Schutzaktionen.
+Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz -- amtliche Quellen für
+Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegelstände, Radioaktivität),
+europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die
+eigene Wetterstation als unabhängiges Sicherheitsnetz -- gefiltert auf den selbst definierten
+Umkreis um eigene (auch mobile) Standorte, mit Push-Benachrichtigung an
+WebFront-/Kachel-Visualisierung-Geräte und optionalen Schutzaktionen.
 
 ## Was tut dieses Modul?
 
@@ -27,12 +29,19 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   selbst eingestellten Radioaktivitäts-Schwellwerts. Ein Formular-Popup ordnet den Wert ein
   (Dosisleistung/rechnerische Verweildauer bis zum Jahres-Vorsorgewert der Bevölkerung).
 - **Meteoalarm** (`feeds.meteoalarm.org`) -- optional, europaweite Wetterwarnungen für
-  39 Länder, wichtig für mobile Standorte im Ausland. Die frei zugänglichen Feeds liefern
-  keine Warnfläche, nur benannte Gebiete -- der Abgleich läuft deshalb über einen separaten,
-  im Meldungstext klar gekennzeichneten Namensvergleich statt geometrischem Matching.
+  39 Länder **inklusive Österreich und Schweiz**, wichtig für mobile Standorte im Ausland.
+  Die frei zugänglichen Feeds liefern keine Warnfläche, nur benannte Gebiete -- der Abgleich
+  läuft deshalb über einen separaten, im Meldungstext klar gekennzeichneten Namensvergleich
+  statt geometrischem Matching.
+- **Eigene Wetterstation** (aktuell Froggit) -- optional, unabhängig von allen übrigen
+  Quellen: löst aus, sobald die lokal gemessene Windböe oder Regenrate den eigenen
+  Schwellwert überschreitet. Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein
+  tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. Eine
+  Objektbaum-Suche findet eine passende Station automatisch.
 
-PEGELONLINE und BfS ODL-Info kennen keine amtliche Warnstufen-Klassifikation -- WarnHub
-meldet stattdessen einen selbst definierten Schwellwert, ausdrücklich als solcher gekennzeichnet.
+PEGELONLINE, BfS ODL-Info und die eigene Wetterstation kennen keine amtliche
+Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen selbst definierten Schwellwert,
+ausdrücklich als solcher gekennzeichnet.
 
 Jeder Standort (eigener Wohnort, Zweitwohnsitz, Angehörige) bekommt einen eigenen Umkreis
 und Mindest-Schweregrad. Eine Warnung löst nur aus, wenn der Standort **geometrisch**
@@ -57,6 +66,11 @@ versehentliches Öffnen, siehe unten), ein akustisches Signal schalten oder ein 
 Skript ausführen. Jede Schutzaktion feuert nur einmal je Warnung; es gibt bewusst keine
 automatische Rückstellung -- das bleibt Nutzerhandeln. Eine Schutzaktion ohne eigenen
 Standort-Filter feuert automatisch nur noch von festen, nicht von mobilen Standorten aus.
+Eine Schutzaktion feuert außerdem nicht schon bei Eingang der Meldung, sondern erst kurz vor
+deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf, Standard 30 Minuten) -- eine
+morgens eintreffende, aber erst für den Nachmittag gültige Warnung fährt die Markise also
+nicht schon morgens ein. Die Push-Benachrichtigung selbst bleibt davon unberührt und kommt
+weiterhin sofort.
 
 ## Installation
 
@@ -74,7 +88,8 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
    Symcon-Systemeinstellungen übernehmen" (liest die Kern-Instanz "Standort"), Adress-/
    PLZ-Suche über OpenStreetMap Nominatim, Punkt auf der Karte auswählen, oder Knopf
    "Fahrzeug-/Standort-Variablen suchen" für einen mobilen Standort (Tessie/Geofency).
-2. Datenquellen prüfen (NINA ist standardmäßig aktiv, alle anderen optional zusätzlich).
+2. Datenquellen prüfen (NINA ist standardmäßig aktiv, alle anderen optional zusätzlich) --
+   für eine eigene Wetterstation reicht meist der Knopf "Wetterstation suchen".
 3. Push-Benachrichtigung: Knopf "WebFront-Instanzen suchen" klicken (findet sowohl
    klassische WebFront-Instanzen als auch Kachel-Visualisierung-Instanzen).
 4. Optional: Knopf "Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster
@@ -82,12 +97,13 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
 
 ### Auto-Erkennung: gefunden = aktiviert, Abwahl möglich
 
-Die Standort-, Push-Ziel- und Schutzaktionen-Suche folgen demselben Prinzip: gefundene
-Treffer werden als **bereits aktivierte** Zeile vorgeschlagen (ein gefundener mobiler
-Standort ist sofort mit den Live-Variablen verknüpft, Push geht sofort an jede gefundene
-WebFront-/Kachel-Visualisierung-Instanz, jede gefundene
-Raffstore-/Jalousie-/Markise-/Garage-/Fenster-/Sirene-Steuerung löst sofort aus) -- nicht
-gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen. Eine erneute Suche
+Die Standort-, Datenquellen-, Push-Ziel- und Schutzaktionen-Suche folgen demselben Prinzip:
+gefundene Treffer werden als **bereits aktivierte** Zeile vorgeschlagen (ein gefundener
+mobiler Standort ist sofort mit den Live-Variablen verknüpft, eine gefundene Wetterstation
+ist sofort einsatzbereit, Push geht an jede gefundene WebFront-/Kachel-Visualisierung-Instanz,
+jede gefundene Raffstore-/Jalousie-/Markise-/Garage-/Fenster-/Sirene-Steuerung ist ab der
+nächsten passenden Warnung scharf) -- nicht gewünschte Treffer lassen sich einfach über die
+Aktiv-Spalte abwählen. Eine erneute Suche
 ergänzt nur neu hinzugekommene Treffer und lässt bereits getroffene Aktiv/Inaktiv-
 Entscheidungen unangetastet. Bei Schutzaktionen unbedingt den **Zielwert** jeder gefundenen
 Zeile prüfen, bevor eine echte Warnung eintritt -- welcher Wert "offen"/"hochgefahren"
@@ -120,6 +136,13 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   Klappe öffnen statt schließen. Ohne gültige Zustands-Variable wird deshalb gar nicht erst
   ausgelöst. Der vordere Kofferraum (Frunk) lässt sich über die Tesla-API grundsätzlich nicht
   schließen, nur öffnen, und wird deshalb von WarnHub nicht automatisiert.
+- Die eigene Wetterstation braucht Variablen, die exakt "Windböe" bzw. "Regenrate" heißen
+  (wie bei Froggit-Modulen üblich) -- andere Fabrikate lassen sich zwar per Instanz-ID manuell
+  eintragen, liefern aber nur dann Werte, wenn sie entsprechend benannte Variablen besitzen.
+  Die automatische Suche findet aktuell nur Froggit-Instanzen.
+- Schutzaktionen warten grundsätzlich bis kurz vor dem Gültigkeitsbeginn einer Warnung (siehe
+  oben) -- Meldungen ganz ohne Zeitangabe (kommt selten vor) lösen weiterhin sofort aus, da es
+  dann nichts zum Abwarten gibt.
 
 ## Lizenz
 

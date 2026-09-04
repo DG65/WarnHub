@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.0-beta.17 (2026-09-04)
+
+- Neue, unabhängige Datenquelle: eigene Wetterstation (aktuell Froggit).
+  Löst eigenständig aus, sobald die lokal gemessene Windböe oder Regenrate
+  einen eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den
+  Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis
+  nicht oder nicht rechtzeitig melden (Dietmars Wunsch 04.09.2026: "die
+  Unwetterwarnungen können sich ja auch irren"). Neuer Knopf "Wetterstation
+  suchen" -- findet eine passende Instanz automatisch, übernimmt sie aber
+  NUR, wenn sie tatsächlich die benötigten Felder "Windböe" und
+  "Regenrate" besitzt.
+- Fix (Timing): Schutzaktionen feuerten bisher sofort bei Eingang einer
+  Meldung, unabhängig davon, wann die Warnung laut CAP-Daten (`onset`)
+  eigentlich beginnen sollte -- eine morgens eintreffende, aber erst für
+  den Nachmittag gültige Sturmwarnung fuhr die Markise bereits morgens
+  ein. Neue globale Einstellung "Vorlauf vor Gültigkeitsbeginn" (Standard
+  30 Minuten): eine Aktion wartet jetzt bis kurz vor den tatsächlichen
+  Beginn der Warnung. Warnungen ohne Zeitangabe sowie bereits akute/
+  laufende Warnungen lösen weiterhin sofort aus. Die Push-Benachrichtigung
+  selbst ist davon unberührt und bleibt sofort. Dietmars Nachfrage
+  04.09.2026.
+- Positionierung auf Deutschland, Österreich und Schweiz (D-A-CH)
+  ausgeweitet: Meteoalarm deckte Österreich und die Schweiz technisch
+  schon seit beta.12 mit ab, das war in Doku/README bisher nicht klar
+  benannt -- jetzt in Kurzbeschreibung, Doku-Panel, README und
+  Forum-Entwurf durchgängig als D-A-CH-Modul positioniert statt als
+  reines Deutschland-Modul mit optionalem Europa-Zusatz.
+
 ## 0.1.0-beta.16 (2026-09-04)
 
 - Neuer Knopf "Fahrzeug-/Standort-Variablen suchen" im Standorte-Panel:
