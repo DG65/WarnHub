@@ -244,7 +244,7 @@ class WarnHub extends IPSModule
                 [
                     'type' => 'List',
                     'name' => 'Standorte',
-                    'rowCount' => 5,
+                    'rowCount' => $this->listRowCount(count($this->decodeStandorte())),
                     'add' => true,
                     'delete' => true,
                     'columns' => [
@@ -306,7 +306,7 @@ class WarnHub extends IPSModule
                 [
                     'type' => 'List',
                     'name' => 'WebFronts',
-                    'rowCount' => 4,
+                    'rowCount' => $this->listRowCount(count($this->decodeWebFronts()), 3),
                     'add' => false,
                     'delete' => true,
                     'columns' => [
@@ -345,7 +345,7 @@ class WarnHub extends IPSModule
                 [
                     'type' => 'List',
                     'name' => 'Schutzaktionen',
-                    'rowCount' => 5,
+                    'rowCount' => $this->listRowCount(count($this->decodeSchutzaktionen())),
                     'add' => true,
                     'delete' => true,
                     'columns' => [
@@ -390,6 +390,12 @@ class WarnHub extends IPSModule
         $form['elements'][] = $this->LicenseHint();
 
         return json_encode($form);
+    }
+
+    /** Sichtbare Zeilenzahl einer Liste an ihren tatsächlichen Inhalt anpassen, statt fest zu scrollen -- Dietmars Fund 04.09.2026 (Schutzaktionen-Liste nach der Objektbaum-Suche). Plus 1 Luft für "Hinzufügen", nach oben gedeckelt, damit ein einzelnes Panel nicht die ganze Seite dominiert. */
+    private function listRowCount(int $currentRows, int $min = 5, int $max = 20): int
+    {
+        return max($min, min($max, $currentRows + 1));
     }
 
     private function severityOptions(): array
@@ -520,6 +526,7 @@ class WarnHub extends IPSModule
             $added++;
         }
         $this->UpdateFormField('WebFronts', 'values', json_encode($rows));
+        $this->UpdateFormField('WebFronts', 'rowCount', $this->listRowCount(count($rows), 3));
         if ($added === 0 && count($rows) > 0) {
             return sprintf('ℹ️ Keine neuen WebFront-Instanzen gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
@@ -805,6 +812,7 @@ class WarnHub extends IPSModule
         }
 
         $this->UpdateFormField('Schutzaktionen', 'values', json_encode($rows));
+        $this->UpdateFormField('Schutzaktionen', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
             return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Garage/Sirene im Objektbaum gefunden.';
         }
@@ -875,13 +883,13 @@ class WarnHub extends IPSModule
      * Ersatzwert -- besser als 0/0, aber keine Rätselraterei über den
      * tatsächlichen Wohnort.
      */
-    private function mapDefaultLocation(): array
+    private function mapDefaultLocation(): string
     {
         $loc = $this->getSystemLocation();
         if ($loc !== null) {
-            return ['latitude' => $loc['lat'], 'longitude' => $loc['lon']];
+            return json_encode(['latitude' => $loc['lat'], 'longitude' => $loc['lon']]);
         }
-        return ['latitude' => 51.1657, 'longitude' => 10.4515];
+        return json_encode(['latitude' => 51.1657, 'longitude' => 10.4515]);
     }
 
     /** Nur in die offene Formularmaske schreiben, "Übernehmen" bleibt der bewusste letzte Schritt -- Muster wie MeterHubVirtual::AddDevice(). */
@@ -902,6 +910,7 @@ class WarnHub extends IPSModule
             'Aktiv' => true,
         ];
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
+        $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($loc['lat'], 5), round($loc['lon'], 5));
     }
 
@@ -928,6 +937,7 @@ class WarnHub extends IPSModule
             'Aktiv' => true,
         ];
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
+        $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($lat, 5), round($lon, 5));
     }
 

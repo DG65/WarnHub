@@ -164,10 +164,21 @@ class IPSModule
     public function SendDebug($s, $m, $f)
     {
     }
-    public $lastFormFieldUpdate = null;
+    public array $formFieldUpdates = [];
     public function UpdateFormField($n, $k, $v)
     {
-        $this->lastFormFieldUpdate = [$n, $k, $v];
+        $this->formFieldUpdates[] = [$n, $k, $v];
+    }
+    /** Letzter 'values'-Schreibzugriff auf ein bestimmtes Listenfeld -- ein Discovery-Aufruf schreibt inzwischen ZWEI Felder ('values' und 'rowCount'), 'values' ist das für die Tests relevante. */
+    public function lastValuesUpdate(string $fieldName): ?array
+    {
+        for ($i = count($this->formFieldUpdates) - 1; $i >= 0; $i--) {
+            [$n, $k, $v] = $this->formFieldUpdates[$i];
+            if ($n === $fieldName && $k === 'values') {
+                return [$n, $k, $v];
+            }
+        }
+        return null;
     }
     public function Create()
     {
@@ -194,7 +205,7 @@ $hub->Create();
 echo "== WebFront-Discovery ==\n";
 $msg = $hub->DiscoverWebFronts();
 check('meldet 2 neue Instanzen', str_contains($msg, '2 neue'));
-[$field, $key, $valuesJson] = $hub->lastFormFieldUpdate;
+[$field, $key, $valuesJson] = $hub->lastValuesUpdate('WebFronts');
 check('schreibt in das Feld "WebFronts"', $field === 'WebFronts');
 $rows = json_decode($valuesJson, true);
 check('2 Zeilen gefunden', count($rows) === 2);
@@ -212,7 +223,7 @@ $hub->SetProp('WebFronts', json_encode($rows));
 // Erneute Suche darf die Abwahl NICHT rückgängig machen.
 $msg2 = $hub->DiscoverWebFronts();
 check('erneute Suche findet keine NEUEN Instanzen mehr', str_contains($msg2, 'Keine neuen'));
-[, , $valuesJson2] = $hub->lastFormFieldUpdate;
+[, , $valuesJson2] = $hub->lastValuesUpdate('WebFronts');
 $rows2 = json_decode($valuesJson2, true);
 $gast = array_values(array_filter($rows2, fn ($r) => $r['InstanceID'] === 21))[0];
 check('"WebFront Gast" bleibt deaktiviert nach erneuter Suche', $gast['Aktiv'] === false);
@@ -222,7 +233,7 @@ $hub2 = new WarnHub();
 $hub2->Create();
 $msg3 = $hub2->DiscoverSchutzaktionen();
 check('meldet 3 neue Schutzaktionen (Raffstore/Sirene/Garage)', str_contains($msg3, '3 neue'));
-[$field3, , $valuesJson3] = $hub2->lastFormFieldUpdate;
+[$field3, , $valuesJson3] = $hub2->lastValuesUpdate('Schutzaktionen');
 check('schreibt in das Feld "Schutzaktionen"', $field3 === 'Schutzaktionen');
 $actions = json_decode($valuesJson3, true);
 check('genau 3 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig)', count($actions) === 3);

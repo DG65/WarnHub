@@ -161,7 +161,9 @@ function findByName(array $elements, string $name): ?array
 
 $kartenfeld = findByName($decoded['elements'], 'KartenStandort');
 check('SelectLocation-Kartenfeld "KartenStandort" vorhanden', ($kartenfeld['type'] ?? null) === 'SelectLocation');
-check('Kartenfeld startet NICHT bei 0/0 ("Null Island"/Atlantik)', ($kartenfeld['value']['latitude'] ?? 0.0) !== 0.0 || ($kartenfeld['value']['longitude'] ?? 0.0) !== 0.0);
+check('Kartenfeld-value ist ein JSON-String, kein verschachteltes Objekt (WebFront erwartet String, siehe Live-Fund "[object Object] is not valid JSON")', is_string($kartenfeld['value'] ?? null));
+$kartenwert = json_decode($kartenfeld['value'] ?? '', true) ?? [];
+check('Kartenfeld startet NICHT bei 0/0 ("Null Island"/Atlantik)', ($kartenwert['latitude'] ?? 0.0) !== 0.0 || ($kartenwert['longitude'] ?? 0.0) !== 0.0);
 check('"WebFronts"-Liste vorhanden', findByName($decoded['elements'], 'WebFronts') !== null);
 check('"Schutzaktionen"-Liste vorhanden', findByName($decoded['elements'], 'Schutzaktionen') !== null);
 check('"Standorte"-Liste vorhanden', findByName($decoded['elements'], 'Standorte') !== null);
