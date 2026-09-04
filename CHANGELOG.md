@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0 (2026-09-05)
+
+Erste Stable-Version für den Symcon Module Store (bisher nur Beta-Kanal).
+Funktional identisch zu 0.1.0-beta.36 -- die Versionsnummer wechselt von
+der Beta-Zählung auf die reguläre SemVer-Schiene (Dietmars Wunsch
+05.09.2026, "denn ich möchte ja gleich auf die Stable in Symcon
+veröffentlichen"), analog zum Vorgehen bei HeishaMon/GleitenderMittelwert.
+
+- Echte Forums-Thread-URL statt Platzhalter: `FORUM_THREAD_URL` in
+  `module.php` (Button "Zum Forums-Thread" im Panel "Forum & Community")
+  zeigt jetzt auf den tatsächlich veröffentlichten Community-Thread.
+  Forum-Ankündigungs-Entwurf im Feedback-Abschnitt entsprechend ergänzt.
+  Dietmars Mitteilung 05.09.2026, dass der Thread live ist.
+
 ## 0.1.0-beta.35 (2026-09-05)
 
 - Store-Review-Fixes (Checkliste aus dem NRG-Stack angewendet, obwohl

@@ -123,11 +123,11 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.35';
-    private const NEWS_VERSION = '0.1.0-beta.33';
+    private const DOC_VERSION = '1.0';
+    private const NEWS_VERSION = '1.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
-    private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
+    private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
 
     // Stichwörter für die automatische Schutzaktionen-Suche im Objektbaum
     // (Instanz-/Variablenname enthält eins der Wörter -> Aktionstyp-Vorschlag).
@@ -1117,6 +1117,7 @@ class WarnHub extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'expanded' => true,
             'caption' => '🆕  Neu in Version ' . self::NEWS_VERSION,
             'items' => [
+                ['type' => 'Label', 'caption' => '🎉 WarnHub ist jetzt im Symcon Module Store als Stable-Version verfügbar (bisher nur Beta)!'],
                 ['type' => 'Label', 'caption' => 'Seit der Erstversion neu dazugekommen:'],
                 ['type' => 'Label', 'caption' => '• Zwei neue Datenquellen: Pegelstände (PEGELONLINE/WSV) und Radioaktivität (BfS Ortsdosisleistung, mit Einordnungshilfe "Was bedeutet dieser Wert?" -- Dosisleistung/Verweildauer bis zum Jahres-Vorsorgewert)'],
                 ['type' => 'Label', 'caption' => '• Meteoalarm als dritte Wetterquelle: europaweite Warnungen für 39 Länder, wichtig für mobile Standorte im Ausland'],
