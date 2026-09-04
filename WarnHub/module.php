@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.0';
+    private const DOC_VERSION = '1.0.1';
     private const NEWS_VERSION = '1.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
@@ -1167,7 +1167,7 @@ class WarnHub extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'ForumHintPanel', 'expanded' => false,
             'caption' => '💬  Feedback im Symcon-Forum',
             'items' => [
-                ['type' => 'Label', 'caption' => 'Im Forum ist noch nichts veröffentlicht -- dieser Link ist ein Platzhalter und wird beim ersten Store-Release ersetzt.'],
+                ['type' => 'Label', 'caption' => 'Rückmeldungen, Fehler, fehlende Datenquellen oder Ideen für weitere Schutzaktionen bitte gerne hier im Thread.'],
                 ['type' => 'Button', 'caption' => 'Zum Forums-Thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckForumHint($id);'],
             ],

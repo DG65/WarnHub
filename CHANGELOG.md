@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1 (2026-09-05)
+
+- Fix: der begleitende Hinweistext im Panel "Feedback im Symcon-Forum"
+  ("Im Forum ist noch nichts veröffentlicht -- dieser Link ist ein
+  Platzhalter...") wurde bei der 1.0-Umstellung übersehen -- nur die
+  `FORUM_THREAD_URL`-Konstante selbst war aktualisiert worden, der
+  Panel-Text stand noch auf dem alten Platzhalter-Stand. Dietmars Fund
+  per Screenshot 05.09.2026 ("Lügst Du? 🤣").
+
 ## 1.0 (2026-09-05)
 
 Erste Stable-Version für den Symcon Module Store (bisher nur Beta-Kanal).
