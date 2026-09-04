@@ -225,6 +225,7 @@ echo "\n== checkWetterstationAutoRestore(): Wind noch NICHT ruhig -> CalmSinceTs
 $hub3 = new WarnHub();
 $hub3->Create();
 $hub3->SetProp('WetterstationWindVariableID', 501);
+$hub3->SetProp('Schutzaktionen', json_encode([$raffstoreAction, $raffstoreAction, $raffstoreAction, $raffstoreAction])); // Index 3 = $raffstoreAction, für den Aktionsnamen im Historieneintrag
 $GLOBALS['whub_test_variableExists'][501] = true;
 $GLOBALS['whub_test_variableProfiles'][501] = '~WindSpeed.kmh';
 $GLOBALS['whub_test_variableValues'][501] = 80.0; // weiterhin über der Moderate-Schwelle (40)
@@ -272,6 +273,10 @@ check('RequestAction erhält die ZielVariableID (151) und den ursprünglichen We
 $stateNachher = json_decode($hub3->ReadAttributeString('WetterstationRestoreState'), true);
 check('der Eintrag wird nach der Rückstellung entfernt', !isset($stateNachher[3]));
 check('eine Push-Benachrichtigung über die Rückstellung wird gesendet (PushAktiv, nicht pausiert)', count($GLOBALS['whub_test_pushCalls']) === 1);
+$historyNachRueckstellung = json_decode($hub3->GetHistory(), true);
+check('die Rückstellung wird in der Warnungs-Historie protokolliert', count($historyNachRueckstellung) === 1 && ($historyNachRueckstellung[0]['kind'] ?? null) === 'rueckstellung');
+check('Historieneintrag nennt den Aktionsnamen ("Raffstore Wohnzimmer")', str_contains($historyNachRueckstellung[0]['standort'] ?? '', 'Raffstore Wohnzimmer'));
+check('Historieneintrag ordnet Wind der Kategorie "sturm" zu', ($historyNachRueckstellung[0]['category'] ?? null) === 'sturm');
 
 echo "\n== checkWetterstationAutoRestore(): NutzerIn hat die Position inzwischen selbst verändert -> KEINE Überschreibung ==\n";
 $hub3b = new WarnHub();
@@ -326,6 +331,68 @@ callPrivate($hub6, 'checkWetterstationAutoRestore');
 check('keine RequestAction auf eine nicht mehr existierende Variable', count($GLOBALS['whub_test_requestActionCalls']) === 0);
 $stateWeg = json_decode($hub6->ReadAttributeString('WetterstationRestoreState'), true);
 check('der verwaiste Eintrag wird trotzdem aufgeräumt', !isset($stateWeg[9]));
+
+echo "\n== wetterstationRestoreStatusLine(): Sichtbarkeit einer anstehenden Rückstellung ==\n";
+$hub7 = new WarnHub();
+$hub7->Create();
+check('keine Einträge -> null (Label wird im Formular weggelassen)', callPrivate($hub7, 'wetterstationRestoreStatusLine') === null);
+
+$hub7->WriteAttributeString('WetterstationRestoreState', json_encode([3 => ['ZielVariableID' => 151, 'RestoreValue' => 100.0, 'FiredValue' => 0.0, 'Source' => 'windboe', 'CalmSinceTs' => null]]));
+$lineWartetNochAufRuhe = callPrivate($hub7, 'wetterstationRestoreStatusLine');
+check('Eintrag ohne CalmSinceTs -> "wartet noch auf Windberuhigung"', str_contains($lineWartetNochAufRuhe, 'wartet noch auf Windberuhigung'));
+
+$hub7->WriteAttributeString('WetterstationRestoreState', json_encode([3 => ['ZielVariableID' => 151, 'RestoreValue' => 100.0, 'FiredValue' => 0.0, 'Source' => 'windboe', 'CalmSinceTs' => time() - 600]])); // 10 von 20 Minuten Ruhephase absolviert
+$lineCountdown = callPrivate($hub7, 'wetterstationRestoreStatusLine');
+check('Eintrag MIT CalmSinceTs (10 von 20 Min. absolviert) -> nennt die verbleibenden ca. 10 Minuten', str_contains($lineCountdown, '10 Min.'));
+check('nennt die Anzahl der geschützten Aktionen (1)', str_contains($lineCountdown, '1 durch die Wetterstation geschützte'));
+
+$hub7->WriteAttributeString('WetterstationRestoreState', json_encode([
+    3 => ['ZielVariableID' => 151, 'RestoreValue' => 100.0, 'FiredValue' => 0.0, 'Source' => 'windboe', 'CalmSinceTs' => time() - 600], // noch 10 Min.
+    5 => ['ZielVariableID' => 152, 'RestoreValue' => 100.0, 'FiredValue' => 0.0, 'Source' => 'regenrate', 'CalmSinceTs' => time() - 1080], // noch 2 Min. -- die kürzere Restzeit gewinnt
+]));
+$lineMehrere = callPrivate($hub7, 'wetterstationRestoreStatusLine');
+check('bei mehreren Einträgen wird die KÜRZESTE verbleibende Zeit genannt (2 Min., nicht 10)', str_contains($lineMehrere, '2 Min.'));
+check('nennt die Gesamtzahl (2) der geschützten Aktionen', str_contains($lineMehrere, '2 durch die Wetterstation geschützte'));
+
+echo "\n== GetConfigurationForm(): Rückstellungs-Statuszeile erscheint nur, wenn tatsächlich etwas ansteht ==\n";
+$hub8 = new WarnHub();
+$hub8->Create();
+$json8 = json_decode($hub8->GetConfigurationForm(), true);
+$pruefungPanel8 = null;
+foreach ($json8['elements'] as $el) {
+    if (($el['caption'] ?? '') === '🔎  Prüfung & Status') {
+        $pruefungPanel8 = $el;
+        break;
+    }
+}
+$hatLabel8 = false;
+foreach ($pruefungPanel8['items'] ?? [] as $item) {
+    if (($item['name'] ?? null) === 'WetterstationRestoreStatusLabel') {
+        $hatLabel8 = true;
+        break;
+    }
+}
+check('ohne anstehende Rückstellung: Statuszeile fehlt im Formular (kein unnötiger Hinweis)', $hatLabel8 === false);
+
+$hub9 = new WarnHub();
+$hub9->Create();
+$hub9->WriteAttributeString('WetterstationRestoreState', json_encode([3 => ['ZielVariableID' => 151, 'RestoreValue' => 100.0, 'FiredValue' => 0.0, 'Source' => 'windboe', 'CalmSinceTs' => null]]));
+$json9 = json_decode($hub9->GetConfigurationForm(), true);
+$pruefungPanel9 = null;
+foreach ($json9['elements'] as $el) {
+    if (($el['caption'] ?? '') === '🔎  Prüfung & Status') {
+        $pruefungPanel9 = $el;
+        break;
+    }
+}
+$hatLabel9 = false;
+foreach ($pruefungPanel9['items'] ?? [] as $item) {
+    if (($item['name'] ?? null) === 'WetterstationRestoreStatusLabel') {
+        $hatLabel9 = true;
+        break;
+    }
+}
+check('MIT anstehender Rückstellung: Statuszeile steht im Prüfung & Status-Panel', $hatLabel9 === true);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

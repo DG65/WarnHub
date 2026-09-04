@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-beta.32 (2026-09-05)
+
+- Auto-Rückstellung wird jetzt in der Warnungs-Historie protokolliert
+  (neuer Verlaufstyp `"rueckstellung"`) -- vorher war eine automatische
+  Rückstellung nirgends auditierbar, nur über die (optionale, per Snooze
+  unterdrückbare) Push-Benachrichtigung sichtbar. `logHistory()` intern
+  auf einzelne Felder statt eines CAP-Warnungs-Arrays umgestellt, damit
+  auch ein synthetisches Rückstellungs-Ereignis dort hineinpasst.
+- Neue Statuszeile "Prüfung & Status": zeigt an, wenn mindestens eine
+  Schutzaktion auf ihre automatische Rückstellung wartet -- entweder
+  "wartet noch auf Windberuhigung" (Ruhephase hat noch nicht begonnen)
+  oder die verbleibenden Minuten bis zur Rückstellung (kürzeste Zeit
+  bei mehreren wartenden Aktionen). Erscheint nur, wenn tatsächlich
+  etwas ansteht, kein unnötiger Hinweis im Normalfall.
+- Beide Punkte aus Dietmars Bestätigung 04.09.2026 zu meinem eigenen
+  Fund, dass eine automatische Rückstellung bisher weder protokolliert
+  noch vor ihrem Abschluss sichtbar war.
+
 ## 0.1.0-beta.31 (2026-09-05)
 
 - Regenrate der eigenen Wetterstation jetzt ebenfalls in drei Stufen

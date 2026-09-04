@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.31-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.32-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -66,7 +66,10 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Minuten durchgehend wieder unter der Moderate-Schwelle liegen -- die einzige Ausnahme von
   "keine automatische Rückstellung" im ganzen Modul, weil nur die eigene Wetterstation
   einen fortlaufenden, lokalen Live-Wert liefert. Prüft vor dem Zurückstellen, ob der Stand
-  seitdem von Hand verändert wurde, und überschreibt in dem Fall nicht.
+  seitdem von Hand verändert wurde, und überschreibt in dem Fall nicht. Jede Rückstellung
+  wird in der Warnungs-Historie protokolliert; eine noch anstehende Rückstellung steht als
+  eigene Statuszeile im Panel "Prüfung & Status" (nur sichtbar, wenn tatsächlich etwas
+  ansteht).
 - **VKF-Hagelschutz-Signalbox** (Schweiz, `meteo.netitservices.com`) -- **BETA, ungetestet**:
   optional, bindet eine physisch bei einem konkreten Schweizer Gebäude registrierte
   Hagelschutz-Signalbox ein (hagelschutz-einfach-automatisch.ch). Aus der offiziellen

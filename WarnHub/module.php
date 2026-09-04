@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.31';
-    private const NEWS_VERSION = '0.1.0-beta.31';
+    private const DOC_VERSION = '0.1.0-beta.32';
+    private const NEWS_VERSION = '0.1.0-beta.32';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -611,7 +611,7 @@ class WarnHub extends IPSModule
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleSevere', 'caption' => 'Schwellwert Regenrate -- Severe (mm/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleExtreme', 'caption' => 'Schwellwert Regenrate -- Extreme (mm/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'CheckBox', 'name' => 'WetterstationAutoRueckstellung', 'caption' => 'Automatische Rückstellung nach Windberuhigung (Raffstore/Markise/Garage)'],
-                ['type' => 'Label', 'caption' => 'Die EINZIGE Ausnahme von "keine automatische Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert liefert. Stellt eine durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktion automatisch auf den Wert zurück, den sie unmittelbar vor dem Auslösen hatte -- aber erst, nachdem Wind UND Regen seit 20 Minuten durchgehend wieder unter der Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen mitten im Sturm). Gilt NUR für durch die eigene Wetterstation ausgelöste Aktionen, nicht für amtliche Warnungen. Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen bleiben wie gehabt ohne Rückstellung.'],
+                ['type' => 'Label', 'caption' => 'Die EINZIGE Ausnahme von "keine automatische Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert liefert. Stellt eine durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktion automatisch auf den Wert zurück, den sie unmittelbar vor dem Auslösen hatte -- aber erst, nachdem Wind UND Regen seit 20 Minuten durchgehend wieder unter der Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen mitten im Sturm). Gilt NUR für durch die eigene Wetterstation ausgelöste Aktionen, nicht für amtliche Warnungen. Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen bleiben wie gehabt ohne Rückstellung. Jede Rückstellung wird in der Warnungs-Historie (WHUB_GetHistory()) protokolliert, eine anstehende Rückstellung steht unten im Panel "Prüfung & Status".'],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
         ];
@@ -747,32 +747,37 @@ class WarnHub extends IPSModule
             ],
         ];
 
+        $pruefungItems = [
+            ['type' => 'Label', 'caption' => 'WarnHub fragt die oben konfigurierten Datenquellen automatisch im eingestellten Abfragetakt ab und gleicht sie gegen die Standorte/Schutzaktionen weiter oben ab. Der Knopf unten löst das Ganze zusätzlich sofort aus (z. B. um die Einrichtung direkt zu testen), ohne auf den nächsten automatischen Durchlauf zu warten.'],
+            [
+                'type' => 'Label',
+                'name' => 'PollStatusLabel',
+                'caption' => $this->getPollStatusLine(),
+            ],
+            [
+                'type' => 'Button',
+                'caption' => '🔎 Jetzt prüfen',
+                'onClick' => 'echo WHUB_Poll($id);',
+            ],
+        ];
+        $restoreLine = $this->wetterstationRestoreStatusLine();
+        if ($restoreLine !== null) {
+            $pruefungItems[] = ['type' => 'Label', 'name' => 'WetterstationRestoreStatusLabel', 'caption' => $restoreLine];
+        }
+        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: zwei weitere Variablen ("Kachel (kompakt)", "Kachel (Übersicht)") im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. Passen sich automatisch an Hell/Dunkel an. Ohne echtes WebFront hier nicht selbst gegenprüfbar -- Rückmeldungen willkommen.'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'];
+        $pruefungItems[] = [
+            'type' => 'Button',
+            'caption' => '🧪 Testbenachrichtigung senden',
+            'onClick' => 'echo WHUB_TestPush($id);',
+        ];
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '🔎  Prüfung & Status',
             'expanded' => true,
-            'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub fragt die oben konfigurierten Datenquellen automatisch im eingestellten Abfragetakt ab und gleicht sie gegen die Standorte/Schutzaktionen weiter oben ab. Der Knopf unten löst das Ganze zusätzlich sofort aus (z. B. um die Einrichtung direkt zu testen), ohne auf den nächsten automatischen Durchlauf zu warten.'],
-                [
-                    'type' => 'Label',
-                    'name' => 'PollStatusLabel',
-                    'caption' => $this->getPollStatusLine(),
-                ],
-                [
-                    'type' => 'Button',
-                    'caption' => '🔎 Jetzt prüfen',
-                    'onClick' => 'echo WHUB_Poll($id);',
-                ],
-                ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'],
-                ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: zwei weitere Variablen ("Kachel (kompakt)", "Kachel (Übersicht)") im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. Passen sich automatisch an Hell/Dunkel an. Ohne echtes WebFront hier nicht selbst gegenprüfbar -- Rückmeldungen willkommen.'],
-                ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'],
-                ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'],
-                [
-                    'type' => 'Button',
-                    'caption' => '🧪 Testbenachrichtigung senden',
-                    'onClick' => 'echo WHUB_TestPush($id);',
-                ],
-            ],
+            'items' => $pruefungItems,
         ];
 
         $forumHint = $this->ForumHint();
@@ -1028,6 +1033,36 @@ class WarnHub extends IPSModule
         return sprintf('🔕 Push-Benachrichtigung pausiert bis %s Uhr -- Erkennung und Schutzaktionen laufen unverändert weiter, nur die Benachrichtigung selbst ist stumm.', date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
     }
 
+    /**
+     * Sichtbarkeit für eine noch nicht abgeschlossene Auto-Rückstellung --
+     * ohne diese Zeile merkt man erst am Push (falls aktiv), dass sich
+     * überhaupt etwas tut. null = nichts anstehend (Label wird dann im
+     * Formular weggelassen). Dietmars Bestätigung 04.09.2026.
+     */
+    private function wetterstationRestoreStatusLine(): ?string
+    {
+        $restoreState = json_decode($this->ReadAttributeString('WetterstationRestoreState'), true) ?: [];
+        if (count($restoreState) === 0) {
+            return null;
+        }
+        $minRemainingMinutes = null;
+        foreach ($restoreState as $entry) {
+            if ($entry['CalmSinceTs'] === null) {
+                continue;
+            }
+            $remainingSeconds = max(0, self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN - (time() - (int) $entry['CalmSinceTs']));
+            $minutes = (int) ceil($remainingSeconds / 60);
+            if ($minRemainingMinutes === null || $minutes < $minRemainingMinutes) {
+                $minRemainingMinutes = $minutes;
+            }
+        }
+        $count = count($restoreState);
+        if ($minRemainingMinutes !== null) {
+            return sprintf('🔽 %d durch die Wetterstation geschützte Aktion(en) -- frühestens in %d Min. wieder zurückgestellt.', $count, $minRemainingMinutes);
+        }
+        return sprintf('🔽 %d durch die Wetterstation geschützte Aktion(en) -- wartet noch auf Windberuhigung.', $count);
+    }
+
     private function getPollStatusLine(): string
     {
         $lastTs = $this->ReadAttributeInteger('LastPollTs');
@@ -1109,6 +1144,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Regenrate der eigenen Wetterstation jetzt ebenfalls in drei Stufen (Moderate/Severe/Extreme, Standard 15/25/40 mm/h, DWDs eigene Starkregen-Warnstufen)'],
                 ['type' => 'Label', 'caption' => '• NEU (optional, standardmäßig AUS): Automatische Rückstellung nach Windberuhigung für durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktionen -- stellt nach 20 Minuten durchgehender Ruhe automatisch den Wert vor dem Auslösen wieder her, prüft vorher aber, ob der Stand seitdem von Hand verändert wurde (dann keine Überschreibung). Die einzige Ausnahme von "keine automatische Rückstellung" im ganzen Modul, siehe Datenquellen-Panel'],
                 ['type' => 'Label', 'caption' => '• Eine bereits abgelaufene Warnung zählt nicht mehr als aktiv, auch wenn die Quelle sie verzögert weiterliefert -- Absicherung gegen veraltete Quelldaten'],
+                ['type' => 'Label', 'caption' => '• Auto-Rückstellung: wird jetzt zusätzlich in der Warnungs-Historie protokolliert (neuer Verlaufstyp "Rückstellung"), eine noch anstehende Rückstellung steht als eigene Statuszeile im Panel "Prüfung & Status"'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2577,6 +2613,7 @@ class WarnHub extends IPSModule
         );
         $windCalm = $windboeID === null || $this->windSeverityForSpeed($this->readWindSpeedKmh($windboeID)) === null;
         $regenCalm = $regenrateID === null || $this->regenSeverityForRate((float) @GetValue($regenrateID)) === null;
+        $actions = $this->decodeSchutzaktionen();
 
         $now = time();
         $changed = false;
@@ -2608,6 +2645,16 @@ class WarnHub extends IPSModule
             // werden sollte.
             if (@IPS_VariableExists($variableID) && abs((float) @GetValue($variableID) - (float) $entry['FiredValue']) < 0.5) {
                 @RequestAction($variableID, $entry['RestoreValue']);
+                $actionName = $actions[$idx]['Name'] ?? ('Ziel-Variable #' . $variableID);
+                $this->logHistory(
+                    'rueckstellung',
+                    $actionName,
+                    'Automatische Rückstellung',
+                    $actionName . ' automatisch zurückgestellt -- Wind/Regen war seit ' . (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60) . ' Minuten wieder ruhig.',
+                    'Unknown',
+                    $entry['Source'] === 'windboe' ? 'sturm' : 'starkregen',
+                    'wetterstation'
+                );
                 if ($this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed()) {
                     $this->pushToAllWebfronts(
                         '🔽 Automatisch zurückgestellt',
@@ -3139,6 +3186,10 @@ class WarnHub extends IPSModule
         $this->WriteAttributeString('LastActiveWarningsJson', json_encode($result['active']));
         $this->refreshStatusVariables();
         @$this->UpdateFormField('PollStatusLabel', 'caption', $this->getPollStatusLine());
+        $restoreLine = $this->wetterstationRestoreStatusLine();
+        if ($restoreLine !== null) {
+            @$this->UpdateFormField('WetterstationRestoreStatusLabel', 'caption', $restoreLine);
+        }
 
         $icon = $result['activeCount'] > 0 ? '⚠️' : '✅';
         return sprintf(
@@ -3318,7 +3369,7 @@ class WarnHub extends IPSModule
                 if ($w['msgType'] === 'Cancel') {
                     if (isset($seen[$pairKey])) {
                         unset($seen[$pairKey]);
-                        $this->logHistory('entwarnung', $standort['Name'], $w, $category);
+                        $this->logHistory('entwarnung', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
                                 '✅ Entwarnung',
@@ -3360,7 +3411,7 @@ class WarnHub extends IPSModule
                 $isEscalation = !$isNewWarning && $this->severityRank($w['severity']) > $this->severityRank($seenEntry['severity'] ?? 'Unknown');
                 if ($isNewWarning || $isEscalation) {
                     $seen[$pairKey] = ['msgType' => $w['msgType'], 'pushedAt' => time(), 'severity' => $w['severity']];
-                    $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w, $category);
+                    $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
                     if ($pushAktiv) {
                         $text = $this->buildPushText($standort['Name'], $w, $nameMatched);
                         if ($isEscalation) {
@@ -3933,18 +3984,18 @@ HTML;
      * ausgeschaltet war). Deckel bei 500 Einträgen, älteste zuerst raus
      * (identisches Prinzip wie EMS' SpecialEventsLog).
      */
-    private function logHistory(string $kind, string $standortName, array $w, string $category): void
+    private function logHistory(string $kind, string $standortName, string $event, string $headline, string $severity, string $category, string $source): void
     {
         $log = json_decode($this->ReadAttributeString('WarnHistory'), true) ?: [];
         $log[] = [
             'ts' => time(),
-            'kind' => $kind, // 'warnung' oder 'entwarnung'
+            'kind' => $kind, // 'warnung', 'entwarnung', 'eskalation' oder 'rueckstellung'
             'standort' => $standortName,
-            'event' => $w['event'],
-            'headline' => $w['headline'],
-            'severity' => $w['severity'],
+            'event' => $event,
+            'headline' => $headline,
+            'severity' => $severity,
             'category' => $category,
-            'source' => $w['source'],
+            'source' => $source,
         ];
         if (count($log) > 500) {
             $log = array_slice($log, count($log) - 500);

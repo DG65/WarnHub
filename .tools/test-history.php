@@ -221,7 +221,7 @@ for ($i = 0; $i < 500; $i++) {
     $vollesLog[] = ['ts' => $i, 'kind' => 'warnung', 'standort' => 'Test', 'event' => 'Alt', 'headline' => '', 'severity' => 'Minor', 'category' => 'sturm', 'source' => 'test'];
 }
 $hub2->WriteAttributeString('WarnHistory', json_encode($vollesLog));
-callPrivate($hub2, 'logHistory', ['warnung', 'Zuhause', $warnung, 'sturm']);
+callPrivate($hub2, 'logHistory', ['warnung', 'Zuhause', $warnung['event'], $warnung['headline'], $warnung['severity'], 'sturm', $warnung['source']]);
 $capped = json_decode($hub2->ReadAttributeString('WarnHistory'), true);
 check('bleibt bei genau 500 Einträgen (nicht 501)', count($capped) === 500);
 check('der neue Eintrag ist tatsächlich dabei (am Ende)', ($capped[499]['standort'] ?? null) === 'Zuhause');
