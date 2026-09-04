@@ -178,6 +178,7 @@ check('"Standorte"-Liste vorhanden', findByName($decoded['elements'], 'Standorte
 check('Standorte: Live-Standort-Spalte "QuellVarLat" vorhanden (mobiler Standort, z. B. Tessie/Geofency)', findByName($decoded['elements'], 'QuellVarLat') !== null);
 check('Standorte: Live-Standort-Spalte "QuellVarLon" vorhanden', findByName($decoded['elements'], 'QuellVarLon') !== null);
 check('Standorte: "Push nur an"-Filterspalte "PushZielFilter" vorhanden (mehrere Personen/WebFronts)', findByName($decoded['elements'], 'PushZielFilter') !== null);
+check('"QuelleMeteoalarm"-Checkbox vorhanden (europaweite Wetterwarnungen)', findByName($decoded['elements'], 'QuelleMeteoalarm') !== null);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

@@ -29,6 +29,9 @@ function IPS_GetProperty(int $id, string $name)
 {
     return $GLOBALS['whub_test_properties'][$id][$name] ?? '';
 }
+function IPS_LogMessage(string $sender, string $message): void
+{
+}
 
 class IPSModule
 {
@@ -265,6 +268,28 @@ if (count($odlWarnings) > 0) {
     }
     check('erste ODL-Warnung hat Severity "Severe"', $w['severity'] === 'Severe');
 }
+
+echo "== Live-Abruf Meteoalarm (feeds.meteoalarm.org, Deutschland) ==\n";
+$maWarnings = callPrivate($hub, 'fetchMeteoalarmCountry', ['germany']);
+check('fetchMeteoalarmCountry("germany") liefert ein Array', is_array($maWarnings));
+echo '  Info: ' . count($maWarnings) . " Meteoalarm-Einträge für Deutschland (i. d. R. mehrere pro Warnung, ein Eintrag je Gebiet).\n";
+if (count($maWarnings) > 0) {
+    $w = $maWarnings[0];
+    foreach (['identifier', 'source', 'msgType', 'event', 'headline', 'severity', 'nameMatch', 'rings', 'circles'] as $field) {
+        check("erster Meteoalarm-Eintrag hat Feld '$field'", array_key_exists($field, $w));
+    }
+    check('source ist "meteoalarm"', $w['source'] === 'meteoalarm');
+    check('KEINE Geometrie -- live bestätigt, dass die freien Feeds kein Polygon/Kreis liefern', $w['rings'] === [] && $w['circles'] === []);
+    check('nameMatch ist nicht leer (Namensabgleich-Grundlage)', count($w['nameMatch']) > 0);
+    check('severity liegt im bekannten Vokabular (Minor/Moderate/Severe/Extreme/Unknown)', in_array($w['severity'], ['Minor', 'Moderate', 'Severe', 'Extreme', 'Unknown'], true));
+}
+
+echo "== Live-Reverse-Geocoding (Nominatim) für einen bekannten Standort (Offenburg) ==\n";
+$geo = callPrivate($hub, 'reverseGeocodeStandort', [48.4785, 7.9448]);
+check('liefert den Ländercode "de"', $geo['countryCode'] === 'de');
+check('liefert mindestens einen Regionsnamen', count($geo['names']) > 0);
+echo '  Info: Regionsnamen: ' . implode(', ', $geo['names']) . "\n";
+check('Ergebnis wird gecacht (zweiter Aufruf ohne erneuten Netzzugriff liefert dasselbe)', callPrivate($hub, 'reverseGeocodeStandort', [48.4785, 7.9448]) === $geo);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.11';
-    private const NEWS_VERSION = '0.1.0-beta.11';
+    private const DOC_VERSION = '0.1.0-beta.12';
+    private const NEWS_VERSION = '0.1.0-beta.12';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -148,6 +148,25 @@ class WarnHub extends IPSModule
     // dispatcht dieselbe Stelle, die WFC_PushNotification für WHUB_WEBFRONT_GUID
     // aufruft, für DIESE GUID stattdessen an VISU_PostNotificationEx().
     private const KACHEL_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
+
+    // ISO-3166-1-alpha-2-Ländercode (wie von Nominatim reverse geliefert) ->
+    // Länder-Slug der Meteoalarm-Feeds (feeds.meteoalarm.org). Live gegen
+    // die tatsächliche Feed-Liste geprüft (04.09.2026, curl gegen
+    // https://feeds.meteoalarm.org/), NICHT aus der ISO-Ländertabelle
+    // angenommen -- Meteoalarm nutzt ausgeschriebene, teils ungewöhnlich
+    // gebildete Slugs (z. B. "republic-of-north-macedonia", nicht "north-macedonia").
+    private const METEOALARM_COUNTRY_SLUGS = [
+        'ad' => 'andorra', 'at' => 'austria', 'be' => 'belgium', 'ba' => 'bosnia-herzegovina',
+        'bg' => 'bulgaria', 'hr' => 'croatia', 'cy' => 'cyprus', 'cz' => 'czechia',
+        'dk' => 'denmark', 'ee' => 'estonia', 'fi' => 'finland', 'fr' => 'france',
+        'de' => 'germany', 'gr' => 'greece', 'hu' => 'hungary', 'is' => 'iceland',
+        'ie' => 'ireland', 'il' => 'israel', 'it' => 'italy', 'lv' => 'latvia',
+        'lt' => 'lithuania', 'lu' => 'luxembourg', 'mt' => 'malta', 'md' => 'moldova',
+        'me' => 'montenegro', 'nl' => 'netherlands', 'no' => 'norway', 'pl' => 'poland',
+        'pt' => 'portugal', 'mk' => 'republic-of-north-macedonia', 'ro' => 'romania',
+        'rs' => 'serbia', 'sk' => 'slovakia', 'si' => 'slovenia', 'es' => 'spain',
+        'se' => 'sweden', 'ch' => 'switzerland', 'ua' => 'ukraine', 'gb' => 'united-kingdom',
+    ];
 
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
     // (Deutsch, DWD/MoWaS-Vokabular -- siehe reale Beispiele in .tools/test-geo.php).
@@ -190,6 +209,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuellePegelonline', false);
         $this->RegisterPropertyBoolean('QuelleBfsOdl', false);
         $this->RegisterPropertyFloat('BfsOdlSchwellwert', 0.3);
+        $this->RegisterPropertyBoolean('QuelleMeteoalarm', false);
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
@@ -204,6 +224,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeString('PendingSirenOff', '[]');
         $this->RegisterAttributeInteger('LastPollTs', 0);
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
+        $this->RegisterAttributeString('ReverseGeoCache', '{}');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeBoolean('ForumHintGone', false);
@@ -250,7 +271,7 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei) und meldet nur, was innerhalb des selbst definierten Umkreises liegt.'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de), optional Pegelstände (PEGELONLINE/WSV) und optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung).'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de), optional Pegelstände (PEGELONLINE/WSV), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung) und optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder -- wichtig bei mobilen Standorten im Ausland).'],
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE und BfS ODL-Info gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser) bzw. eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
@@ -323,6 +344,8 @@ class WarnHub extends IPSModule
                 ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => 'Pegelstände (PEGELONLINE/WSV) -- warnt bei Pegeln über dem mittleren bzw. bisherigen Höchstwasser in der Nähe eines Standorts'],
                 ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => 'Radioaktivität (BfS Ortsdosisleistung) -- eigener Schwellwert, keine amtliche Meldestufe'],
                 ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => 'Schwellwert Radioaktivität (µSv/h)', 'digits' => 3, 'minValue' => 0.05],
+                ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
+                ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung oben bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
         ];
@@ -1606,6 +1629,148 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  Meteoalarm (feeds.meteoalarm.org -- europaweite Wetterwarnungen,
+    //  39 Länder, Live gegen die echte Feed-Liste geprüft 04.09.2026).
+    //  Anders als NINA/DWD/PEGELONLINE/BfS liefern die frei zugänglichen
+    //  Atom-Feeds KEINE Warnfläche (kein <polygon>/<circle>, live geprüft
+    //  gegen mehrere Länderfeeds inkl. der vollständigen CAP-Originalquelle
+    //  hinter jedem Eintrag) -- nur benannte Verwaltungsgebiete je
+    //  EMMA_ID/NUTS3-Geocode. Der Abgleich läuft deshalb NICHT über
+    //  WHUB_Geo, sondern per Namensvergleich: Der Standort wird per
+    //  Nominatim-Reverse-Geocoding (bereits für die Vorwärtssuche im
+    //  Standorte-Panel genutzt) einmalig einem Kreis/einer Region
+    //  zugeordnet (gecacht, siehe reverseGeocodeStandort()), und diese
+    //  Namen werden gegen die je Meldung genannten Gebietsnamen verglichen.
+    //  Bewusst als eigener, klar gekennzeichneter Pfad NEBEN dem
+    //  geometrischen Matching -- keine vorgetäuschte Präzision.
+    // ----------------------------------------------------------------
+
+    /** Reverse-Geocoding eines Standorts (Land + Kreis-/Regionsname) -- gecacht (6h, gerundete Koordinaten als Schlüssel), um Nominatims Nutzungsbedingungen (max. 1 Anfrage/Sekunde, keine Massennutzung) einzuhalten. */
+    private function reverseGeocodeStandort(float $lat, float $lon): array
+    {
+        $key = sprintf('%.1f_%.1f', $lat, $lon);
+        $cache = json_decode($this->ReadAttributeString('ReverseGeoCache'), true) ?: [];
+        $cached = $cache[$key] ?? null;
+        if (is_array($cached) && (time() - (int) ($cached['ts'] ?? 0)) < 21600) {
+            return ['countryCode' => (string) ($cached['countryCode'] ?? ''), 'names' => (array) ($cached['names'] ?? [])];
+        }
+
+        $url = sprintf('https://nominatim.openstreetmap.org/reverse?format=json&zoom=8&addressdetails=1&lat=%s&lon=%s', $lat, $lon);
+        $body = $this->httpGet($url, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        $json = $body !== null ? json_decode($body, true) : null;
+        $address = is_array($json) ? ($json['address'] ?? []) : [];
+
+        $countryCode = strtolower((string) ($address['country_code'] ?? ''));
+        $names = [];
+        foreach (['county', 'state_district', 'region', 'state', 'province', 'municipality', 'city', 'town'] as $field) {
+            $v = trim((string) ($address[$field] ?? ''));
+            if ($v !== '' && !in_array($v, $names, true)) {
+                $names[] = $v;
+            }
+        }
+
+        $cache[$key] = ['countryCode' => $countryCode, 'names' => $names, 'ts' => time()];
+        $this->WriteAttributeString('ReverseGeoCache', json_encode($cache));
+        return ['countryCode' => $countryCode, 'names' => $names];
+    }
+
+    /** Fallunabhängiger Namensabgleich in beide Richtungen (Substring) -- "Ortenaukreis" matcht "Kreis Ortenaukreis" und umgekehrt. */
+    private function namesOverlap(array $a, array $b): bool
+    {
+        foreach ($a as $x) {
+            $x = mb_strtolower(trim((string) $x));
+            if ($x === '') {
+                continue;
+            }
+            foreach ($b as $y) {
+                $y = mb_strtolower(trim((string) $y));
+                if ($y !== '' && (str_contains($x, $y) || str_contains($y, $x))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Meteoalarm-Warnungen für alle Länder, in denen mindestens ein aktiver
+     * Standort liegt (per Reverse-Geocoding ermittelt) -- fragt gezielt nur
+     * die tatsächlich relevanten Länderfeeds ab, nicht alle 39 auf Verdacht.
+     */
+    private function fetchMeteoalarm(): array
+    {
+        $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
+        $slugs = [];
+        foreach ($standorte as $s) {
+            $coords = $this->resolveStandortCoords($s);
+            $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
+            $slug = self::METEOALARM_COUNTRY_SLUGS[$geo['countryCode']] ?? null;
+            if ($slug !== null) {
+                $slugs[$slug] = true;
+            }
+        }
+
+        $out = [];
+        foreach (array_keys($slugs) as $slug) {
+            $out = array_merge($out, $this->fetchMeteoalarmCountry($slug));
+        }
+        return $out;
+    }
+
+    private function fetchMeteoalarmCountry(string $slug): array
+    {
+        $url = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-' . $slug;
+        $body = $this->httpGet($url, 20, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        if ($body === null) {
+            $this->LogError('fetchMeteoalarmCountry', 'Meteoalarm-Feed für "' . $slug . '" nicht erreichbar.');
+            return [];
+        }
+        return $this->parseMeteoalarmAtom($body, $slug);
+    }
+
+    /** Vom HTTP-Abruf getrennt (wie parseCapXml()/fetchDwdCap()), damit sich die Atom+CAP-Auswertung ohne Netzzugriff testen lässt. */
+    private function parseMeteoalarmAtom(string $body, string $slug): array
+    {
+        $prevUseErrors = libxml_use_internal_errors(true);
+        $sxml = simplexml_load_string($body);
+        libxml_use_internal_errors($prevUseErrors);
+        if ($sxml === false) {
+            $this->LogError('parseMeteoalarmAtom', 'Meteoalarm-Feed für "' . $slug . '" ließ sich nicht als XML parsen.');
+            return [];
+        }
+        $entries = $sxml->entry ?? [];
+
+        $out = [];
+        foreach ($entries as $entry) {
+            $capNs = $entry->children('urn:oasis:names:tc:emergency:cap:1.2');
+            $identifier = (string) $capNs->identifier;
+            $areaDesc = (string) $capNs->areaDesc;
+            if ($identifier === '' || $areaDesc === '') {
+                continue;
+            }
+            $msgType = (string) $capNs->message_type;
+            $out[] = [
+                'identifier' => $identifier . '|' . $areaDesc,
+                'source' => 'meteoalarm',
+                'msgType' => $msgType !== '' ? $msgType : 'Alert',
+                'event' => (string) $capNs->event,
+                'headline' => (string) ($entry->title ?: $capNs->event ?: 'Warnung'),
+                'description' => (string) ($entry->title ?? ''),
+                'instruction' => '',
+                'severity' => (string) ($capNs->severity ?: 'Unknown'),
+                'effective' => (string) $capNs->onset ?: null,
+                'onset' => (string) $capNs->onset ?: null,
+                'expires' => (string) $capNs->expires ?: null,
+                'areaDesc' => $areaDesc,
+                'rings' => [],
+                'circles' => [],
+                'nameMatch' => [$areaDesc],
+            ];
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
     //  Abfragezyklus: Poll, Matching, Push, Schutzaktionen
     // ----------------------------------------------------------------
 
@@ -1635,6 +1800,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleBfsOdl')) {
             $warnings = array_merge($warnings, $this->fetchBfsOdl());
+        }
+        if ($this->ReadPropertyBoolean('QuelleMeteoalarm')) {
+            $warnings = array_merge($warnings, $this->fetchMeteoalarm());
         }
 
         $result = $this->processWarnings($warnings);
@@ -1686,6 +1854,7 @@ class WarnHub extends IPSModule
         $newlyPushed = 0;
         $cancelled = 0;
         $actionsTriggered = 0;
+        $standortGeoNamesCache = [];
 
         foreach ($warnings as $w) {
             $stillPresent[$w['identifier']] = true;
@@ -1701,6 +1870,23 @@ class WarnHub extends IPSModule
                     ? WHUB_Geo::distanceToAny($coords['lat'], $coords['lon'], $w['rings'], $w['circles'])
                     : null;
                 $matches = $hasGeo && $distanceKm !== null && $distanceKm <= $standort['RadiusKm'];
+
+                // Meteoalarm liefert keine Warnfläche, nur benannte Gebiete
+                // (siehe fetchMeteoalarmCountry()) -- Ersatzabgleich per Name
+                // statt Geometrie, deshalb hier klar getrennt vom
+                // geometrischen Pfad oben und ausdrücklich als ungenau
+                // markiert ($nameMatched, siehe 'distanceKm' => null unten).
+                $nameMatched = false;
+                if (!$hasGeo && count($w['nameMatch'] ?? []) > 0) {
+                    if (!array_key_exists($standort['Name'], $standortGeoNamesCache)) {
+                        $standortGeoNamesCache[$standort['Name']] = $this->reverseGeocodeStandort($coords['lat'], $coords['lon'])['names'];
+                    }
+                    $nameMatched = $this->namesOverlap($w['nameMatch'], $standortGeoNamesCache[$standort['Name']]);
+                }
+                if ($nameMatched) {
+                    $matches = true;
+                }
+
                 if (!$matches) {
                     continue;
                 }
@@ -1734,6 +1920,7 @@ class WarnHub extends IPSModule
                     'category' => $category,
                     'source' => $w['source'],
                     'distanceKm' => $distanceKm !== null ? round($distanceKm, 1) : null,
+                    'nameMatched' => $nameMatched,
                     'effective' => $w['effective'],
                     'expires' => $w['expires'],
                 ];
@@ -1743,7 +1930,7 @@ class WarnHub extends IPSModule
                     if ($pushAktiv) {
                         $this->pushToAllWebfronts(
                             $this->buildPushTitle($w['severity'], $w['event']),
-                            $this->buildPushText($standort['Name'], $w),
+                            $this->buildPushText($standort['Name'], $w, $nameMatched),
                             $pushSound,
                             $pushZiele
                         );
@@ -1853,7 +2040,7 @@ class WarnHub extends IPSModule
         return $this->truncateBytes($title, 32);
     }
 
-    private function buildPushText(string $standortName, array $w): string
+    private function buildPushText(string $standortName, array $w, bool $nameMatched = false): string
     {
         $text = $standortName . ': ' . $w['headline'];
         if ($w['description'] !== '') {
@@ -1861,6 +2048,11 @@ class WarnHub extends IPSModule
         }
         if ($w['expires'] !== null) {
             $text .= ' Gültig bis ' . $this->formatDateDe($w['expires']) . ' Uhr.';
+        }
+        // Meteoalarm-Namensabgleich statt Geometrie -- Transparenz statt
+        // vorgetäuschter Präzision (siehe fetchMeteoalarmCountry()).
+        if ($nameMatched) {
+            $text .= ' (Namensabgleich, keine Warnfläche verfügbar.)';
         }
         return $this->truncateBytes($text, 256);
     }

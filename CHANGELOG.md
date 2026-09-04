@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-beta.12 (2026-09-04)
+
+- Neue, optionale Datenquelle: **Meteoalarm** (feeds.meteoalarm.org,
+  europaweite Wetterwarnungen für 39 Länder) -- wichtig für mobile
+  Standorte im Ausland. WarnHub fragt automatisch nur die Länderfeeds ab,
+  in denen tatsächlich ein aktiver Standort liegt (per Reverse-Geocoding
+  über OpenStreetMap Nominatim ermittelt, 6h gecacht).
+- Wichtige Einschränkung, live gegen mehrere Länderfeeds UND die
+  vollständigen CAP-Originaldokumente dahinter geprüft (04.09.2026): Die
+  frei zugänglichen Meteoalarm-Feeds liefern KEINE Warnfläche (kein
+  Polygon/Kreis wie bei NINA/DWD/PEGELONLINE/BfS), nur benannte
+  Verwaltungsgebiete. Der Abgleich läuft deshalb über einen separaten,
+  klar als "Namensabgleich" gekennzeichneten Pfad statt über das
+  geometrische Umkreis-Matching -- in der Meldung selbst sichtbar markiert,
+  keine vorgetäuschte Präzision. Für deutsche Standorte bleibt die direkte
+  DWD-Anbindung die präzisere Quelle, Meteoalarm ergänzt vor allem das
+  europäische Ausland.
+
 ## 0.1.0-beta.11 (2026-09-04)
 
 - Fix/Absicherung (automatisch, keine Einrichtung nötig): Eine Schutzaktion
