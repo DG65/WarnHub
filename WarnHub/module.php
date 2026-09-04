@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.4';
-    private const NEWS_VERSION = '0.1.0-beta.4';
+    private const DOC_VERSION = '0.1.0-beta.5';
+    private const NEWS_VERSION = '0.1.0-beta.5';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -936,10 +936,16 @@ class WarnHub extends IPSModule
         return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($loc['lat'], 5), round($loc['lon'], 5));
     }
 
-    /** $KartenStandort kommt vom 'SelectLocation'-Formularfeld -- laut SDK-Doku ein JSON-Objekt {latitude, longitude}, hier defensiv sowohl als String als auch als bereits dekodiertes Array akzeptiert. */
-    public function AddStandortFromMap($KartenStandort): string
+    /**
+     * $KartenStandort kommt vom 'SelectLocation'-Formularfeld als JSON-String
+     * {"latitude":..,"longitude":..} (Symcon verlangt bei PREFIX_-Funktionen
+     * zwingend einen der Skalar-Typen bool/int/float/string -- Live-Fund
+     * 04.09.2026: ohne Typangabe meldet die Konsole "Parameter ... hat
+     * keinen Datentyp" und der Aufruf schlägt fehl).
+     */
+    public function AddStandortFromMap(string $KartenStandort): string
     {
-        $loc = is_array($KartenStandort) ? $KartenStandort : json_decode((string) $KartenStandort, true);
+        $loc = json_decode($KartenStandort, true);
         if (!is_array($loc) || !isset($loc['latitude'], $loc['longitude'])) {
             return '⚠️ Kein Kartenpunkt ausgewählt.';
         }
@@ -1559,18 +1565,25 @@ class WarnHub extends IPSModule
             if (!$w['Aktiv']) {
                 continue;
             }
+            // TargetID = eigene InstanceID statt 0 -- Live-Fund 04.09.2026:
+            // VISU_PostNotification schlug mit TargetID=0 fehl; die offizielle
+            // Referenzimplementierung (github.com/symcon/Benachrichtigung,
+            // Notification/module.php) übergibt an genau dieser Stelle für
+            // BEIDE Funktionen $this->InstanceID, nicht 0 -- offenbar muss
+            // TargetID ein tatsächlich existierendes, im Ziel navigierbares
+            // Objekt sein statt eines "kein Ziel"-Platzhalters.
             if ($w['Typ'] === 'kachel') {
                 if (!function_exists('VISU_PostNotification')) {
                     $this->LogError('pushToAllWebfronts', 'VISU_PostNotification ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
                     continue;
                 }
-                $ok = @VISU_PostNotification($w['InstanceID'], $title, $text, $sound, 0);
+                $ok = @VISU_PostNotification($w['InstanceID'], $title, $text, $sound, $this->InstanceID);
             } else {
                 if (!function_exists('WFC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
                     continue;
                 }
-                $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, 0);
+                $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, $this->InstanceID);
             }
             if ($ok) {
                 $sent++;

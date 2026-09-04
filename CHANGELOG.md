@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-beta.5 (2026-09-04)
+
+- Fix: Push an Kachel-Visualisierung-Instanzen schlug immer fehl (Live-Test, Dietmar). Ursache:
+  TargetID wurde als `0` übergeben -- die offizielle Symcon-Referenzimplementierung
+  (Kernmodul "Benachrichtigung") übergibt dort die eigene Instanz-ID. Betrifft
+  VISU_PostNotification UND WFC_PushNotification gleichermaßen, beide korrigiert.
+- Fix: "Standort per Karte übernehmen" schlug mit "Parameter KartenStandort hat keinen
+  Datentyp" fehl -- Symcon verlangt bei jeder öffentlichen Funktion zwingend einen
+  Skalar-Typ je Parameter, jetzt `string $KartenStandort` statt untypisiert.
+
 ## 0.1.0-beta.4 (2026-09-04)
 
 - Fix: Push-Ziele-Liste zeigte Name/Instanz-ID nicht an (fehlendes `edit` je Spalte bei
