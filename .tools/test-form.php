@@ -193,5 +193,22 @@ check('Schutzaktionstyp "fenster" (Fenster schließen, z. B. Tesla) steht zur Au
 check('Schutzaktionstyp "kofferraum" (Kofferraum/Heckklappe schließen) steht zur Auswahl', in_array('kofferraum', $typOptions, true));
 check('Schutzaktionen: Spalte "ZustandsVariableID" vorhanden (Sicherheitsprüfung vor dem Kofferraum-Umschalten)', findByName($schutzaktionenListe['columns'], 'ZustandsVariableID') !== null);
 
+$datenquellenPanel = null;
+foreach ($decoded['elements'] as $el) {
+    if (($el['caption'] ?? '') === '🌐  Datenquellen') {
+        $datenquellenPanel = $el;
+        break;
+    }
+}
+$bfsPopup = null;
+foreach ($datenquellenPanel['items'] ?? [] as $item) {
+    if (($item['type'] ?? '') === 'PopupButton' && str_contains($item['caption'] ?? '', 'bedeutet dieser Wert')) {
+        $bfsPopup = $item;
+        break;
+    }
+}
+check('Popup "Was bedeutet dieser Wert?" (Dosisleistung/Verweildauer) steht im Datenquellen-Panel', $bfsPopup !== null);
+check('Popup enthält mindestens 5 Einordnungszeilen', $bfsPopup !== null && count($bfsPopup['popup']['items'] ?? []) >= 5);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

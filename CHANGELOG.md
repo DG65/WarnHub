@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.0-beta.15 (2026-09-04)
+
+- Radioaktivität-Einordnung: neues Popup "Was bedeutet dieser Wert?" im
+  Datenquellen-Panel (gestaffelte Dosisleistung/Verweildauer-Tabelle, u. a.
+  natürliches Untergrundniveau, WarnHubs Standard-Schwellwert, Jahres-
+  Vorsorgewert der Bevölkerung, akute Schwelle) sowie eine wertabhängige
+  Einordnung direkt im Meldungstext jeder BfS-ODL-Warnung ("Jahres-
+  Vorsorgewert rechnerisch nach X Tagen erreicht"). Werte/Quellen:
+  odlinfo.bfs.de -- eigene Orientierungsrechnung, ausdrücklich als solche
+  gekennzeichnet, keine amtliche Tabelle. Dietmars Wunsch 04.09.2026.
+- Dokumentations-Review nach den zahlreichen Erweiterungen seit beta.9:
+  Der "Neu in Version X"-Banner zeigte noch den Text der allerersten
+  Version -- jetzt aktualisiert auf die tatsächlichen Neuerungen (mobiler
+  Standort, Push-Ziel-Filter, PEGELONLINE/BfS/Meteoalarm, neue
+  Schutzaktionstypen). "Wozu dieses Modul?" und die Doku-Kurzbeschreibung
+  erwähnten weiterhin nur Deutschland, obwohl Meteoalarm und mobile
+  Standorte längst europaweite Nutzung ermöglichen -- korrigiert. Ein
+  Hinweistext im Schutzaktionen-Panel behauptete weiterhin uneingeschränkt
+  "wird aktiviert", obwohl Kofferraum/Heckklappe-Treffer seit beta.14
+  ausnahmsweise inaktiv bleiben -- korrigiert. README.md komplett
+  überarbeitet (fehlten: alle vier neuen Datenquellen, mobiler Standort,
+  Push-Ziel-Filter, neue Schutzaktionstypen, deren Grenzen).
+
 ## 0.1.0-beta.14 (2026-09-04)
 
 - Neuer Schutzaktionstyp "Kofferraum/Heckklappe schließen": löst jetzt doch

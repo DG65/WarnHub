@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.14';
-    private const NEWS_VERSION = '0.1.0-beta.14';
+    private const DOC_VERSION = '0.1.0-beta.15';
+    private const NEWS_VERSION = '0.1.0-beta.15';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -284,7 +284,7 @@ class WarnHub extends IPSModule
             'expanded' => false,
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
-                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei) und meldet nur, was innerhalb des selbst definierten Umkreises liegt.'],
+                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen -- amtlich für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei), optional europaweite Wetterwarnungen für 39 Länder -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im europäischen Ausland).'],
                 ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de), optional Pegelstände (PEGELONLINE/WSV), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung) und optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder -- wichtig bei mobilen Standorten im Ausland).'],
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE und BfS ODL-Info gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser) bzw. eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
@@ -358,6 +358,14 @@ class WarnHub extends IPSModule
                 ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => 'Pegelstände (PEGELONLINE/WSV) -- warnt bei Pegeln über dem mittleren bzw. bisherigen Höchstwasser in der Nähe eines Standorts'],
                 ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => 'Radioaktivität (BfS Ortsdosisleistung) -- eigener Schwellwert, keine amtliche Meldestufe'],
                 ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => 'Schwellwert Radioaktivität (µSv/h)', 'digits' => 3, 'minValue' => 0.05],
+                [
+                    'type' => 'PopupButton',
+                    'caption' => 'Was bedeutet dieser Wert? (Einordnung Dosisleistung/Verweildauer)',
+                    'popup' => [
+                        'caption' => 'Ortsdosisleistung -- Einordnung',
+                        'items' => $this->bfsOdlReferencePopupItems(),
+                    ],
+                ],
                 ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
                 ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung oben bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
@@ -421,7 +429,7 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster schließen/Heckklappe/Sirene durchsuchen',
                     'onClick' => 'echo WHUB_DiscoverSchutzaktionen($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
+                ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und in der Regel AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Ausnahme Kofferraum/Heckklappe: bleibt ohne automatisch gefundene Zustands-Variable INAKTIV (Sicherheitssperre, siehe Hilfe-Knopf oben). Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
                 [
                     'type' => 'List',
                     'name' => 'Schutzaktionen',
@@ -493,6 +501,77 @@ class WarnHub extends IPSModule
             ['caption' => 'Hoch (Severe)', 'value' => 3],
             ['caption' => 'Extrem (Extreme)', 'value' => 4],
         ];
+    }
+
+    /**
+     * Referenz-Dosisleistungen für die Einordnungshilfe (Popup + Warnungstext,
+     * siehe formatDurationToPublicLimit()/bfsOdlContext() unten). Werte/
+     * Quellen: natürliche ODL in Deutschland 0,05-0,2 µSv/h, Jahres-
+     * Grenzwert der Bevölkerung 1 mSv (beides odlinfo.bfs.de, Stand
+     * 04.09.2026) -- keine amtliche Verweildauer-Tabelle, eigene Berechnung
+     * zur Orientierung (Dietmars Wunsch 04.09.2026: "wie lange man sich bei
+     * welcher Dosis aufhalten darf").
+     */
+    private const BFS_ODL_REFERENZWERTE = [
+        ['rate' => 0.1, 'label' => 'typisches natürliches Untergrundniveau in Deutschland'],
+        ['rate' => 0.2, 'label' => 'obere natürliche Spanne in Deutschland'],
+        ['rate' => 0.3, 'label' => 'WarnHubs Standard-Schwellwert'],
+        ['rate' => 1.0, 'label' => ''],
+        ['rate' => 10.0, 'label' => ''],
+        ['rate' => 100.0, 'label' => ''],
+        ['rate' => 1000.0, 'label' => 'entspricht 1 mSv/h'],
+    ];
+
+    /**
+     * Rein rechnerische Zeitspanne bis zum Jahres-Grenzwert der Bevölkerung
+     * (1 mSv, ein Vorsorge-Grenzwert -- laut BfS ausdrücklich KEINE
+     * Gefahrenschwelle) bei durchgehendem Aufenthalt exakt an dieser Stelle.
+     * Reine Orientierungsrechnung (1000 µSv / Dosisleistung), keine amtliche
+     * Angabe -- wird deshalb überall mit "rechnerisch" formuliert.
+     */
+    private function formatDurationToPublicLimit(float $doseRateUSvH): string
+    {
+        if ($doseRateUSvH <= 0) {
+            return '';
+        }
+        $hours = 1000.0 / $doseRateUSvH;
+        if ($hours >= 24) {
+            return sprintf('%s Tagen', number_format(round($hours / 24), 0, ',', '.'));
+        }
+        return sprintf('%s Stunden', number_format($hours, 1, ',', '.'));
+    }
+
+    /** Kurzer, wertabhängiger Einordnungssatz für den Meldungstext einer BfS-ODL-Warnung -- siehe fetchBfsOdl(). */
+    private function bfsOdlContext(float $doseRateUSvH): string
+    {
+        if ($doseRateUSvH <= 0) {
+            return '';
+        }
+        return sprintf(
+            'Rein rechnerisch (bei durchgehendem Aufenthalt an dieser Stelle) wäre der Jahres-Vorsorgewert für die Bevölkerung (1 mSv) nach %s erreicht -- das ist ein Vorsorge-, kein Gefahrenwert.',
+            $this->formatDurationToPublicLimit($doseRateUSvH)
+        );
+    }
+
+    /** Gestaffelte Einordnungstabelle Dosisleistung/Verweildauer als Popup-Inhalt (siehe Datenquellen-Panel). */
+    private function bfsOdlReferencePopupItems(): array
+    {
+        $items = [
+            ['type' => 'Label', 'caption' => 'Natürliche Ortsdosisleistung in Deutschland: ca. 0,05-0,2 µSv/h (Summe aus Boden- und Höhenstrahlung, ortsabhängig). Quelle: odlinfo.bfs.de.'],
+            ['type' => 'Label', 'caption' => 'Jahres-Grenzwert für die Bevölkerung: 1 Millisievert (mSv) zusätzlich zu natürlicher/medizinischer Strahlung -- laut BfS ausdrücklich ein Vorsorge-, kein Gefahrenwert: seine Überschreitung bedeutet ein statistisch erhöhtes Langzeitrisiko, keinen unmittelbaren Gesundheitsschaden.'],
+            ['type' => 'Label', 'caption' => 'Akute Strahlenschäden (Strahlenkrankheit) treten laut BfS erst ab etwa 500 mSv als EINZELDOSIS auf -- weit oberhalb dessen, was Umgebungs-Messstationen realistischerweise anzeigen.'],
+        ];
+        foreach (self::BFS_ODL_REFERENZWERTE as $ref) {
+            $caption = sprintf(
+                '%s µSv/h%s -- Jahres-Vorsorgewert (1 mSv) rechnerisch nach %s bei DURCHGEHENDEM Aufenthalt.',
+                number_format($ref['rate'], $ref['rate'] < 1 ? 1 : 0, ',', '.'),
+                $ref['label'] !== '' ? ' (' . $ref['label'] . ')' : '',
+                $this->formatDurationToPublicLimit($ref['rate'])
+            );
+            $items[] = ['type' => 'Label', 'caption' => $caption];
+        }
+        $items[] = ['type' => 'Label', 'caption' => 'Reine Orientierungsrechnung (eigene Berechnung, keine amtliche Verweildauer-Tabelle) -- in einer echten Lage zählt ausschließlich die Einschätzung der Behörden (BfS, NINA-Warn-App, Katastrophenschutz), nicht diese Tabelle.'];
+        return $items;
     }
 
     private function actionTypeOptions(): array
@@ -665,7 +744,7 @@ class WarnHub extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
             'caption' => '👋  Wozu dieses Modul?',
             'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen für Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei) und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt.'],
+                ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen -- Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei, Pegelstände, Radioaktivität) plus optional europaweite Wetterwarnungen -- und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt, auch mobile Standorte im Ausland.'],
                 ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront- und Kachel-Visualisierung-Geräten (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckPurposeIntro($id);'],
             ],
@@ -687,11 +766,13 @@ class WarnHub extends IPSModule
             'type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'expanded' => true,
             'caption' => '🆕  Neu in Version ' . self::NEWS_VERSION,
             'items' => [
-                ['type' => 'Label', 'caption' => 'Erste Version von WarnHub:'],
-                ['type' => 'Label', 'caption' => '• Warn- und Alarmmeldungen für Deutschland (NINA-Aggregation + optionale direkte DWD-Wetterwarnungen), geometrisch auf den eigenen Umkreis gefiltert'],
-                ['type' => 'Label', 'caption' => '• Beliebig viele Standorte, wahlweise aus Symcons eigenem Standort, Adress-/PLZ-Suche oder Karte übernommen'],
-                ['type' => 'Label', 'caption' => '• Automatische Push-Benachrichtigung an gefundene, aktivierte WebFront- UND Kachel-Visualisierung-Instanzen'],
-                ['type' => 'Label', 'caption' => '• Optionale Schutzaktionen (Raffstore/Rollladen, Garagentor, akustischer Alarm, eigenes Skript), inkl. automatischer Objektbaum-Suche nach passenden Geräten'],
+                ['type' => 'Label', 'caption' => 'Seit der Erstversion neu dazugekommen:'],
+                ['type' => 'Label', 'caption' => '• Zwei neue Datenquellen: Pegelstände (PEGELONLINE/WSV) und Radioaktivität (BfS Ortsdosisleistung, mit Einordnungshilfe "Was bedeutet dieser Wert?" -- Dosisleistung/Verweildauer bis zum Jahres-Vorsorgewert)'],
+                ['type' => 'Label', 'caption' => '• Meteoalarm als dritte Wetterquelle: europaweite Warnungen für 39 Länder, wichtig für mobile Standorte im Ausland'],
+                ['type' => 'Label', 'caption' => '• Mobiler Standort: statt fester Koordinaten an zwei Live-Variablen bindbar (z. B. Tessie/Geofency) -- WarnHub liest bei jeder Prüfung die aktuelle Position'],
+                ['type' => 'Label', 'caption' => '• "Push nur an"-Filter je Standort -- bei mehreren Personen/Fahrzeugen bekommt nicht mehr automatisch jeder die Warnung der anderen Person'],
+                ['type' => 'Label', 'caption' => '• Neue Schutzaktionen: Fenster schließen sowie Kofferraum/Heckklappe schließen (Letzteres mit zwingender Sicherheitsprüfung gegen ein versehentliches Öffnen), beide auch über die automatische Objektbaum-Suche auffindbar'],
+                ['type' => 'Label', 'caption' => '• Schutzaktionen ohne eigenen Standort-Filter feuern jetzt automatisch nur noch von festen, nicht von mobilen Standorten aus (Sicherheitssperre)'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -745,7 +826,7 @@ class WarnHub extends IPSModule
     //  Standorte / Geocoding
     // ----------------------------------------------------------------
 
-    /** @return array<int,array{Name:string,Ort:string,Lat:float,Lon:float,RadiusKm:float,MinSeverity:int,Aktiv:bool}> */
+    /** @return array<int,array{Name:string,Ort:string,Lat:float,Lon:float,QuellVarLat:int,QuellVarLon:int,RadiusKm:float,MinSeverity:int,PushZielFilter:string,Aktiv:bool}> */
     private function decodeStandorte(): array
     {
         $raw = json_decode($this->ReadPropertyString('Standorte'), true);
@@ -1672,12 +1753,13 @@ class WarnHub extends IPSModule
                 'msgType' => 'Alert',
                 'event' => 'Erhöhte Radioaktivität',
                 'headline' => sprintf('Erhöhte Ortsdosisleistung: %s', $name),
-                'description' => sprintf(
-                    '%s µSv/h an Messstelle %s (eigener Schwellwert %s µSv/h -- keine amtliche Alarmstufe, die Rohdaten kennen keine offizielle Meldeschwelle).',
+                'description' => trim(sprintf(
+                    '%s µSv/h an Messstelle %s (eigener Schwellwert %s µSv/h -- keine amtliche Alarmstufe, die Rohdaten kennen keine offizielle Meldeschwelle). %s',
                     number_format($value, 3, ',', '.'),
                     $name,
-                    number_format($threshold, 3, ',', '.')
-                ),
+                    number_format($threshold, 3, ',', '.'),
+                    $this->bfsOdlContext($value)
+                )),
                 'instruction' => '',
                 'severity' => 'Severe',
                 'effective' => $props['end_measure'] ?? null,
