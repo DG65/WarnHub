@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-beta.3 (2026-09-04)
+
+- Fix: Konfigurationsformular ließ sich nach dem letzten Update nicht mehr öffnen
+  (Kartenfeld-Vorbelegung falsch kodiert).
+- Push-Ziele-Suche erkennt jetzt zusätzlich zu klassischen WebFront-Instanzen auch
+  **Kachel-Visualisierung**-Instanzen (Symcons neuere, kachelbasierte Oberfläche unter
+  "Visualisierung Instanzen") und pusht über die dafür richtige Funktion
+  (`VISU_PostNotification` statt `WFC_PushNotification`) -- Live-Fund: viele Installationen
+  nutzen ausschließlich Kacheln, keine klassischen WebFront-Instanzen.
+- Standorte-/WebFronts-/Schutzaktionen-Listen passen ihre sichtbare Höhe jetzt an die
+  tatsächliche Anzahl an Einträgen an.
+
 ## 0.1.0-beta.2 (2026-09-04)
 
 - Formular-Reihenfolge korrigiert: "Wozu dieses Modul?" → "Neu in Version X.Y" →

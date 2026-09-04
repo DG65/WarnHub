@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.2';
-    private const NEWS_VERSION = '0.1.0-beta.2';
+    private const DOC_VERSION = '0.1.0-beta.3';
+    private const NEWS_VERSION = '0.1.0-beta.3';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -139,6 +139,14 @@ class WarnHub extends IPSModule
 
     private const SEVERITY_RANK = ['Unknown' => 0, 'Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
     private const SEVERITY_ICON = ['Unknown' => 'ℹ️', 'Minor' => 'ℹ️', 'Moderate' => '⚠️', 'Severe' => '🚨', 'Extreme' => '🆘'];
+
+    // Kachel-Visualisierung -- Symcons zweite, neuere Push-fähige Oberfläche
+    // NEBEN dem klassischen WebFront-Konfigurator. GUID gegen den offiziellen
+    // Quellcode des Symcon-Kernmoduls "Benachrichtigung" verifiziert
+    // (github.com/symcon/Benachrichtigung, Notification/module.php) -- dort
+    // dispatcht dieselbe Stelle, die WFC_PushNotification für WHUB_WEBFRONT_GUID
+    // aufruft, für DIESE GUID stattdessen an VISU_PostNotification().
+    private const KACHEL_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
 
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
     // (Deutsch, DWD/MoWaS-Vokabular -- siehe reale Beispiele in .tools/test-geo.php).
@@ -225,7 +233,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de) und optional die direkten DWD-Wetterwarnungen (opendata.dwd.de).'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei WebFronts/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -294,7 +302,7 @@ class WarnHub extends IPSModule
             'caption' => '🔔  Benachrichtigung',
             'expanded' => true,
             'items' => [
-                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte WebFront-Instanzen (auch Handy)'],
+                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte WebFront-/Kachel-Visualisierung-Instanzen (auch Handy)'],
                 ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton', 'options' => $this->soundOptions()],
                 [
                     'type' => 'Button',
@@ -302,7 +310,7 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
                 ],
                 ['type' => 'Label', 'caption' => $this->webfrontStatusLine()],
-                ['type' => 'Label', 'caption' => 'Gefundene WebFront-Instanzen sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Instanzen hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
+                ['type' => 'Label', 'caption' => 'Sucht sowohl klassische WebFront-Instanzen als auch Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
                 [
                     'type' => 'List',
                     'name' => 'WebFronts',
@@ -310,7 +318,8 @@ class WarnHub extends IPSModule
                     'add' => false,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '260px'],
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '220px'],
+                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '140px', 'edit' => ['type' => 'Select', 'options' => [['caption' => 'WebFront', 'value' => 'webfront'], ['caption' => 'Kachel-Visualisierung', 'value' => 'kachel']]]],
                         ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px'],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '80px', 'edit' => ['type' => 'CheckBox']],
                     ],
@@ -439,51 +448,61 @@ class WarnHub extends IPSModule
     }
 
     /**
-     * Löst die WebFront-Modul-GUID zur LAUFZEIT über den Modulnamen auf, statt
-     * sich allein auf eine hart hinterlegte GUID zu verlassen. Hintergrund
-     * (Praxis-Fund 04.09.2026): die aus dem offiziellen Symcon-Kernmodul
-     * "Benachrichtigung" entnommene GUID {3565B1F2-...} lieferte auf einer
-     * echten Installation trotz vorhandener, aktiv genutzter WebFront-Instanz
-     * null Treffer -- Ursache nicht abschließend geklärt (evtl. Versions-
-     * unterschied), aber die Namenssuche ist robuster als jede feste GUID und
-     * bleibt auch bei einer künftigen Symcon-Änderung korrekt.
+     * Findet alle Instanzen eines per Namens-Teilstring gesuchten Modultyps --
+     * robuster als eine fest hinterlegte GUID (siehe unten). $exactGuid wird
+     * zuerst versucht (schnell, keine volle Modulliste nötig), die
+     * Namenssuche greift nur als Rückfallebene.
+     *
+     * @return array<int,string> InstanceID => Modulname
      */
-    private function resolveWebFrontModuleGuid(): ?string
+    private function findInstancesByModuleNameSubstring(string $exactGuid, string $needle): array
     {
-        $allModules = @IPS_GetModuleList() ?: [];
-        $sampleNames = [];
-        foreach ($allModules as $moduleID) {
+        $out = [];
+        foreach (@IPS_GetInstanceListByModuleID($exactGuid) ?: [] as $instanceID) {
+            $out[$instanceID] = $needle;
+        }
+        if (count($out) > 0) {
+            return $out;
+        }
+        foreach (@IPS_GetModuleList() ?: [] as $moduleID) {
             $m = @IPS_GetModule($moduleID);
             $name = is_array($m) ? (string) ($m['ModuleName'] ?? '') : '';
-            if ($name !== '' && count($sampleNames) < 200) {
-                $sampleNames[] = $name;
+            if ($name === '' || stripos($name, $needle) === false) {
+                continue;
             }
-            // Substring statt exaktem Vergleich -- manche Symcon-Stände/Sprachen
-            // könnten den Namen leicht abweichend führen (z. B. Zusatzwort).
-            if ($name !== '' && stripos($name, 'webfront') !== false) {
-                return $moduleID;
+            foreach (@IPS_GetInstanceListByModuleID($moduleID) ?: [] as $instanceID) {
+                $out[$instanceID] = $name;
             }
         }
-        // Fallback auf die verifizierte, aber ggf. versionsabhängige GUID.
-        if (count(@IPS_GetInstanceListByModuleID(WHUB_WEBFRONT_GUID) ?: []) > 0) {
-            return WHUB_WEBFRONT_GUID;
-        }
-        // Nichts gefunden -- Diagnose dauerhaft loggen (nicht nur SendDebug,
-        // das Debug-Fenster ist meist nicht offen, wenn's auffällt), damit
-        // sich die tatsächliche Modulliste dieser Installation nachvollziehen
-        // lässt, statt im Dunkeln zu raten.
-        IPS_LogMessage(
-            'WarnHub #' . $this->InstanceID,
-            sprintf(
-                'resolveWebFrontModuleGuid: kein Modul mit "webfront" im Namen unter %d installierten Modulen gefunden. Beispiele: %s',
-                count($allModules),
-                implode(', ', array_slice($sampleNames, 0, 30))
-            )
-        );
-        return null;
+        return $out;
     }
 
-    /** @return array<int,array{InstanceID:int,Name:string,Aktiv:bool}> */
+    /**
+     * Push-Ziele: sowohl klassische WebFront-Konfigurator-Instanzen
+     * (WFC_PushNotification) als auch Kachel-Visualisierung-Instanzen
+     * (VISU_PostNotification) -- Praxis-Fund 04.09.2026: Dietmars einzige
+     * genutzte Oberfläche ist eine Kachel-Visualisierung ("Dietmar", unter
+     * "Visualisierung Instanzen"), kein klassisches WebFront -- beide
+     * Symcon-Oberflächen bieten eigene, INKOMPATIBLE Push-Funktionen (gegen
+     * den offiziellen Quellcode des Symcon-Kernmoduls "Benachrichtigung"
+     * verifiziert, siehe WHUB_WEBFRONT_GUID-Kommentar oben), deshalb werden
+     * beide Typen gesucht und je nach Typ die passende Funktion aufgerufen.
+     *
+     * @return array<int,array{InstanceID:int,Name:string,Typ:string}>
+     */
+    private function discoverPushTargets(): array
+    {
+        $out = [];
+        foreach ($this->findInstancesByModuleNameSubstring(WHUB_WEBFRONT_GUID, 'webfront') as $instanceID => $moduleName) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'webfront'];
+        }
+        foreach ($this->findInstancesByModuleNameSubstring(self::KACHEL_VISU_GUID, 'kachel') as $instanceID => $moduleName) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'kachel'];
+        }
+        return $out;
+    }
+
+    /** @return array<int,array{InstanceID:int,Name:string,Typ:string,Aktiv:bool}> */
     private function decodeWebFronts(): array
     {
         $raw = json_decode($this->ReadPropertyString('WebFronts'), true);
@@ -495,6 +514,7 @@ class WarnHub extends IPSModule
             $out[] = [
                 'InstanceID' => (int) ($w['InstanceID'] ?? 0),
                 'Name' => (string) ($w['Name'] ?? ''),
+                'Typ' => (string) ($w['Typ'] ?? 'webfront'),
                 'Aktiv' => (bool) ($w['Aktiv'] ?? true),
             ];
         }
@@ -502,38 +522,34 @@ class WarnHub extends IPSModule
     }
 
     /**
-     * Sucht WebFront-Instanzen und ergänzt NUR neu gefundene (per
-     * InstanceID abgeglichen) -- bestehende Zeilen samt eigener
-     * Aktiv/Inaktiv-Entscheidung bleiben unangetastet. Schreibt wie
+     * Sucht Push-Ziele (WebFront + Kachel-Visualisierung) und ergänzt NUR neu
+     * gefundene (per InstanceID abgeglichen) -- bestehende Zeilen samt
+     * eigener Aktiv/Inaktiv-Entscheidung bleiben unangetastet. Schreibt wie
      * AddStandortFromSystemLocation() nur in die offene Formularmaske,
      * "Übernehmen" bleibt der bewusste letzte Schritt.
      */
     public function DiscoverWebFronts(): string
     {
-        $guid = $this->resolveWebFrontModuleGuid();
-        if ($guid === null) {
-            return '⚠️ Keine WebFront-Instanz im Objektbaum gefunden.';
-        }
-        $found = @IPS_GetInstanceListByModuleID($guid) ?: [];
+        $foundTargets = $this->discoverPushTargets();
         $rows = $this->decodeWebFronts();
         $known = array_column($rows, null, 'InstanceID');
         $added = 0;
-        foreach ($found as $instanceID) {
-            if (isset($known[$instanceID])) {
+        foreach ($foundTargets as $target) {
+            if (isset($known[$target['InstanceID']])) {
                 continue;
             }
-            $rows[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Aktiv' => true];
+            $rows[] = ['InstanceID' => $target['InstanceID'], 'Name' => $target['Name'], 'Typ' => $target['Typ'], 'Aktiv' => true];
             $added++;
         }
         $this->UpdateFormField('WebFronts', 'values', json_encode($rows));
         $this->UpdateFormField('WebFronts', 'rowCount', $this->listRowCount(count($rows), 3));
         if ($added === 0 && count($rows) > 0) {
-            return sprintf('ℹ️ Keine neuen WebFront-Instanzen gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
+            return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
         if ($added === 0) {
-            return '⚠️ Keine WebFront-Instanz im Objektbaum gefunden.';
+            return '⚠️ Weder WebFront- noch Kachel-Visualisierung-Instanzen im Objektbaum gefunden.';
         }
-        return sprintf('✅ %d neue WebFront-Instanz(en) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
+        return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
     }
 
     private function webfrontStatusLine(): string
@@ -541,12 +557,12 @@ class WarnHub extends IPSModule
         $rows = $this->decodeWebFronts();
         $active = count(array_filter($rows, fn ($w) => $w['Aktiv']));
         if (count($rows) === 0) {
-            return 'ℹ️ Noch keine WebFront-Instanz gesucht -- oben "🔎 WebFront-Instanzen suchen" klicken.';
+            return 'ℹ️ Noch keine Push-Ziele gesucht -- oben "🔎 WebFront-Instanzen suchen" klicken.';
         }
         if ($active === 0) {
-            return sprintf('⚠️ %d WebFront-Instanz(en) gefunden, aber keine aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.', count($rows));
+            return sprintf('⚠️ %d Push-Ziel(e) gefunden, aber keines aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.', count($rows));
         }
-        return sprintf('✅ %d von %d gefundenen WebFront-Instanz(en) aktiv -- Push-Benachrichtigungen gehen dorthin.', $active, count($rows));
+        return sprintf('✅ %d von %d gefundenen Push-Ziel(en) aktiv -- Push-Benachrichtigungen gehen dorthin.', $active, count($rows));
     }
 
     private function getPollStatusLine(): string
@@ -582,7 +598,7 @@ class WarnHub extends IPSModule
             'caption' => '👋  Wozu dieses Modul?',
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen für Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei) und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt.'],
-                ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront-Geräten (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
+                ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront- und Kachel-Visualisierung-Geräten (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckPurposeIntro($id);'],
             ],
         ];
@@ -606,7 +622,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Erste Version von WarnHub:'],
                 ['type' => 'Label', 'caption' => '• Warn- und Alarmmeldungen für Deutschland (NINA-Aggregation + optionale direkte DWD-Wetterwarnungen), geometrisch auf den eigenen Umkreis gefiltert'],
                 ['type' => 'Label', 'caption' => '• Beliebig viele Standorte, wahlweise aus Symcons eigenem Standort, Adress-/PLZ-Suche oder Karte übernommen'],
-                ['type' => 'Label', 'caption' => '• Automatische Push-Benachrichtigung an gefundene, aktivierte WebFront-Instanzen'],
+                ['type' => 'Label', 'caption' => '• Automatische Push-Benachrichtigung an gefundene, aktivierte WebFront- UND Kachel-Visualisierung-Instanzen'],
                 ['type' => 'Label', 'caption' => '• Optionale Schutzaktionen (Raffstore/Rollladen, Garagentor, akustischer Alarm, eigenes Skript), inkl. automatischer Objektbaum-Suche nach passenden Geräten'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
@@ -1511,23 +1527,31 @@ class WarnHub extends IPSModule
         return mb_substr($text, 0, 256);
     }
 
-    /** Pusht an alle in der (nutzerbearbeitbaren) WebFronts-Liste aktivierten Instanzen -- siehe DiscoverWebFronts(). */
+    /** Pusht an alle aktivierten Ziele -- je nach Typ per WFC_PushNotification (WebFront) oder VISU_PostNotification (Kachel-Visualisierung), siehe discoverPushTargets(). */
     private function pushToAllWebfronts(string $title, string $text, string $sound): int
     {
-        if (!function_exists('WFC_PushNotification')) {
-            $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
-            return 0;
-        }
         $sent = 0;
         foreach ($this->decodeWebFronts() as $w) {
             if (!$w['Aktiv']) {
                 continue;
             }
-            $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, 0);
+            if ($w['Typ'] === 'kachel') {
+                if (!function_exists('VISU_PostNotification')) {
+                    $this->LogError('pushToAllWebfronts', 'VISU_PostNotification ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
+                    continue;
+                }
+                $ok = @VISU_PostNotification($w['InstanceID'], $title, $text, $sound, 0);
+            } else {
+                if (!function_exists('WFC_PushNotification')) {
+                    $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
+                    continue;
+                }
+                $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, 0);
+            }
             if ($ok) {
                 $sent++;
             } else {
-                $this->LogError('pushToAllWebfronts', 'Push an WebFront-Instanz ' . $w['InstanceID'] . ' fehlgeschlagen.');
+                $this->LogError('pushToAllWebfronts', 'Push an Instanz ' . $w['InstanceID'] . ' (' . $w['Typ'] . ') fehlgeschlagen.');
             }
         }
         return $sent;

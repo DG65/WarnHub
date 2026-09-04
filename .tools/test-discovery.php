@@ -9,7 +9,14 @@
  */
 
 const WEBFRONT_GUID = '{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}';
+const KACHEL_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
 const OTHER_MODULE_GUID = '{00000000-0000-0000-0000-000000000000}';
+// Frei erfundene GUID, unter der die Kachel-Visualisierung in DIESEM Test
+// tatsächlich registriert ist -- bewusst NICHT identisch mit
+// KACHEL_VISU_GUID, um exakt Dietmars Live-Fund nachzustellen: die
+// exakte GUID liefert null Treffer, erst die Namenssuche ("kachel" im
+// Modulnamen) findet die echte Instanz.
+const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
 
 // Kleiner Fake-Objektbaum:
 //   0 (Root)
@@ -18,10 +25,11 @@ const OTHER_MODULE_GUID = '{00000000-0000-0000-0000-000000000000}';
 //    |   +- 12 Instanz "Sirene Außen" -> 121 Var "Ein/Aus" (aktionsfähig)
 //    |   +- 13 Instanz "Garagentor" -> 131 Var "Status" (NICHT aktionsfähig), 132 Var "Steuerung" (aktionsfähig)
 //    |   +- 14 Instanz "Wetterstation" (kein Treffer)
-//    +- 20 Instanz "WebFront Familie" (Modul WebFront)
-//    +- 21 Instanz "WebFront Gast" (Modul WebFront)
+//    +- 20 Instanz "WebFront Familie" (Modul WebFront, exakte GUID liefert Treffer)
+//    +- 21 Instanz "WebFront Gast" (Modul WebFront, exakte GUID liefert Treffer)
+//    +- 22 Instanz "Dietmar" (Kachel-Visualisierung, NUR über Namenssuche auffindbar)
 $GLOBALS['whub_test_tree'] = [
-    0 => [10, 20, 21],
+    0 => [10, 20, 21, 22],
     10 => [11, 12, 13, 14],
     11 => [111],
     12 => [121],
@@ -29,6 +37,7 @@ $GLOBALS['whub_test_tree'] = [
     14 => [],
     20 => [],
     21 => [],
+    22 => [],
 ];
 $GLOBALS['whub_test_objects'] = [
     10 => ['ObjectType' => 0, 'ObjectName' => 'Geräte'],
@@ -38,6 +47,7 @@ $GLOBALS['whub_test_objects'] = [
     14 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation'],
     20 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Familie'],
     21 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Gast'],
+    22 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar'],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Position'],
     121 => ['ObjectType' => 2, 'ObjectName' => 'Ein/Aus'],
     131 => ['ObjectType' => 2, 'ObjectName' => 'Status'],
@@ -51,6 +61,13 @@ $GLOBALS['whub_test_variables'] = [
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     WEBFRONT_GUID => [20, 21],
+    KACHEL_VISU_GUID => [], // exakte GUID liefert bewusst NICHTS -- Namenssuche muss greifen
+    KACHEL_VISU_GUID_ACTUAL => [22],
+];
+$GLOBALS['whub_test_moduleNames'] = [
+    WEBFRONT_GUID => 'WebFront',
+    KACHEL_VISU_GUID_ACTUAL => 'Kachel Visualisierung',
+    OTHER_MODULE_GUID => 'Irgendwas',
 ];
 
 function IPS_GetChildrenIDs(int $id): array
@@ -75,11 +92,11 @@ function IPS_GetInstanceListByModuleID(string $guid): array
 }
 function IPS_GetModuleList(): array
 {
-    return [WEBFRONT_GUID, OTHER_MODULE_GUID];
+    return array_keys($GLOBALS['whub_test_moduleNames']);
 }
 function IPS_GetModule(string $guid): array
 {
-    return ['ModuleName' => $guid === WEBFRONT_GUID ? 'WebFront' : 'Irgendwas'];
+    return ['ModuleName' => $GLOBALS['whub_test_moduleNames'][$guid] ?? 'Irgendwas'];
 }
 
 class IPSModule
@@ -202,14 +219,17 @@ function check(string $label, bool $ok): void
 $hub = new WarnHub();
 $hub->Create();
 
-echo "== WebFront-Discovery ==\n";
+echo "== WebFront-/Kachel-Visualisierung-Discovery ==\n";
 $msg = $hub->DiscoverWebFronts();
-check('meldet 2 neue Instanzen', str_contains($msg, '2 neue'));
+check('meldet 3 neue Ziele (2× WebFront exakte GUID + 1× Kachel-Visu nur über Namenssuche)', str_contains($msg, '3 neue'));
 [$field, $key, $valuesJson] = $hub->lastValuesUpdate('WebFronts');
 check('schreibt in das Feld "WebFronts"', $field === 'WebFronts');
 $rows = json_decode($valuesJson, true);
-check('2 Zeilen gefunden', count($rows) === 2);
-check('beide standardmäßig aktiv', $rows[0]['Aktiv'] === true && $rows[1]['Aktiv'] === true);
+check('3 Zeilen gefunden', count($rows) === 3);
+check('alle drei standardmäßig aktiv', $rows[0]['Aktiv'] === true && $rows[1]['Aktiv'] === true && $rows[2]['Aktiv'] === true);
+$byId = array_column($rows, null, 'InstanceID');
+check('Instanz 20/21 als Typ "webfront" erkannt (exakte GUID)', ($byId[20]['Typ'] ?? null) === 'webfront' && ($byId[21]['Typ'] ?? null) === 'webfront');
+check('Instanz 22 ("Dietmar") als Typ "kachel" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer)', ($byId[22]['Typ'] ?? null) === 'kachel');
 
 // Nutzer deaktiviert "WebFront Gast" (id 21) und speichert (Property).
 foreach ($rows as &$r) {
