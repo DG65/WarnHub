@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.12';
-    private const NEWS_VERSION = '0.1.0-beta.12';
+    private const DOC_VERSION = '0.1.0-beta.13';
+    private const NEWS_VERSION = '0.1.0-beta.13';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -135,6 +135,14 @@ class WarnHub extends IPSModule
         'raffstore' => ['raffstore', 'jalousie'],
         'markise' => ['markise', 'sonnenschutz'],
         'garage' => ['garage', 'garagentor'],
+        // "fenster schließen", nicht nur "fenster" -- sonst würden auch
+        // reine Fenster-OFFEN-Sensoren (keine Aktion, ohnehin durch
+        // isActionableVariable() ausgefiltert, aber ambig benannt) sowie
+        // fremde Geräte mit "Fenster" im Namen mit anfassen. Trifft exakt
+        // Tessies eigene Standard-Variable "Fenster schließen"
+        // (act_close_windows, sendet Teslas gerichteten close_windows-Befehl
+        // -- sicher blind auslösbar, kein Umschalt-Risiko).
+        'fenster' => ['fenster schließen', 'close_windows'],
         'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn'],
     ];
 
@@ -276,7 +284,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
                 ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie oder einer Geofency-Bridge -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Sirene" im Namen). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Sirene" im Namen -- Letzteres passt insbesondere zu Tessies eigener Tesla-Aktion). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -382,10 +390,10 @@ class WarnHub extends IPSModule
 
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Sirenen, Skripte)',
+            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Sirenen, Skripte)',
             'expanded' => false,
             'items' => [
-                ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
+                ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, Autofenster schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
                 [
                     'type' => 'PopupButton',
                     'caption' => 'Welche Felder brauche ich für welchen Aktionstyp?',
@@ -393,16 +401,17 @@ class WarnHub extends IPSModule
                         'caption' => 'Felder je Aktionstyp',
                         'items' => [
                             ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-/Markisen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren/eingefahren, bitte am eigenen Aktor prüfen).'],
+                            ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern). WICHTIG: Die Heckklappe/der Kofferraum lässt sich NICHT automatisiert sichern -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Dafür müsste zuerst der aktuelle Öffnungszustand bekannt sein.'],
                             ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
                             ['type' => 'Label', 'caption' => 'Skript ausführen: Ziel-Skript statt Ziel-Variable/Zielwert.'],
-                            ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise bereits Sturm + Hagel an.'],
+                            ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise Sturm + Hagel an, bei Fenster schließen zusätzlich Starkregen.'],
                             ['type' => 'Label', 'caption' => 'Leeres "Nur Standort" bedeutet "alle FESTEN Standorte", NICHT auch mobile (Live-Standort-gebundene, siehe Standorte-Panel) -- sonst würde z. B. ein Sturm über Hamburg, den nur der mobile Standort meldet, die zuhause verbaute Jalousie einfahren. Das gilt automatisch für jede Aktion, keine Einrichtung nötig.'],
                         ],
                     ],
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Sirene durchsuchen',
+                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster schließen/Sirene durchsuchen',
                     'onClick' => 'echo WHUB_DiscoverSchutzaktionen($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
@@ -484,6 +493,7 @@ class WarnHub extends IPSModule
             ['caption' => 'Raffstore/Rollladen hochfahren', 'value' => 'raffstore'],
             ['caption' => 'Markise einfahren', 'value' => 'markise'],
             ['caption' => 'Garagentor schließen', 'value' => 'garage'],
+            ['caption' => 'Fenster schließen (z. B. Tesla)', 'value' => 'fenster'],
             ['caption' => 'Akustischer Alarm', 'value' => 'sirene'],
             ['caption' => 'Skript ausführen', 'value' => 'skript'],
         ];
@@ -880,8 +890,9 @@ class WarnHub extends IPSModule
 
     /**
      * Durchsucht den GESAMTEN Objektbaum nach Instanzen/Variablen, deren Name
-     * "Raffstore"/"Jalousie" (Typ raffstore), "Garage" (Typ garage) oder
-     * "Sirene"/"Hupe"/"Buzzer"/"Signalhorn" (Typ sirene) enthält, und ergänzt
+     * "Raffstore"/"Jalousie" (Typ raffstore), "Garage" (Typ garage),
+     * "Fenster schließen" (Typ fenster, z. B. Tessies eigene Tesla-Aktion)
+     * oder "Sirene"/"Hupe"/"Buzzer"/"Signalhorn" (Typ sirene) enthält, und ergänzt
      * für jeden NEUEN Treffer (nach Ziel-Variable dedupliziert) eine
      * VORAKTIVIERTE Schutzaktions-Zeile -- explizit auf Dietmars Wunsch
      * (04.09.2026): "gleich mitaufnehmen und aktivieren, deaktivieren geht
@@ -910,6 +921,10 @@ class WarnHub extends IPSModule
             'raffstore' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 3, 'AutoOff' => 0],
             'markise' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 3, 'AutoOff' => 0],
             'garage' => ['Kategorien' => [], 'MinSeverity' => 3, 'AutoOff' => 0], // leer = jede Kategorie
+            // Auch Starkregen -- ein offenes Fenster lässt bei Dauerregen genauso
+            // Wasser rein wie bei Sturm/Hagel (anders als Raffstore/Markise, die
+            // primär gegen Wind-/Hagelschaden schützen).
+            'fenster' => ['Kategorien' => ['sturm', 'hagel', 'starkregen'], 'MinSeverity' => 3, 'AutoOff' => 0],
             'sirene' => ['Kategorien' => [], 'MinSeverity' => 4, 'AutoOff' => 60],
         ];
 
@@ -987,7 +1002,7 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Schutzaktionen', 'values', json_encode($rows));
         $this->UpdateFormField('Schutzaktionen', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Markise/Garage/Sirene im Objektbaum gefunden.';
+            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Markise/Garage/Fenster schließen/Sirene im Objektbaum gefunden.';
         }
         return sprintf(
             '✅ %d neue Schutzaktion(en) gefunden und aktiviert (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken.',
@@ -2138,6 +2153,22 @@ class WarnHub extends IPSModule
                 }
                 if ($action['AutoOffSekunden'] > 0) {
                     $this->scheduleSirenOff($action['ZielVariableID'], time() + $action['AutoOffSekunden']);
+                }
+                return;
+            }
+
+            // Fenster schließen: immer "Ein" schalten, wie bei Sirene -- KEIN
+            // Zielwert nötig. Anders als bei Sirene aber KEIN Auto-Aus: ein
+            // automatisches "Fenster wieder öffnen" nach der Warnung wäre
+            // fachlich falsch und sicherheitsrelevant unerwünscht. Bewusst
+            // NICHT für die Heckklappe/den Kofferraum nutzbar -- Teslas
+            // Kofferraum-Befehl ist ein reiner Umschalter (kein "schließen",
+            // nur "auslösen"), ein Aufruf bei bereits geschlossener Klappe
+            // würde sie ÖFFNEN. Siehe Popup-Hilfe im Formular.
+            if ($action['Typ'] === 'fenster') {
+                $ok = @RequestAction($action['ZielVariableID'], true);
+                if (!$ok) {
+                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Fenster schließen): RequestAction fehlgeschlagen.');
                 }
                 return;
             }

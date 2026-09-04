@@ -180,5 +180,16 @@ check('Standorte: Live-Standort-Spalte "QuellVarLon" vorhanden', findByName($dec
 check('Standorte: "Push nur an"-Filterspalte "PushZielFilter" vorhanden (mehrere Personen/WebFronts)', findByName($decoded['elements'], 'PushZielFilter') !== null);
 check('"QuelleMeteoalarm"-Checkbox vorhanden (europaweite Wetterwarnungen)', findByName($decoded['elements'], 'QuelleMeteoalarm') !== null);
 
+$schutzaktionenListe = findByName($decoded['elements'], 'Schutzaktionen');
+$typSpalte = null;
+foreach ($schutzaktionenListe['columns'] ?? [] as $col) {
+    if (($col['name'] ?? null) === 'Typ') {
+        $typSpalte = $col;
+        break;
+    }
+}
+$typOptions = array_column($typSpalte['edit']['options'] ?? [], 'value');
+check('Schutzaktionstyp "fenster" (Fenster schließen, z. B. Tesla) steht zur Auswahl', in_array('fenster', $typOptions, true));
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

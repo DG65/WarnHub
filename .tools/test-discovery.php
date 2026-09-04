@@ -34,8 +34,13 @@ const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
 //    +- 20 Instanz "WebFront Familie" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 21 Instanz "WebFront Gast" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 22 Instanz "Dietmar" (Kachel-Visualisierung, NUR über Namenssuche auffindbar)
+//    +- 23 Instanz "Blitz" (Auto, wie Tessies TessieVehicle)
+//        +- 231 Var "Fenster schließen" (aktionsfähig -- Treffer, Typ fenster)
+//        +- 232 Var "Fenster" (aktionsfähig, ABER ohne "schließen" -- KEIN
+//              Treffer, belegt die Stichwort-Spezifität: sonst würden auch
+//              reine Fenster-offen-SENSOREN mit anfassen, siehe DISCOVERY_KEYWORDS)
 $GLOBALS['whub_test_tree'] = [
-    0 => [10, 20, 21, 22],
+    0 => [10, 20, 21, 22, 23],
     10 => [11, 12, 13, 14, 15, 16, 17, 18],
     11 => [111],
     12 => [121],
@@ -49,6 +54,7 @@ $GLOBALS['whub_test_tree'] = [
     20 => [],
     21 => [],
     22 => [],
+    23 => [231, 232],
 ];
 $GLOBALS['whub_test_objects'] = [
     10 => ['ObjectType' => 0, 'ObjectName' => 'Geräte'],
@@ -64,6 +70,7 @@ $GLOBALS['whub_test_objects'] = [
     20 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Familie'],
     21 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Gast'],
     22 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar'],
+    23 => ['ObjectType' => 1, 'ObjectName' => 'Blitz'],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Position'],
     121 => ['ObjectType' => 2, 'ObjectName' => 'Ein/Aus'],
     131 => ['ObjectType' => 2, 'ObjectName' => 'Status'],
@@ -72,6 +79,8 @@ $GLOBALS['whub_test_objects'] = [
     161 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
     171 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
     181 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
+    231 => ['ObjectType' => 2, 'ObjectName' => 'Fenster schließen'],
+    232 => ['ObjectType' => 2, 'ObjectName' => 'Fenster'],
 ];
 $GLOBALS['whub_test_variables'] = [
     111 => ['VariableAction' => 1],
@@ -82,6 +91,8 @@ $GLOBALS['whub_test_variables'] = [
     161 => ['VariableAction' => 1],
     171 => ['VariableAction' => 1],
     181 => ['VariableAction' => 1],
+    231 => ['VariableAction' => 1],
+    232 => ['VariableAction' => 1],
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     WEBFRONT_GUID => [20, 21],
@@ -299,11 +310,11 @@ echo "== Schutzaktionen-Discovery ==\n";
 $hub2 = new WarnHub();
 $hub2->Create();
 $msg3 = $hub2->DiscoverSchutzaktionen();
-check('meldet 7 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe)', str_contains($msg3, '7 neue'));
+check('meldet 8 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe + Fenster schließen)', str_contains($msg3, '8 neue'));
 [$field3, , $valuesJson3] = $hub2->lastValuesUpdate('Schutzaktionen');
 check('schreibt in das Feld "Schutzaktionen"', $field3 === 'Schutzaktionen');
 $actions = json_decode($valuesJson3, true);
-check('genau 7 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig)', count($actions) === 7);
+check('genau 8 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig, "Fenster" ohne "schließen" kein Treffer)', count($actions) === 8);
 check('Auto-Hupen sind über den Fahrzeugnamen unterscheidbar statt alle nur "Hupe" zu heißen (Dietmars Live-Fund)', in_array('Schneeflocke – Hupe', array_column($actions, 'Name'), true) && in_array('Kohlekasten – Hupe', array_column($actions, 'Name'), true) && !in_array('Hupe', array_column($actions, 'Name'), true));
 check('Zwei Ebenen tief (Trabbi > Steuerung > Hupe) findet trotzdem die ECHTE Instanz "Trabbi", nicht die Zwischenkategorie "Steuerung" (Dietmars Nachfrage 04.09.2026)', in_array('Trabbi – Hupe', array_column($actions, 'Name'), true) && !in_array('Steuerung – Hupe', array_column($actions, 'Name'), true));
 
@@ -315,7 +326,9 @@ check('Raffstore Wohnzimmer -> EINE Zeile, Sturm UND Hagel beide angekreuzt, Zie
 check('Markise Terrasse -> ebenso Sturm UND Hagel angekreuzt, Ziel-Variable 151', ($byName['Markise Terrasse']['Typ'] ?? null) === 'markise' && ($byName['Markise Terrasse']['KatSturm'] ?? false) === true && ($byName['Markise Terrasse']['KatHagel'] ?? false) === true && ($byName['Markise Terrasse']['ZielVariableID'] ?? null) === 151);
 check('Sirene Außen -> Typ sirene, kein Kästchen angekreuzt (gilt für jede Kategorie), MinSeverity 4', ($byName['Sirene Außen']['Typ'] ?? null) === 'sirene' && ($byName['Sirene Außen']['KatSturm'] ?? false) === false && ($byName['Sirene Außen']['MinSeverity'] ?? null) === 4);
 check('Garagentor -> Typ garage, Ziel-Variable 132 (Steuerung, NICHT die nicht-aktionsfähige Status-Variable 131)', ($byName['Garagentor']['Typ'] ?? null) === 'garage' && ($byName['Garagentor']['ZielVariableID'] ?? null) === 132);
-check('alle sieben Treffer standardmäßig aktiv', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 7);
+check('Blitz – Fenster schließen -> Typ fenster, Sturm+Hagel+Starkregen angekreuzt, Ziel-Variable 231 (wie Tessies eigene Tesla-Aktion)', ($byName['Blitz – Fenster schließen']['Typ'] ?? null) === 'fenster' && ($byName['Blitz – Fenster schließen']['KatSturm'] ?? false) === true && ($byName['Blitz – Fenster schließen']['KatHagel'] ?? false) === true && ($byName['Blitz – Fenster schließen']['KatStarkregen'] ?? false) === true && ($byName['Blitz – Fenster schließen']['ZielVariableID'] ?? null) === 231);
+check('"Fenster" ohne "schließen" wird NICHT vorgeschlagen (Stichwort-Spezifität -- sonst auch Fenster-offen-Sensoren betroffen)', !in_array('Blitz – Fenster', array_column($actions, 'Name'), true) && !in_array(232, array_column($actions, 'ZielVariableID'), true));
+check('alle acht Treffer standardmäßig aktiv', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 8);
 
 // Ende-zu-Ende: decodeSchutzaktionen() muss die angekreuzten Kästchen korrekt
 // in die normalisierte 'Kategorien'-Liste übersetzen (für die Zuordnungslogik

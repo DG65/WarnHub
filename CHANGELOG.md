@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.0-beta.13 (2026-09-04)
+
+- Neuer Schutzaktionstyp "Fenster schließen (z. B. Tesla)": schaltet eine
+  Ziel-Variable auf "Ein" -- passt insbesondere zu Tessies eigener Aktion
+  "Fenster schließen" (löst Teslas gerichteten `close_windows`-Befehl aus,
+  sicher auch bei bereits geschlossenen Fenstern). Die automatische
+  Objektbaum-Suche findet und aktiviert sie jetzt ebenfalls (Stichwort
+  "Fenster schließen", bewusst NICHT nur "Fenster" -- sonst wären auch
+  reine Fenster-offen-Sensoren betroffen). Voreingestellte Auslöser: Sturm,
+  Hagel UND Starkregen (offene Fenster lassen bei Dauerregen genauso
+  Wasser rein wie bei Sturm/Hagel).
+- Bewusst NICHT unterstützt, mit Begründung im Formular: die Heckklappe/der
+  Kofferraum lässt sich nicht automatisiert absichern. Recherche ergab:
+  Teslas Kofferraum-Befehl (`actuate_trunk`) ist ein reiner Umschalter ohne
+  Richtungsangabe -- ein automatisches Auslösen bei bereits geschlossener
+  Klappe würde sie ÖFFNEN statt schließen. Dafür müsste zuerst der aktuelle
+  Öffnungszustand bekannt sein (aktuell keine Symcon-Variable dafür,
+  Live-geprüft an Dietmars beiden Tessie-Instanzen: 0 Telemetrie-Variablen
+  vorhanden) -- das wäre eine Erweiterung des Tessie-Moduls, nicht von WarnHub.
+
 ## 0.1.0-beta.12 (2026-09-04)
 
 - Neue, optionale Datenquelle: **Meteoalarm** (feeds.meteoalarm.org,

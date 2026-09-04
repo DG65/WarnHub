@@ -310,5 +310,19 @@ $GLOBALS['whub_test_requestActionCalls'] = [];
 $result = callPrivate($hub6, 'processWarnings', [[$hamburgSturm]]);
 check('mit explizit auf den mobilen Standort gesetztem Filter feuert die Aktion trotzdem (bewusster Opt-in)', $result['actionsTriggered'] === 1);
 
+echo "\n== fireProtectiveAction(): Typ 'fenster' (z. B. Tessies eigene Tesla-Aktion 'Fenster schließen') ==\n";
+$GLOBALS['whub_test_variableValues'][301] = 0; // Ziel-Variable muss nur existieren
+$fensterAktion = [
+    'Name' => 'Blitz – Fenster schließen', 'Typ' => 'fenster', 'ZielVariableID' => 301,
+    'ZielWert' => 0.0, 'ZielSkriptID' => 0, 'AutoOffSekunden' => 0,
+];
+$hub7 = new WarnHub();
+$hub7->Create();
+$GLOBALS['whub_test_requestActionCalls'] = [];
+callPrivate($hub7, 'fireProtectiveAction', [$fensterAktion]);
+check('RequestAction wurde genau einmal aufgerufen', count($GLOBALS['whub_test_requestActionCalls']) === 1);
+check('RequestAction schaltet auf "Ein" (true), kein Zielwert nötig', ($GLOBALS['whub_test_requestActionCalls'][0] ?? null) === [301, true]);
+check('KEIN Auto-Aus wird geplant (anders als bei Sirene -- ein automatisches Wiederöffnen der Fenster wäre falsch)', $hub7->ReadAttributeString('PendingSirenOff') === '[]');
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
