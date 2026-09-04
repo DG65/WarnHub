@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.0-beta.30 (2026-09-04)
+
+- Erneute Push-Benachrichtigung bei Eskalation: verschärft sich eine
+  bereits gemeldete Warnung (z. B. DWD stuft von Moderate auf Severe
+  hoch), kommt jetzt eine erneute Benachrichtigung -- vorher blieb eine
+  einmal gepushte Warnung für immer stumm, egal wie sehr sie sich
+  verschlimmerte. Eine Abstufung pusht bewusst NICHT erneut. Attribut
+  `SeenWarnings` merkt sich dafür je Warnung/Standort zusätzlich die
+  zuletzt gesehene Severity; ein späteres erneutes Ansteigen auf
+  denselben Wert nach einer zwischenzeitlichen Abstufung zählt korrekt
+  wieder als Eskalation. Neuer Zähler `escalated` in der Poll()-
+  Zusammenfassung ("X neu gemeldet, Y hochgestuft, ...").
+- Push-Text zeigt jetzt auch die Handlungsempfehlung der Quelle
+  (CAP-Feld `instruction`, z. B. "Meiden Sie den Aufenthalt im Wald") --
+  wurde bisher eingelesen, aber nirgends angezeigt.
+- Beide beim Durchsehen des Codes auf Dietmars Frage "noch andere
+  Ideen?" gefunden (04.09.2026), keine erfundenen Features -- echte,
+  verifizierte Lücken im bestehenden Verhalten.
+
 ## 0.1.0-beta.29 (2026-09-04)
 
 - Push-Ruhephase (Snooze): `WHUB_SnoozePush($id, $minuten)`/`WHUB_CancelSnooze($id)`

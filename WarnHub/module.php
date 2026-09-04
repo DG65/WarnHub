@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.29';
-    private const NEWS_VERSION = '0.1.0-beta.29';
+    private const DOC_VERSION = '0.1.0-beta.30';
+    private const NEWS_VERSION = '0.1.0-beta.30';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -1076,6 +1076,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation: drittes unterstütztes Modul (Meteobridge/Meteohub, deckt als Aggregator zusätzlich weitere Marken wie DAVIS ab) sowie ein letzter Rückfall bei der Suche über das Symcon-Standardprofil (findet z. B. eine bereits profilierte KNX-Wetterstation automatisch). Wichtiger Fix: Windgeschwindigkeiten in m/s (kommt bei manchen Modulen/KNX vor) werden jetzt korrekt in km/h umgerechnet -- vorher hätte eine m/s-Variable stumm gegen den km/h-Schwellwert verglichen werden können'],
                 ['type' => 'Label', 'caption' => '• Windböe: drei Schwellwerte (Moderate/Severe/Extreme, Standard 40/65/90 km/h, an DWDs eigene Warnstufen angelehnt) statt einem pauschalen Wert -- eine Markise ist windempfindlicher als ein Raffstore. Jede Schutzaktions-Zeile wählt über ihr bestehendes "Ab Schweregrad"-Feld selbst, ab welcher Stufe sie reagiert; neu ins Popup "Welchen Schwellwert wähle ich?" im Datenquellen-Panel'],
                 ['type' => 'Label', 'caption' => '• Push-Ruhephase: Benachrichtigung für 1/4/24 Std. pausierbar (z. B. Urlaub, Feier, Nachtruhe) -- Erkennung, Warnungs-Historie und Schutzaktionen laufen unverändert weiter, nur das Handy bleibt still. Ein manueller Testklick auf "Testbenachrichtigung senden" kommt trotzdem an'],
+                ['type' => 'Label', 'caption' => '• Eine bereits gemeldete Warnung, die sich verschärft (z. B. DWD stuft von Moderate auf Severe hoch), löst jetzt eine ERNEUTE Push-Benachrichtigung aus -- vorher blieb sie nach der ersten Meldung stumm, egal wie sehr sie sich verschlimmerte. Eine Abstufung pusht bewusst nicht erneut'],
+                ['type' => 'Label', 'caption' => '• Push-Text enthält jetzt auch die Handlungsempfehlung der Quelle (CAP-Feld "instruction", z. B. "Meiden Sie den Aufenthalt im Wald"), falls vorhanden -- wurde bisher eingelesen, aber nirgends angezeigt'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2971,10 +2973,11 @@ class WarnHub extends IPSModule
 
         $icon = $result['activeCount'] > 0 ? '⚠️' : '✅';
         return sprintf(
-            '%s Prüfung abgeschlossen: %d aktive Warnung(en), %d neu gemeldet, %d Entwarnung(en), %d Schutzaktion(en) ausgelöst.',
+            '%s Prüfung abgeschlossen: %d aktive Warnung(en), %d neu gemeldet, %d hochgestuft, %d Entwarnung(en), %d Schutzaktion(en) ausgelöst.',
             $icon,
             $result['activeCount'],
             $result['newlyPushed'],
+            $result['escalated'],
             $result['cancelled'],
             $result['actionsTriggered']
         );
@@ -3076,6 +3079,7 @@ class WarnHub extends IPSModule
         $stillPresent = [];
         $active = [];
         $newlyPushed = 0;
+        $escalated = 0;
         $cancelled = 0;
         $actionsTriggered = 0;
         $standortGeoNamesCache = [];
@@ -3158,19 +3162,40 @@ class WarnHub extends IPSModule
                     'expires' => $w['expires'],
                 ];
 
-                if (!isset($seen[$pairKey])) {
-                    $seen[$pairKey] = ['msgType' => $w['msgType'], 'pushedAt' => time()];
-                    $this->logHistory('warnung', $standort['Name'], $w, $category);
+                // Erneut pushen, wenn die Meldung NEU ist ODER seit dem letzten
+                // Push tatsächlich HOCHGESTUFT wurde (z. B. DWD verschärft eine
+                // laufende Sturmwarnung von Moderate auf Severe) -- vorher blieb
+                // eine bereits gesehene Warnung für immer stumm, auch wenn sie
+                // sich deutlich verschlimmerte. Eine Abstufung pusht bewusst
+                // NICHT erneut (keine dringende Nachricht), hält die
+                // gespeicherte Severity aber aktuell, damit ein SPÄTERES
+                // erneutes Ansteigen auf denselben Wert wieder zählt.
+                $seenEntry = $seen[$pairKey] ?? null;
+                $isNewWarning = $seenEntry === null;
+                $isEscalation = !$isNewWarning && $this->severityRank($w['severity']) > $this->severityRank($seenEntry['severity'] ?? 'Unknown');
+                if ($isNewWarning || $isEscalation) {
+                    $seen[$pairKey] = ['msgType' => $w['msgType'], 'pushedAt' => time(), 'severity' => $w['severity']];
+                    $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w, $category);
                     if ($pushAktiv) {
+                        $text = $this->buildPushText($standort['Name'], $w, $nameMatched);
+                        if ($isEscalation) {
+                            $text = '⬆️ Hochgestuft (' . $w['severity'] . '): ' . $text;
+                        }
                         $this->pushToAllWebfronts(
                             $this->buildPushTitle($w['severity'], $w['event']),
-                            $this->buildPushText($standort['Name'], $w, $nameMatched),
+                            $text,
                             $pushSound,
                             $pushZiele,
                             $w['severity']
                         );
                     }
-                    $newlyPushed++;
+                    if ($isNewWarning) {
+                        $newlyPushed++;
+                    } else {
+                        $escalated++;
+                    }
+                } elseif ($seenEntry !== null) {
+                    $seen[$pairKey]['severity'] = $w['severity'];
                 }
 
                 foreach ($actions as $idx => $action) {
@@ -3237,6 +3262,7 @@ class WarnHub extends IPSModule
             'active' => $active,
             'activeCount' => count($active),
             'newlyPushed' => $newlyPushed,
+            'escalated' => $escalated,
             'cancelled' => $cancelled,
             'actionsTriggered' => $actionsTriggered,
         ];
@@ -3283,6 +3309,12 @@ class WarnHub extends IPSModule
         $text = $standortName . ': ' . $w['headline'];
         if ($w['description'] !== '') {
             $text .= '. ' . $w['description'];
+        }
+        // Handlungsempfehlung der Quelle (CAP <instruction>, z. B. "Meiden Sie
+        // den Aufenthalt im Wald") -- wurde bisher eingelesen, aber nirgends
+        // angezeigt. Echter, unmittelbar nutzbarer Inhalt, kein Eigenwert.
+        if (!empty($w['instruction'])) {
+            $text .= ' ' . $w['instruction'];
         }
         if ($w['expires'] !== null) {
             $text .= ' Gültig bis ' . $this->formatDateDe($w['expires']) . ' Uhr.';

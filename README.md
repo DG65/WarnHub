@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.29-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.30-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -82,9 +82,7 @@ Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch (
 aktivierte Standorte an -- kein manuelles Heraussuchen der Variablen-IDs nötig. Über einen
 "Push nur an"-Namensfilter lässt sich außerdem festlegen, dass ein Standort nur bestimmte
 Push-Ziele benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig
-genutzten Standorten). Die Benachrichtigung selbst lässt sich für eine Weile pausieren
-("Ruhephase", z. B. Urlaub oder Nachtruhe) -- Erkennung und Schutzaktionen laufen dabei
-unverändert weiter.
+genutzten Standorten).
 
 Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen **aktivierten**
 Push-Zielen -- WebFront- und Kachel-Visualisierung-Instanzen sowie, falls installiert,
@@ -103,6 +101,15 @@ deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf, Standard 30 Minu
 morgens eintreffende, aber erst für den Nachmittag gültige Warnung fährt die Markise also
 nicht schon morgens ein. Die Push-Benachrichtigung selbst bleibt davon unberührt und kommt
 weiterhin sofort.
+
+Verschärft sich eine bereits gemeldete Warnung (z. B. DWD stuft von Moderate auf Severe
+hoch), kommt eine erneute Push-Benachrichtigung -- eine Abstufung dagegen nicht, um nicht
+unnötig zu beunruhigen. Der Push-Text enthält, falls vorhanden, auch die Handlungsempfehlung
+der Quelle (CAP-Feld `instruction`, z. B. "Meiden Sie den Aufenthalt im Wald"). Die
+Benachrichtigung lässt sich außerdem für eine Weile pausieren ("Ruhephase", 1/4/24 Stunden --
+z. B. Urlaub, Feier, Nachtruhe): Erkennung, Warnungs-Historie und Schutzaktionen laufen dabei
+unverändert weiter, nur die Zustellung selbst ist stumm; ein manueller Testklick kommt
+trotzdem an.
 
 ## Installation
 
