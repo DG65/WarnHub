@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta.16 (2026-09-04)
+
+- Neuer Knopf "Fahrzeug-/Standort-Variablen suchen" im Standorte-Panel:
+  durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren
+  (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current
+  Latitude/Longitude") und legt je Fund einen bereits mit den
+  Live-Variablen verknüpften, aktivierten mobilen Standort an -- kein
+  manuelles Heraussuchen der Variablen-IDs mehr nötig. Erkennt zuverlässig
+  mehrere Fahrzeuge gleichzeitig und unterscheidet die Fahrzeugposition
+  sauber von Teslas Navigationsziel ("Zielposition", gleiche Wortendung,
+  andere Bedeutung) sowie von Geofencys zusätzlicher, gleichnamiger
+  Latitude/Longitude ohne "Current" (vermutlich Geofence-Zentrum statt
+  Live-Position). Dietmars Nachfrage 04.09.2026.
+
 ## 0.1.0-beta.15 (2026-09-04)
 
 - Radioaktivität-Einordnung: neues Popup "Was bedeutet dieser Wert?" im

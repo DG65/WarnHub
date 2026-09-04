@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.15-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.16-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -38,11 +38,14 @@ Jeder Standort (eigener Wohnort, Zweitwohnsitz, Angehörige) bekommt einen eigen
 und Mindest-Schweregrad. Eine Warnung löst nur aus, wenn der Standort **geometrisch**
 innerhalb der tatsächlichen Warnfläche (Polygon/Kreis der Meldung) oder ihres Umkreises
 liegt -- nicht anhand grober Postleitzahlen-/Gemeindegrenzen. Ein Standort kann statt fester
-Koordinaten auch an zwei Live-Variablen (Lat/Lon, z. B. aus Tessie oder einer
-Geofency-Bridge) gebunden werden -- WarnHub liest dann bei jeder Prüfung die aktuelle
-Position. Über einen "Push nur an"-Namensfilter lässt sich außerdem festlegen, dass ein
-Standort nur bestimmte Push-Ziele benachrichtigt (z. B. je eine Person/ein Fahrzeug bei
-mehreren gleichzeitig genutzten Standorten).
+Koordinaten auch an zwei Live-Variablen (Lat/Lon, z. B. aus Tessie oder Geofency) gebunden
+werden -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Eine eigene
+Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch (Tessie
+"Fahrzeugposition", Geofency "Current Latitude/Longitude") und legt direkt verknüpfte,
+aktivierte Standorte an -- kein manuelles Heraussuchen der Variablen-IDs nötig. Über einen
+"Push nur an"-Namensfilter lässt sich außerdem festlegen, dass ein Standort nur bestimmte
+Push-Ziele benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig
+genutzten Standorten).
 
 Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen **aktivierten**
 WebFront- und Kachel-Visualisierung-Instanzen (automatisch im Objektbaum gefunden und
@@ -67,9 +70,10 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
 
 ## Einrichtung
 
-1. Mindestens einen Standort anlegen -- drei Wege stehen zur Wahl: Knopf "Standort aus
+1. Mindestens einen Standort anlegen -- mehrere Wege stehen zur Wahl: Knopf "Standort aus
    Symcon-Systemeinstellungen übernehmen" (liest die Kern-Instanz "Standort"), Adress-/
-   PLZ-Suche über OpenStreetMap Nominatim, oder Punkt auf der Karte auswählen.
+   PLZ-Suche über OpenStreetMap Nominatim, Punkt auf der Karte auswählen, oder Knopf
+   "Fahrzeug-/Standort-Variablen suchen" für einen mobilen Standort (Tessie/Geofency).
 2. Datenquellen prüfen (NINA ist standardmäßig aktiv, alle anderen optional zusätzlich).
 3. Push-Benachrichtigung: Knopf "WebFront-Instanzen suchen" klicken (findet sowohl
    klassische WebFront-Instanzen als auch Kachel-Visualisierung-Instanzen).
@@ -78,9 +82,10 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
 
 ### Auto-Erkennung: gefunden = aktiviert, Abwahl möglich
 
-Sowohl die Push-Ziel-Suche als auch die Schutzaktionen-Suche folgen demselben Prinzip:
-gefundene Treffer werden als **bereits aktivierte** Zeile vorgeschlagen (Push geht sofort an
-jede gefundene WebFront-/Kachel-Visualisierung-Instanz, jede gefundene
+Die Standort-, Push-Ziel- und Schutzaktionen-Suche folgen demselben Prinzip: gefundene
+Treffer werden als **bereits aktivierte** Zeile vorgeschlagen (ein gefundener mobiler
+Standort ist sofort mit den Live-Variablen verknüpft, Push geht sofort an jede gefundene
+WebFront-/Kachel-Visualisierung-Instanz, jede gefundene
 Raffstore-/Jalousie-/Markise-/Garage-/Fenster-/Sirene-Steuerung löst sofort aus) -- nicht
 gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen. Eine erneute Suche
 ergänzt nur neu hinzugekommene Treffer und lässt bereits getroffene Aktiv/Inaktiv-

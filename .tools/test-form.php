@@ -210,5 +210,21 @@ foreach ($datenquellenPanel['items'] ?? [] as $item) {
 check('Popup "Was bedeutet dieser Wert?" (Dosisleistung/Verweildauer) steht im Datenquellen-Panel', $bfsPopup !== null);
 check('Popup enthält mindestens 5 Einordnungszeilen', $bfsPopup !== null && count($bfsPopup['popup']['items'] ?? []) >= 5);
 
+$standortePanel = null;
+foreach ($decoded['elements'] as $el) {
+    if (($el['caption'] ?? '') === '📍  Standorte (Umkreis-Definition)') {
+        $standortePanel = $el;
+        break;
+    }
+}
+$mobilBtn = null;
+foreach ($standortePanel['items'] ?? [] as $item) {
+    if (($item['type'] ?? '') === 'Button' && str_contains($item['onClick'] ?? '', 'WHUB_DiscoverMobileStandorte')) {
+        $mobilBtn = $item;
+        break;
+    }
+}
+check('Button "Fahrzeug-/Standort-Variablen suchen" (mobiler Standort) steht im Standorte-Panel', $mobilBtn !== null);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

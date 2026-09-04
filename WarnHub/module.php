@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.15';
-    private const NEWS_VERSION = '0.1.0-beta.15';
+    private const DOC_VERSION = '0.1.0-beta.16';
+    private const NEWS_VERSION = '0.1.0-beta.16';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -150,6 +150,23 @@ class WarnHub extends IPSModule
         // -- Sonderbehandlung direkt im Suchlauf unten, siehe dortigen Kommentar.
         'kofferraum' => ['heckklappe'],
         'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn'],
+    ];
+
+    // Namensmuster für die automatische Suche nach mobilen Standort-
+    // Variablenpaaren (Lat/Lon), siehe DiscoverMobileStandorte() --
+    // Dietmars Live-Fund 04.09.2026 (2 Tessie-Fahrzeuge + 3 Geofency-Profile).
+    // 'prefix' filtert VORAB auf Kandidaten (z. B. "fahrzeugposition"), 'lat'/
+    // 'lon' unterscheiden danach die beiden Achsen. Der Prefix ist zwingend
+    // nötig, um Tessies "Fahrzeugposition – Breitengrad/Längengrad" (aktuelle
+    // Position) NICHT mit "Zielposition – Breitengrad/Längengrad"
+    // (Navigationsziel, live ebenfalls vorhanden) zu verwechseln -- ein reiner
+    // "breitengrad"-Substring-Treffer würde beide gleichermaßen matchen.
+    private const DISCOVERY_LATLON_PAIRS = [
+        ['label' => 'Tessie/Fahrzeug', 'prefix' => 'fahrzeugposition', 'lat' => 'breitengrad', 'lon' => 'längengrad'],
+        // "current" grenzt Geofencys aktuelle Position von dessen zusätzlicher,
+        // gleichnamiger "Latitude"/"Longitude" ab (vermutlich Geofence-Zentrum,
+        // nicht die Live-Position) -- live an Dietmars System geprüft.
+        ['label' => 'Geofency', 'prefix' => 'current', 'lat' => 'latitude', 'lon' => 'longitude'],
     ];
 
     private const SEVERITY_RANK = ['Unknown' => 0, 'Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
@@ -289,8 +306,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE und BfS ODL-Info gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser) bzw. eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
-                ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie oder einer Geofency-Bridge -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen). Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie oder Geofency -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Die Objektbaum-Suche im Standorte-Panel findet passende Variablenpaare automatisch und verknüpft sie direkt. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Standorten/Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor -- mobile Standorte (Tessie-Fahrzeugposition, Geofency), WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen. Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -306,7 +323,13 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_AddStandortFromSystemLocation($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Übernimmt Breiten-/Längengrad aus der Symcon-Kerninstanz "Standort" (Kern-Instanzen) als neue Zeile -- fügt sie nur der offenen Tabelle hinzu, "Übernehmen" bleibt trotzdem nötig.'],
-                ['type' => 'Label', 'caption' => 'Mobiler Standort (z. B. aus Tessie- oder einer Geofency-Bridge-Variable): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
+                [
+                    'type' => 'Button',
+                    'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
+                    'onClick' => 'echo WHUB_DiscoverMobileStandorte($id);',
+                ],
+                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude") und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
+                ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie- oder einer Geofency-Bridge-Variable): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
                 ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
                 [
                     'type' => 'List',
@@ -769,7 +792,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Seit der Erstversion neu dazugekommen:'],
                 ['type' => 'Label', 'caption' => '• Zwei neue Datenquellen: Pegelstände (PEGELONLINE/WSV) und Radioaktivität (BfS Ortsdosisleistung, mit Einordnungshilfe "Was bedeutet dieser Wert?" -- Dosisleistung/Verweildauer bis zum Jahres-Vorsorgewert)'],
                 ['type' => 'Label', 'caption' => '• Meteoalarm als dritte Wetterquelle: europaweite Warnungen für 39 Länder, wichtig für mobile Standorte im Ausland'],
-                ['type' => 'Label', 'caption' => '• Mobiler Standort: statt fester Koordinaten an zwei Live-Variablen bindbar (z. B. Tessie/Geofency) -- WarnHub liest bei jeder Prüfung die aktuelle Position'],
+                ['type' => 'Label', 'caption' => '• Mobiler Standort: statt fester Koordinaten an zwei Live-Variablen bindbar (z. B. Tessie/Geofency) -- WarnHub liest bei jeder Prüfung die aktuelle Position. Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch'],
                 ['type' => 'Label', 'caption' => '• "Push nur an"-Filter je Standort -- bei mehreren Personen/Fahrzeugen bekommt nicht mehr automatisch jeder die Warnung der anderen Person'],
                 ['type' => 'Label', 'caption' => '• Neue Schutzaktionen: Fenster schließen sowie Kofferraum/Heckklappe schließen (Letzteres mit zwingender Sicherheitsprüfung gegen ein versehentliches Öffnen), beide auch über die automatische Objektbaum-Suche auffindbar'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen ohne eigenen Standort-Filter feuern jetzt automatisch nur noch von festen, nicht von mobilen Standorten aus (Sicherheitssperre)'],
@@ -1229,6 +1252,90 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($loc['lat'], 5), round($loc['lon'], 5));
+    }
+
+    /**
+     * Durchsucht den GESAMTEN Objektbaum nach Variablen-PAAREN (Lat+Lon
+     * unter derselben Instanz), die zu einem bekannten Namensmuster passen
+     * (siehe DISCOVERY_LATLON_PAIRS) -- z. B. Tessies "Fahrzeugposition –
+     * Breitengrad/Längengrad" oder Geofencys "Current Latitude/Longitude" --
+     * und ergänzt je Treffer einen VORAKTIVIERTEN, bereits an die Live-
+     * Variablen gebundenen mobilen Standort. Dietmars Nachfrage 04.09.2026:
+     * "Warum kannst du die Zuordnung nicht auch gleich ... übernehmen?" --
+     * bisher musste QuellVarLat/QuellVarLon je Standort von Hand gesetzt
+     * werden. Läuft wie DiscoverWebFronts()/DiscoverSchutzaktionen() nur auf
+     * der offenen Formularmaske, "Übernehmen" bleibt der bewusste letzte Schritt.
+     */
+    public function DiscoverMobileStandorte(): string
+    {
+        $rows = $this->decodeStandorte();
+        $knownPairs = [];
+        foreach ($rows as $r) {
+            if ($r['QuellVarLat'] > 0 && $r['QuellVarLon'] > 0) {
+                $knownPairs[$r['QuellVarLat'] . '|' . $r['QuellVarLon']] = true;
+            }
+        }
+
+        // Kandidaten je (Instanz, Musterindex) sammeln, damit z. B. Tessies
+        // "Fahrzeugposition"-Muster nicht versehentlich mit Geofencys
+        // "current"-Muster derselben Instanz vermischt wird.
+        $latCandidates = [];
+        $lonCandidates = [];
+        foreach ($this->collectObjectIDsRecursive(0) as $id) {
+            $obj = @IPS_GetObject($id);
+            if (!is_array($obj) || (int) $obj['ObjectType'] !== 2) {
+                continue;
+            }
+            $haystack = mb_strtolower((string) $obj['ObjectName']);
+            $parentID = (int) $obj['ParentID'];
+            foreach (self::DISCOVERY_LATLON_PAIRS as $pIdx => $pattern) {
+                if (mb_strpos($haystack, $pattern['prefix']) === false) {
+                    continue;
+                }
+                $key = $parentID . '|' . $pIdx;
+                if (mb_strpos($haystack, $pattern['lat']) !== false) {
+                    $latCandidates[$key] ??= $id;
+                } elseif (mb_strpos($haystack, $pattern['lon']) !== false) {
+                    $lonCandidates[$key] ??= $id;
+                }
+            }
+        }
+
+        $added = 0;
+        foreach ($latCandidates as $key => $latID) {
+            if (!isset($lonCandidates[$key])) {
+                continue; // nur vollständige Paare, kein Rätselraten bei nur einer Achse
+            }
+            $lonID = $lonCandidates[$key];
+            if (isset($knownPairs[$latID . '|' . $lonID])) {
+                continue;
+            }
+            [$parentID] = explode('|', $key);
+            $name = (string) (@IPS_GetName((int) $parentID) ?: 'Mobiler Standort');
+            $lat = (float) @GetValue($latID);
+            $lon = (float) @GetValue($lonID);
+            $rows[] = [
+                'Name' => $name,
+                'Ort' => '',
+                'Lat' => round($lat, 5),
+                'Lon' => round($lon, 5),
+                'QuellVarLat' => $latID,
+                'QuellVarLon' => $lonID,
+                'RadiusKm' => 20.0,
+                'MinSeverity' => 2,
+                'PushZielFilter' => '',
+                'Aktiv' => true,
+            ];
+            $knownPairs[$latID . '|' . $lonID] = true;
+            $added++;
+        }
+
+        $this->UpdateFormField('Standorte', 'values', json_encode($rows));
+        $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
+        if ($added === 0) {
+            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude").';
+        }
+        return sprintf('✅ %d mobile(r) Standort(e) gefunden und mit den Live-Variablen verknüpft -- bitte Umkreis/Schweregrad prüfen, dann unten „Übernehmen" klicken.', $added);
     }
 
     /**
