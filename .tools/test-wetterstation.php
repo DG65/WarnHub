@@ -353,6 +353,15 @@ check('89.9 km/h -> weiterhin "Severe" (noch unter Extreme)', callPrivate($hub5b
 check('90 km/h (Extreme-Grenze) -> "Extreme"', callPrivate($hub5b, 'windSeverityForSpeed', [90.0]) === 'Extreme');
 check('150 km/h -> weiterhin "Extreme" (Deckel, keine höhere Stufe)', callPrivate($hub5b, 'windSeverityForSpeed', [150.0]) === 'Extreme');
 
+echo "\n== regenSeverityForRate(): drei Stufen, Standardwerte 15/25/40 mm/h (DWDs eigene Starkregen-Warnstufen) ==\n";
+check('14.9 mm/h -> unter der niedrigsten Stufe, keine Warnung (null)', callPrivate($hub5b, 'regenSeverityForRate', [14.9]) === null);
+check('15 mm/h (Moderate-Grenze) -> "Moderate"', callPrivate($hub5b, 'regenSeverityForRate', [15.0]) === 'Moderate');
+check('24.9 mm/h -> weiterhin "Moderate" (noch unter Severe)', callPrivate($hub5b, 'regenSeverityForRate', [24.9]) === 'Moderate');
+check('25 mm/h (Severe-Grenze) -> "Severe"', callPrivate($hub5b, 'regenSeverityForRate', [25.0]) === 'Severe');
+check('39.9 mm/h -> weiterhin "Severe" (noch unter Extreme)', callPrivate($hub5b, 'regenSeverityForRate', [39.9]) === 'Severe');
+check('40 mm/h (Extreme-Grenze) -> "Extreme"', callPrivate($hub5b, 'regenSeverityForRate', [40.0]) === 'Extreme');
+check('100 mm/h -> weiterhin "Extreme" (Deckel, keine höhere Stufe)', callPrivate($hub5b, 'regenSeverityForRate', [100.0]) === 'Extreme');
+
 echo "\n== fetchWetterstation(): meldet die tatsächlich erreichte Stufe als severity, nicht mehr pauschal Severe ==\n";
 $hub5c = new WarnHub();
 $hub5c->Create();
@@ -362,6 +371,16 @@ $resultModerate = callPrivate($hub5c, 'fetchWetterstation');
 check('45 km/h löst bereits aus (Moderate-Stufe, Standard 40 km/h) -- vorher hätte der pauschale 70-km/h-Wert das NICHT gemeldet', count($resultModerate) === 1);
 check('severity ist "Moderate", nicht mehr pauschal "Severe"', $resultModerate[0]['severity'] === 'Moderate');
 check('Beschreibung nennt die Stufe beim Namen', str_contains($resultModerate[0]['description'], 'Moderate'));
+
+echo "\n== fetchWetterstation(): Regenrate meldet ebenfalls die tatsächlich erreichte Stufe ==\n";
+$hub5d = new WarnHub();
+$hub5d->Create();
+$hub5d->SetProp('WetterstationInstanceID', 10);
+$GLOBALS['whub_test_values'] = [101 => 0.0, 102 => 18.0]; // 18 mm/h -> Moderate (Standard 15), nicht mehr Severe (Standard bisher 25)
+$resultRegenModerate = callPrivate($hub5d, 'fetchWetterstation');
+check('18 mm/h löst bereits aus (Moderate-Stufe, Standard 15 mm/h) -- vorher hätte der pauschale 25-mm/h-Wert das NICHT gemeldet', count($resultRegenModerate) === 1);
+check('severity ist "Moderate"', $resultRegenModerate[0]['severity'] === 'Moderate');
+check('Beschreibung nennt die Stufe beim Namen', str_contains($resultRegenModerate[0]['description'], 'Moderate'));
 
 echo "\n== DiscoverWetterstation(): korrekte Instanz über exakte Froggit-GUID gefunden ==\n";
 $hub6 = new WarnHub();

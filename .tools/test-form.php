@@ -301,7 +301,10 @@ check('manuelles Feld "WetterstationRegenVariableID" (andere Fabrikate, z. B. KN
 check('Schwellwert-Feld "WetterstationWindSchwelleModerate" vorhanden', findByName($decoded['elements'], 'WetterstationWindSchwelleModerate') !== null);
 check('Schwellwert-Feld "WetterstationWindSchwelleSevere" vorhanden', findByName($decoded['elements'], 'WetterstationWindSchwelleSevere') !== null);
 check('Schwellwert-Feld "WetterstationWindSchwelleExtreme" vorhanden', findByName($decoded['elements'], 'WetterstationWindSchwelleExtreme') !== null);
-check('Schwellwert-Feld "WetterstationRegenrateSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationRegenrateSchwelle') !== null);
+check('Schwellwert-Feld "WetterstationRegenSchwelleModerate" vorhanden', findByName($decoded['elements'], 'WetterstationRegenSchwelleModerate') !== null);
+check('Schwellwert-Feld "WetterstationRegenSchwelleSevere" vorhanden', findByName($decoded['elements'], 'WetterstationRegenSchwelleSevere') !== null);
+check('Schwellwert-Feld "WetterstationRegenSchwelleExtreme" vorhanden', findByName($decoded['elements'], 'WetterstationRegenSchwelleExtreme') !== null);
+check('Auto-Rückstellungs-Checkbox "WetterstationAutoRueckstellung" vorhanden', findByName($decoded['elements'], 'WetterstationAutoRueckstellung') !== null);
 $wetterstationBtn = null;
 foreach ($datenquellenPanel['items'] ?? [] as $item) {
     if (($item['type'] ?? '') === 'Button' && str_contains($item['onClick'] ?? '', 'WHUB_DiscoverWetterstation')) {

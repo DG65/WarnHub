@@ -234,5 +234,59 @@ $textOhne = callPrivate($hub, 'buildPushText', ['Zuhause', machWarnung('Severe',
 check('ohne Handlungsempfehlung: kein Artefakt/doppeltes Leerzeichen im Text', !str_contains($textOhne, '  '));
 check('ohne Handlungsempfehlung bleibt der Text unverändert kurz (kein leerer Anhang)', mb_strlen($textOhne) < mb_strlen($textMit));
 
+echo "\n== processWarnings(): bereits abgelaufene Warnung wird NICHT mehr als aktiv gewertet ==\n";
+$hub2 = new WarnHub();
+$hub2->Create();
+$hub2->SetProp('Standorte', json_encode([$standort]));
+$hub2->SetProp('WebFronts', json_encode($webfronts));
+$hub2->SetProp('PushAktiv', true);
+$abgelaufeneWarnung = machWarnung('Severe');
+$abgelaufeneWarnung['identifier'] = 'test-abgelaufen-1';
+$abgelaufeneWarnung['expires'] = date('c', time() - 3600); // vor einer Stunde abgelaufen, aber die Quelle liefert sie noch
+$GLOBALS['whub_test_pushCalls'] = [];
+$rAbgelaufen = callPrivate($hub2, 'processWarnings', [[$abgelaufeneWarnung]]);
+check('activeCount = 0 -- eine abgelaufene Warnung zählt nicht mehr als aktiv', $rAbgelaufen['activeCount'] === 0);
+check('kein Push für eine bereits abgelaufene Warnung', count($GLOBALS['whub_test_pushCalls']) === 0);
+
+echo "\n== processWarnings(): Gegenprobe -- eine NOCH gültige Warnung (expires in der Zukunft) bleibt unverändert aktiv ==\n";
+$gueltigeWarnung = machWarnung('Severe');
+$gueltigeWarnung['identifier'] = 'test-noch-gueltig-1';
+$gueltigeWarnung['expires'] = date('c', time() + 3600); // noch eine Stunde gültig
+$GLOBALS['whub_test_pushCalls'] = [];
+$rGueltig = callPrivate($hub2, 'processWarnings', [[$gueltigeWarnung]]);
+check('activeCount = 1 -- eine noch gültige Warnung bleibt unverändert aktiv', $rGueltig['activeCount'] === 1);
+check('Push kommt wie gewohnt an', count($GLOBALS['whub_test_pushCalls']) === 1);
+
+echo "\n== processWarnings(): eine Warnung ohne expires-Angabe bleibt unverändert aktiv (nichts zu prüfen) ==\n";
+$ohneExpires = machWarnung('Severe');
+$ohneExpires['identifier'] = 'test-ohne-expires-1';
+$ohneExpires['expires'] = null;
+$rOhne = callPrivate($hub2, 'processWarnings', [[$ohneExpires]]);
+check('activeCount = 1 -- keine Ablaufprüfung ohne expires-Feld möglich, also weiterhin aktiv', $rOhne['activeCount'] === 1);
+
+echo "\n== processWarnings(): eine abgelaufene, bereits gesehene Warnung wird beim nächsten Poll aus dem Zustand entfernt (keine Entwarnung nötig) ==\n";
+$hub3 = new WarnHub();
+$hub3->Create();
+$hub3->SetProp('Standorte', json_encode([$standort]));
+$hub3->SetProp('WebFronts', json_encode($webfronts));
+$hub3->SetProp('PushAktiv', true);
+$w1 = machWarnung('Severe');
+$w1['identifier'] = 'test-lebenszyklus-1';
+$w1['expires'] = date('c', time() + 3600);
+callPrivate($hub3, 'processWarnings', [[$w1]]); // zunächst aktiv und gepusht
+$w2 = $w1;
+$w2['expires'] = date('c', time() - 60); // dieselbe Warnung, jetzt (knapp) abgelaufen
+$rLebenszyklus = callPrivate($hub3, 'processWarnings', [[$w2]]);
+check('nach Ablauf: nicht mehr aktiv', $rLebenszyklus['activeCount'] === 0);
+// Erneutes Auftreten derselben Kennung (z. B. eine neue, spätere Warnung mit
+// gleicher ID durch einen Datenfehler) muss wieder als NEUE Warnung zählen,
+// da der Ablauf denselben Aufräum-Mechanismus wie ein echtes Cancel nutzt.
+$w3 = machWarnung('Severe');
+$w3['identifier'] = 'test-lebenszyklus-1';
+$w3['expires'] = date('c', time() + 3600);
+$GLOBALS['whub_test_pushCalls'] = [];
+$rWieder = callPrivate($hub3, 'processWarnings', [[$w3]]);
+check('nach dem Ablauf erneut auftauchend -> wieder als NEUE Warnung erkannt und gepusht', $rWieder['newlyPushed'] === 1 && count($GLOBALS['whub_test_pushCalls']) === 1);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

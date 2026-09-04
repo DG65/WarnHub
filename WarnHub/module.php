@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.30';
-    private const NEWS_VERSION = '0.1.0-beta.30';
+    private const DOC_VERSION = '0.1.0-beta.31';
+    private const NEWS_VERSION = '0.1.0-beta.31';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -215,6 +215,14 @@ class WarnHub extends IPSModule
     // ebenfalls kein eigenes Testgerät verfügbar. Ident "Wind_Gust_KmH"
     // (Profil bereits ~WindSpeed.kmh, keine Umrechnung nötig) und "Rain_Rate".
     private const METEOBRIDGE_GUID = '{24A6FC41-748D-4843-BEF9-0606DBB95CD3}';
+
+    // Ruhephase, bevor eine durch die eigene Wetterstation ausgelöste
+    // Schutzaktion automatisch zurückgestellt wird (siehe
+    // checkWetterstationAutoRestore()) -- Wind/Regen müssen DURCHGEHEND so
+    // lange unter der Moderate-Schwelle liegen, sonst würde eine kurze
+    // Windböen-Pause mitten im Sturm die Markise fälschlich wieder
+    // ausfahren. Dietmars Bestätigung 04.09.2026 (20 Minuten).
+    private const WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN = 1200;
 
     // ISO-3166-1-alpha-2-Ländercode (wie von Nominatim reverse geliefert) ->
     // Länder-Slug der Meteoalarm-Feeds (feeds.meteoalarm.org). Live gegen
@@ -332,7 +340,10 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyFloat('WetterstationWindSchwelleModerate', 40.0);
         $this->RegisterPropertyFloat('WetterstationWindSchwelleSevere', 65.0);
         $this->RegisterPropertyFloat('WetterstationWindSchwelleExtreme', 90.0);
-        $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
+        $this->RegisterPropertyFloat('WetterstationRegenSchwelleModerate', 15.0);
+        $this->RegisterPropertyFloat('WetterstationRegenSchwelleSevere', 25.0);
+        $this->RegisterPropertyFloat('WetterstationRegenSchwelleExtreme', 40.0);
+        $this->RegisterPropertyBoolean('WetterstationAutoRueckstellung', false);
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
@@ -350,6 +361,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
         $this->RegisterAttributeString('WarnHistory', '[]');
         $this->RegisterAttributeInteger('PushSnoozeUntilTs', 0);
+        $this->RegisterAttributeString('WetterstationRestoreState', '{}');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
@@ -583,7 +595,23 @@ class WarnHub extends IPSModule
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleModerate', 'caption' => 'Schwellwert Windböe -- Moderate (km/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleSevere', 'caption' => 'Schwellwert Windböe -- Severe (km/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleExtreme', 'caption' => 'Schwellwert Windböe -- Extreme (km/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenrateSchwelle', 'caption' => 'Schwellwert Regenrate (mm/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'Label', 'caption' => 'Regenrate -- ebenfalls drei Schwellwerte statt einem, analog zur Windböe.'],
+                [
+                    'type' => 'PopupButton',
+                    'caption' => 'Welchen Regen-Schwellwert wähle ich?',
+                    'popup' => [
+                        'caption' => 'Regenraten-Schwellwerte -- Einordnung',
+                        'items' => [
+                            ['type' => 'Label', 'caption' => 'Die Standardwerte entsprechen DWDs eigenen amtlichen Starkregen-Warnstufen (1 Stunde): Moderate 15 mm/h ("Markante Wetterwarnung"), Severe 25 mm/h ("Unwetterwarnung"), Extreme 40 mm/h ("Warnung vor extremem Unwetter").'],
+                            ['type' => 'Label', 'caption' => 'Wie bei der Windböe wählt jede Schutzaktions-Zeile über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert (z. B. Fenster schließen schon bei Moderate, ein robustes Garagentor erst bei Severe).'],
+                        ],
+                    ],
+                ],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleModerate', 'caption' => 'Schwellwert Regenrate -- Moderate (mm/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleSevere', 'caption' => 'Schwellwert Regenrate -- Severe (mm/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleExtreme', 'caption' => 'Schwellwert Regenrate -- Extreme (mm/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'CheckBox', 'name' => 'WetterstationAutoRueckstellung', 'caption' => 'Automatische Rückstellung nach Windberuhigung (Raffstore/Markise/Garage)'],
+                ['type' => 'Label', 'caption' => 'Die EINZIGE Ausnahme von "keine automatische Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert liefert. Stellt eine durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktion automatisch auf den Wert zurück, den sie unmittelbar vor dem Auslösen hatte -- aber erst, nachdem Wind UND Regen seit 20 Minuten durchgehend wieder unter der Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen mitten im Sturm). Gilt NUR für durch die eigene Wetterstation ausgelöste Aktionen, nicht für amtliche Warnungen. Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen bleiben wie gehabt ohne Rückstellung.'],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
         ];
@@ -1078,6 +1106,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Push-Ruhephase: Benachrichtigung für 1/4/24 Std. pausierbar (z. B. Urlaub, Feier, Nachtruhe) -- Erkennung, Warnungs-Historie und Schutzaktionen laufen unverändert weiter, nur das Handy bleibt still. Ein manueller Testklick auf "Testbenachrichtigung senden" kommt trotzdem an'],
                 ['type' => 'Label', 'caption' => '• Eine bereits gemeldete Warnung, die sich verschärft (z. B. DWD stuft von Moderate auf Severe hoch), löst jetzt eine ERNEUTE Push-Benachrichtigung aus -- vorher blieb sie nach der ersten Meldung stumm, egal wie sehr sie sich verschlimmerte. Eine Abstufung pusht bewusst nicht erneut'],
                 ['type' => 'Label', 'caption' => '• Push-Text enthält jetzt auch die Handlungsempfehlung der Quelle (CAP-Feld "instruction", z. B. "Meiden Sie den Aufenthalt im Wald"), falls vorhanden -- wurde bisher eingelesen, aber nirgends angezeigt'],
+                ['type' => 'Label', 'caption' => '• Regenrate der eigenen Wetterstation jetzt ebenfalls in drei Stufen (Moderate/Severe/Extreme, Standard 15/25/40 mm/h, DWDs eigene Starkregen-Warnstufen)'],
+                ['type' => 'Label', 'caption' => '• NEU (optional, standardmäßig AUS): Automatische Rückstellung nach Windberuhigung für durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktionen -- stellt nach 20 Minuten durchgehender Ruhe automatisch den Wert vor dem Auslösen wieder her, prüft vorher aber, ob der Stand seitdem von Hand verändert wurde (dann keine Überschreibung). Die einzige Ausnahme von "keine automatische Rückstellung" im ganzen Modul, siehe Datenquellen-Panel'],
+                ['type' => 'Label', 'caption' => '• Eine bereits abgelaufene Warnung zählt nicht mehr als aktiv, auch wenn die Quelle sie verzögert weiterliefert -- Absicherung gegen veraltete Quelldaten'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2454,6 +2485,145 @@ class WarnHub extends IPSModule
         return null;
     }
 
+    /**
+     * Wie windSeverityForSpeed(), aber für die Regenrate (mm/h) -- Standard-
+     * werte entsprechen DWDs eigenen amtlichen Starkregen-Warnstufen (1
+     * Stunde): 15/25/40 mm/h. Dietmars Bestätigung 04.09.2026, Regenrate
+     * ebenfalls gestuft statt einem einzigen Wert.
+     */
+    private function regenSeverityForRate(float $regenrate): ?string
+    {
+        $extreme = $this->ReadPropertyFloat('WetterstationRegenSchwelleExtreme');
+        if ($extreme <= 0) {
+            $extreme = 40.0;
+        }
+        $severe = $this->ReadPropertyFloat('WetterstationRegenSchwelleSevere');
+        if ($severe <= 0) {
+            $severe = 25.0;
+        }
+        $moderate = $this->ReadPropertyFloat('WetterstationRegenSchwelleModerate');
+        if ($moderate <= 0) {
+            $moderate = 15.0;
+        }
+
+        if ($regenrate >= $extreme) {
+            return 'Extreme';
+        }
+        if ($regenrate >= $severe) {
+            return 'Severe';
+        }
+        if ($regenrate >= $moderate) {
+            return 'Moderate';
+        }
+        return null;
+    }
+
+    /**
+     * Merkt sich vor dem Auslösen einer Wetterstations-Schutzaktion den
+     * AKTUELLEN Wert ihrer Ziel-Variable -- dorthin stellt
+     * checkWetterstationAutoRestore() später zurück, statt auf einen festen
+     * Wert. Überschreibt einen bereits verfolgten Eintrag NICHT (sonst würde
+     * ein zweites Auslösen, während die Aktion schon ausgelöst ist, den
+     * eigentlichen Ursprungswert mit dem bereits geschützten Wert
+     * überschreiben).
+     */
+    private function rememberWetterstationRestoreState(int $idx, array $action, string $identifier): void
+    {
+        $restoreState = json_decode($this->ReadAttributeString('WetterstationRestoreState'), true) ?: [];
+        if (isset($restoreState[$idx])) {
+            return;
+        }
+        $restoreState[$idx] = [
+            'ZielVariableID' => $action['ZielVariableID'],
+            'RestoreValue' => (float) @GetValue($action['ZielVariableID']),
+            'FiredValue' => (float) $action['ZielWert'],
+            'Source' => str_contains($identifier, 'windboe') ? 'windboe' : 'regenrate',
+            'CalmSinceTs' => null,
+        ];
+        $this->WriteAttributeString('WetterstationRestoreState', json_encode($restoreState));
+    }
+
+    /**
+     * Stellt eine durch die eigene Wetterstation ausgelöste Schutzaktion
+     * automatisch zurück, NACHDEM Wind bzw. Regen (je nachdem, was sie
+     * ausgelöst hat) seit WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN
+     * DURCHGEHEND wieder unter der Moderate-Schwelle liegt -- die einzige
+     * Ausnahme von "keine automatische Rückstellung" im ganzen Modul,
+     * bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als
+     * eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert
+     * liefert. Wird am Ende jedes Poll() aufgerufen, unabhängig davon, ob
+     * gerade eine aktive Wetterstations-Warnung vorliegt (genau dann, wenn
+     * KEINE mehr vorliegt, kann zurückgestellt werden).
+     */
+    private function checkWetterstationAutoRestore(): void
+    {
+        $restoreState = json_decode($this->ReadAttributeString('WetterstationRestoreState'), true) ?: [];
+        if (count($restoreState) === 0) {
+            return;
+        }
+
+        $instanceID = $this->ReadPropertyInteger('WetterstationInstanceID');
+        [$windboeID] = $this->resolveWetterstationSource(
+            $this->ReadPropertyInteger('WetterstationWindVariableID'),
+            $instanceID,
+            'Windböe',
+            ['Windgust', 'Wind_Gust_KmH']
+        );
+        [$regenrateID] = $this->resolveWetterstationSource(
+            $this->ReadPropertyInteger('WetterstationRegenVariableID'),
+            $instanceID,
+            'Regenrate',
+            ['rainin', 'Rain_Rate']
+        );
+        $windCalm = $windboeID === null || $this->windSeverityForSpeed($this->readWindSpeedKmh($windboeID)) === null;
+        $regenCalm = $regenrateID === null || $this->regenSeverityForRate((float) @GetValue($regenrateID)) === null;
+
+        $now = time();
+        $changed = false;
+        foreach ($restoreState as $idx => $entry) {
+            $calm = $entry['Source'] === 'windboe' ? $windCalm : $regenCalm;
+            if (!$calm) {
+                if ($entry['CalmSinceTs'] !== null) {
+                    $restoreState[$idx]['CalmSinceTs'] = null;
+                    $changed = true;
+                }
+                continue;
+            }
+            if ($entry['CalmSinceTs'] === null) {
+                $restoreState[$idx]['CalmSinceTs'] = $now;
+                $changed = true;
+                continue;
+            }
+            if ($now - $entry['CalmSinceTs'] < self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN) {
+                continue;
+            }
+
+            $variableID = (int) $entry['ZielVariableID'];
+            // Sicherheitsprüfung wie beim Kofferraum-Typ: steht die Variable
+            // NICHT mehr auf dem Wert, den WIR beim Schützen gesetzt haben
+            // (FiredValue), hat der Nutzer (oder eine andere Automation) sie
+            // inzwischen selbst verändert -- dann NICHT überschreiben,
+            // sondern die Rückstellung nur still fallen lassen. Dietmars
+            // Nachfrage 04.09.2026, ob der Stand vor dem Befehl geprüft
+            // werden sollte.
+            if (@IPS_VariableExists($variableID) && abs((float) @GetValue($variableID) - (float) $entry['FiredValue']) < 0.5) {
+                @RequestAction($variableID, $entry['RestoreValue']);
+                if ($this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed()) {
+                    $this->pushToAllWebfronts(
+                        '🔽 Automatisch zurückgestellt',
+                        sprintf('Wind/Regen war seit %d Minuten wieder ruhig -- Schutzaktion zurückgestellt.', (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60)),
+                        $this->ReadPropertyString('PushSound')
+                    );
+                }
+            }
+            unset($restoreState[$idx]);
+            $changed = true;
+        }
+        if ($changed) {
+            $this->WriteAttributeString('WetterstationRestoreState', json_encode($restoreState));
+        }
+    }
+
     private function fetchWetterstation(): array
     {
         $instanceID = $this->ReadPropertyInteger('WetterstationInstanceID');
@@ -2476,11 +2646,6 @@ class WarnHub extends IPSModule
         if ($loc === null) {
             $this->LogError('fetchWetterstation', 'Kein konfigurierter Symcon-Systemstandort -- Wetterstations-Werte können nicht platziert werden (keine geratene Position).');
             return [];
-        }
-
-        $regenrateSchwelle = $this->ReadPropertyFloat('WetterstationRegenrateSchwelle');
-        if ($regenrateSchwelle <= 0) {
-            $regenrateSchwelle = 25.0;
         }
 
         $out = [];
@@ -2514,7 +2679,8 @@ class WarnHub extends IPSModule
         }
         if ($regenrateID !== null) {
             $regenrate = (float) @GetValue($regenrateID);
-            if ($regenrate >= $regenrateSchwelle) {
+            $regenSeverity = $this->regenSeverityForRate($regenrate);
+            if ($regenSeverity !== null) {
                 $out[] = [
                     'identifier' => 'wetterstation-regenrate-' . $regenIdentSuffix,
                     'source' => 'wetterstation',
@@ -2522,12 +2688,12 @@ class WarnHub extends IPSModule
                     'event' => 'Starkregen (eigene Messung)',
                     'headline' => sprintf('Eigene Wetterstation: Regenrate %s mm/h', number_format($regenrate, 1, ',', '.')),
                     'description' => sprintf(
-                        'Lokal gemessene Regenrate %s mm/h (eigener Schwellwert %s mm/h) -- unabhängig von amtlichen Warnungen, eigener Schwellwert, keine amtliche Klassifikation.',
+                        'Lokal gemessene Regenrate %s mm/h, Stufe "%s" -- unabhängig von amtlichen Warnungen, eigene Schwellwerte, keine amtliche Klassifikation.',
                         number_format($regenrate, 1, ',', '.'),
-                        number_format($regenrateSchwelle, 1, ',', '.')
+                        $regenSeverity
                     ),
                     'instruction' => '',
-                    'severity' => 'Severe',
+                    'severity' => $regenSeverity,
                     'effective' => null,
                     'onset' => null,
                     'expires' => null,
@@ -2965,6 +3131,9 @@ class WarnHub extends IPSModule
         }
 
         $result = $this->processWarnings($warnings);
+        if ($this->ReadPropertyBoolean('WetterstationAutoRueckstellung')) {
+            $this->checkWetterstationAutoRestore();
+        }
 
         $this->WriteAttributeInteger('LastPollTs', time());
         $this->WriteAttributeString('LastActiveWarningsJson', json_encode($result['active']));
@@ -3085,6 +3254,22 @@ class WarnHub extends IPSModule
         $standortGeoNamesCache = [];
 
         foreach ($warnings as $w) {
+            // Bereits abgelaufene Warnung ignorieren, auch wenn die Quelle
+            // sie (verzögert oder fehlerhaft) noch weiterliefert -- zählt
+            // NICHT als "still present", damit ein zuvor gepushter Zustand
+            // über die bestehende Bereinigung am Ende automatisch aufgeräumt
+            // wird, ohne dass die Quelle extra ein Cancel-Ereignis schicken
+            // müsste. Cancel-Meldungen bleiben ausgenommen -- die haben
+            // ihren eigenen, bereits bestehenden Ablauf. Live-Feeds (NINA/
+            // DWD) räumen ihre Warnungen zwar zuverlässig auf, das ist aber
+            // eine Absicherung gegen verzögerte/fehlerhafte Quelldaten.
+            if ($w['msgType'] !== 'Cancel' && !empty($w['expires'])) {
+                $expiresTs = strtotime((string) $w['expires']);
+                if ($expiresTs !== false && $expiresTs < time()) {
+                    continue;
+                }
+            }
+
             $stillPresent[$w['identifier']] = true;
             $category = $this->classifyEventCategory($w['event'], $w['headline']);
             // Schutzaktionen sollen erst kurz VOR dem tatsächlichen Beginn
@@ -3232,6 +3417,15 @@ class WarnHub extends IPSModule
                         continue; // noch vor dem Vorlauf-Fenster -- beim nächsten Poll erneut prüfen
                     }
                     $fired[$fireKey] = time();
+                    // Vor dem Auslösen den aktuellen Wert merken, falls die
+                    // Auto-Rückstellung aktiv ist -- NUR für durch die eigene
+                    // Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-
+                    // Aktionen (siehe checkWetterstationAutoRestore()).
+                    if ($this->ReadPropertyBoolean('WetterstationAutoRueckstellung')
+                        && str_starts_with($w['identifier'], 'wetterstation-')
+                        && in_array($action['Typ'], ['raffstore', 'markise', 'garage'], true)) {
+                        $this->rememberWetterstationRestoreState($idx, $action, $w['identifier']);
+                    }
                     $this->fireProtectiveAction($action);
                     $actionsTriggered++;
                 }

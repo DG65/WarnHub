@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.1.0-beta.31 (2026-09-05)
+
+- Regenrate der eigenen Wetterstation jetzt ebenfalls in drei Stufen
+  (Moderate/Severe/Extreme, Standard 15/25/40 mm/h) statt einem
+  pauschalen Wert -- analog zur Windböe (beta.28), Standardwerte
+  entsprechen DWDs eigenen amtlichen Starkregen-Warnstufen (1 Stunde:
+  "Markante Wetterwarnung"/"Unwetterwarnung"/"Warnung vor extremem
+  Unwetter"). Neuer Helfer `regenSeverityForRate()`, neues Popup
+  "Welchen Regen-Schwellwert wähle ich?" im Datenquellen-Panel.
+- Automatische Rückstellung nach Windberuhigung (neue Checkbox
+  "WetterstationAutoRueckstellung", Standard AUS): stellt eine durch
+  die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-
+  Aktion automatisch auf den Wert vor dem Auslösen zurück, sobald Wind
+  UND Regen seit 20 Minuten durchgehend wieder unter der
+  Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen
+  mitten im Sturm). Die einzige Ausnahme von "keine automatische
+  Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die
+  eigene Wetterstation (anders als eine amtliche Warnung) einen
+  fortlaufenden, lokalen Live-Wert liefert. Sicherheitsprüfung wie
+  beim Kofferraum-Typ: vor dem Zurückstellen wird geprüft, ob die
+  Variable noch den Wert hat, den WIR beim Schützen gesetzt haben --
+  hat der Nutzer sie inzwischen selbst verändert, wird NICHT
+  überschrieben (Dietmars Nachfrage 04.09.2026). Nur für
+  Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen gilt weiterhin
+  ausschließlich Nutzerhandeln, wie im gesamten übrigen Modul.
+- Eine bereits abgelaufene Warnung zählt nicht mehr als aktiv, auch
+  wenn eine Quelle sie verzögert oder fehlerhaft weiterliefert --
+  Absicherung gegen veraltete Quelldaten, unabhängig von einem
+  formalen Cancel-Ereignis.
+- Alle drei Punkte aus Dietmars Bestätigung 04.09.2026 zu meinen
+  eigenen Vorschlägen aus den "noch andere Ideen?"-Antworten, die
+  Regenrate-Stufen und Auto-Rückstellung ausdrücklich auf die eigene
+  Wetterstation begrenzt ("Was wenn wir das bei einer Wetterstation
+  zulassen?").
+
 ## 0.1.0-beta.30 (2026-09-04)
 
 - Erneute Push-Benachrichtigung bei Eskalation: verschärft sich eine

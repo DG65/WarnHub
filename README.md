@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.30-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.31-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -45,22 +45,28 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Eigenkonstruktion -- nur die Schwelle, ab der WarnHub meldet, ist einstellbar.
 - **Eigene Wetterstation** -- optional, unabhängig von allen übrigen Quellen: löst aus,
   sobald die lokal gemessene Windböe oder Regenrate den eigenen Schwellwert überschreitet.
-  Windböen gestuft in drei Schwellwerten (Moderate/Severe/Extreme, Standard 40/65/90 km/h,
-  an DWDs eigene Warnstufen angelehnt) -- eine Markise ist windempfindlicher als ein
-  Raffstore, jede Schutzaktions-Zeile wählt über ihr "Ab Schweregrad"-Feld selbst, ab
-  welcher Stufe sie reagiert (Popup "Welchen Schwellwert wähle ich?" hilft bei der Wahl).
-  Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal
-  auftretendes Ereignis nicht oder nicht rechtzeitig melden. Eine Objektbaum-Suche findet
-  eine Froggit- (Ecowitt-Protokoll, deckt auch als Sainlogic/HP1000SE/WH3000SE vertriebene
-  Ecowitt-Hardware ab), Sainlogic/ELV- (Wolbolar/IPSymconWeatherStation, Wunderground-
-  Protokoll) oder Meteobridge/Meteohub-Instanz (Datenlogger-Aggregator, deckt zusätzlich
-  weitere Marken wie DAVIS ab) automatisch -- Windgeschwindigkeiten werden dabei unabhängig
-  vom Quellprofil (km/h oder m/s) korrekt normiert. Findet sich keines der drei Module,
-  hilft als letzter Rückfall eine systemweite Suche nach dem passenden Symcon-Standardprofil
-  (z. B. eine bereits profilierte KNX-Variable). Für jedes andere Fabrikat (KNX ohne
-  zugewiesenes Profil, Netatmo, TFA, Homematic, ...) lassen sich Wind- und Regen-Variable
-  stattdessen manuell auswählen, auch gemischt (z. B. Wind von einer KNX-Wetterstation,
-  Regen vom Froggit-Gateway).
+  Beide gestuft in je drei Schwellwerten (Moderate/Severe/Extreme -- Wind Standard 40/65/90
+  km/h, Regen Standard 15/25/40 mm/h, beide an DWDs eigene Warnstufen angelehnt) -- eine
+  Markise ist windempfindlicher als ein Raffstore, jede Schutzaktions-Zeile wählt über ihr
+  "Ab Schweregrad"-Feld selbst, ab welcher Stufe sie reagiert (Popups "Welchen Schwellwert
+  wähle ich?" helfen bei der Wahl). Ein Sicherheitsnetz für den Fall, dass amtliche
+  Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig
+  melden. Eine Objektbaum-Suche findet eine Froggit- (Ecowitt-Protokoll, deckt auch als
+  Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware ab), Sainlogic/ELV- (Wolbolar/
+  IPSymconWeatherStation, Wunderground-Protokoll) oder Meteobridge/Meteohub-Instanz
+  (Datenlogger-Aggregator, deckt zusätzlich weitere Marken wie DAVIS ab) automatisch --
+  Windgeschwindigkeiten werden dabei unabhängig vom Quellprofil (km/h oder m/s) korrekt
+  normiert. Findet sich keines der drei Module, hilft als letzter Rückfall eine systemweite
+  Suche nach dem passenden Symcon-Standardprofil (z. B. eine bereits profilierte
+  KNX-Variable). Für jedes andere Fabrikat (KNX ohne zugewiesenes Profil, Netatmo, TFA,
+  Homematic, ...) lassen sich Wind- und Regen-Variable stattdessen manuell auswählen, auch
+  gemischt (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway). Optional
+  (standardmäßig AUS) stellt WarnHub eine durch die eigene Wetterstation ausgelöste
+  Raffstore-/Markisen-/Garagentor-Aktion automatisch zurück, sobald Wind UND Regen seit 20
+  Minuten durchgehend wieder unter der Moderate-Schwelle liegen -- die einzige Ausnahme von
+  "keine automatische Rückstellung" im ganzen Modul, weil nur die eigene Wetterstation
+  einen fortlaufenden, lokalen Live-Wert liefert. Prüft vor dem Zurückstellen, ob der Stand
+  seitdem von Hand verändert wurde, und überschreibt in dem Fall nicht.
 - **VKF-Hagelschutz-Signalbox** (Schweiz, `meteo.netitservices.com`) -- **BETA, ungetestet**:
   optional, bindet eine physisch bei einem konkreten Schweizer Gebäude registrierte
   Hagelschutz-Signalbox ein (hagelschutz-einfach-automatisch.ch). Aus der offiziellen
@@ -109,7 +115,8 @@ der Quelle (CAP-Feld `instruction`, z. B. "Meiden Sie den Aufenthalt im Wald"). 
 Benachrichtigung lässt sich außerdem für eine Weile pausieren ("Ruhephase", 1/4/24 Stunden --
 z. B. Urlaub, Feier, Nachtruhe): Erkennung, Warnungs-Historie und Schutzaktionen laufen dabei
 unverändert weiter, nur die Zustellung selbst ist stumm; ein manueller Testklick kommt
-trotzdem an.
+trotzdem an. Eine bereits abgelaufene Warnung zählt außerdem nicht mehr als aktiv, auch
+wenn die Quelle sie verzögert oder fehlerhaft weiterliefert.
 
 ## Installation
 
