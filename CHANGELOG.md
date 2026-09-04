@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.0-beta.14 (2026-09-04)
+
+- Neuer Schutzaktionstyp "Kofferraum/Heckklappe schließen": löst jetzt doch
+  sicher aus, nachdem die Semantik von Tessies "Tür-/Klappenstatus" live an
+  Dietmars Fahrzeug verifiziert wurde (kommagetrennte Liste aktuell offener
+  Klappen, z. B. "Frunk, Kofferraum", leer = alles zu). Die Aktion prüft vor
+  jedem Auslösen zwingend eine zusätzliche Zustands-Variable und schaltet
+  NUR, wenn "Kofferraum"/"Heckklappe" aktuell darin vorkommt -- ohne
+  gültige Zustands-Variable wird gar nicht erst ausgelöst (Sicherheitssperre
+  statt Raten), da Teslas Kofferraum-Befehl weiterhin ein reiner Umschalter
+  ohne Richtung ist.
+- Auto-Discovery findet "Heckklappe"-Treffer jetzt ebenfalls und verlinkt
+  automatisch eine passende Zustands-Variable unter derselben Instanz
+  (Namensbestandteil "klappenstatus"). Ohne automatisch gefundene Zustands-
+  Variable bleibt die vorgeschlagene Zeile ausnahmsweise INAKTIV, statt sich
+  unsicher scharf zu stellen.
+
 ## 0.1.0-beta.13 (2026-09-04)
 
 - Neuer Schutzaktionstyp "Fenster schließen (z. B. Tesla)": schaltet eine

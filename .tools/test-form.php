@@ -190,6 +190,8 @@ foreach ($schutzaktionenListe['columns'] ?? [] as $col) {
 }
 $typOptions = array_column($typSpalte['edit']['options'] ?? [], 'value');
 check('Schutzaktionstyp "fenster" (Fenster schließen, z. B. Tesla) steht zur Auswahl', in_array('fenster', $typOptions, true));
+check('Schutzaktionstyp "kofferraum" (Kofferraum/Heckklappe schließen) steht zur Auswahl', in_array('kofferraum', $typOptions, true));
+check('Schutzaktionen: Spalte "ZustandsVariableID" vorhanden (Sicherheitsprüfung vor dem Kofferraum-Umschalten)', findByName($schutzaktionenListe['columns'], 'ZustandsVariableID') !== null);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

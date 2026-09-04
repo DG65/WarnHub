@@ -39,8 +39,16 @@ const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
 //        +- 232 Var "Fenster" (aktionsfähig, ABER ohne "schließen" -- KEIN
 //              Treffer, belegt die Stichwort-Spezifität: sonst würden auch
 //              reine Fenster-offen-SENSOREN mit anfassen, siehe DISCOVERY_KEYWORDS)
+//        +- 233 Var "Heckklappe öffnen/schließen" (aktionsfähig -- Treffer,
+//              Typ kofferraum), 234 Var "Tür-/Klappenstatus" (NICHT
+//              aktionsfähig, wird als Zustands-Variable automatisch verlinkt
+//              -- exakt Tessies reale Feldnamen, live verifiziert 04.09.2026)
+//    +- 25 Instanz "Schneemobil" (Auto OHNE Klappenstatus-Variable)
+//        +- 251 Var "Heckklappe öffnen/schließen" (aktionsfähig -- Treffer,
+//              aber KEINE Zustands-Variable auffindbar -> Zeile bleibt
+//              inaktiv, Sicherheitssperre statt Raten)
 $GLOBALS['whub_test_tree'] = [
-    0 => [10, 20, 21, 22, 23],
+    0 => [10, 20, 21, 22, 23, 25],
     10 => [11, 12, 13, 14, 15, 16, 17, 18],
     11 => [111],
     12 => [121],
@@ -54,7 +62,8 @@ $GLOBALS['whub_test_tree'] = [
     20 => [],
     21 => [],
     22 => [],
-    23 => [231, 232],
+    23 => [231, 232, 233, 234],
+    25 => [251],
 ];
 $GLOBALS['whub_test_objects'] = [
     10 => ['ObjectType' => 0, 'ObjectName' => 'Geräte'],
@@ -71,6 +80,7 @@ $GLOBALS['whub_test_objects'] = [
     21 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Gast'],
     22 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar'],
     23 => ['ObjectType' => 1, 'ObjectName' => 'Blitz'],
+    25 => ['ObjectType' => 1, 'ObjectName' => 'Schneemobil'],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Position'],
     121 => ['ObjectType' => 2, 'ObjectName' => 'Ein/Aus'],
     131 => ['ObjectType' => 2, 'ObjectName' => 'Status'],
@@ -81,6 +91,9 @@ $GLOBALS['whub_test_objects'] = [
     181 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
     231 => ['ObjectType' => 2, 'ObjectName' => 'Fenster schließen'],
     232 => ['ObjectType' => 2, 'ObjectName' => 'Fenster'],
+    233 => ['ObjectType' => 2, 'ObjectName' => 'Heckklappe öffnen/schließen'],
+    234 => ['ObjectType' => 2, 'ObjectName' => 'Tür-/Klappenstatus'],
+    251 => ['ObjectType' => 2, 'ObjectName' => 'Heckklappe öffnen/schließen'],
 ];
 $GLOBALS['whub_test_variables'] = [
     111 => ['VariableAction' => 1],
@@ -93,6 +106,9 @@ $GLOBALS['whub_test_variables'] = [
     181 => ['VariableAction' => 1],
     231 => ['VariableAction' => 1],
     232 => ['VariableAction' => 1],
+    233 => ['VariableAction' => 1],
+    234 => ['VariableAction' => 0],
+    251 => ['VariableAction' => 1],
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     WEBFRONT_GUID => [20, 21],
@@ -310,11 +326,11 @@ echo "== Schutzaktionen-Discovery ==\n";
 $hub2 = new WarnHub();
 $hub2->Create();
 $msg3 = $hub2->DiscoverSchutzaktionen();
-check('meldet 8 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe + Fenster schließen)', str_contains($msg3, '8 neue'));
+check('meldet 10 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe + Fenster schließen + 2× Heckklappe)', str_contains($msg3, '10 neue'));
 [$field3, , $valuesJson3] = $hub2->lastValuesUpdate('Schutzaktionen');
 check('schreibt in das Feld "Schutzaktionen"', $field3 === 'Schutzaktionen');
 $actions = json_decode($valuesJson3, true);
-check('genau 8 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig, "Fenster" ohne "schließen" kein Treffer)', count($actions) === 8);
+check('genau 10 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig, "Fenster" ohne "schließen" kein Treffer)', count($actions) === 10);
 check('Auto-Hupen sind über den Fahrzeugnamen unterscheidbar statt alle nur "Hupe" zu heißen (Dietmars Live-Fund)', in_array('Schneeflocke – Hupe', array_column($actions, 'Name'), true) && in_array('Kohlekasten – Hupe', array_column($actions, 'Name'), true) && !in_array('Hupe', array_column($actions, 'Name'), true));
 check('Zwei Ebenen tief (Trabbi > Steuerung > Hupe) findet trotzdem die ECHTE Instanz "Trabbi", nicht die Zwischenkategorie "Steuerung" (Dietmars Nachfrage 04.09.2026)', in_array('Trabbi – Hupe', array_column($actions, 'Name'), true) && !in_array('Steuerung – Hupe', array_column($actions, 'Name'), true));
 
@@ -328,7 +344,9 @@ check('Sirene Außen -> Typ sirene, kein Kästchen angekreuzt (gilt für jede Ka
 check('Garagentor -> Typ garage, Ziel-Variable 132 (Steuerung, NICHT die nicht-aktionsfähige Status-Variable 131)', ($byName['Garagentor']['Typ'] ?? null) === 'garage' && ($byName['Garagentor']['ZielVariableID'] ?? null) === 132);
 check('Blitz – Fenster schließen -> Typ fenster, Sturm+Hagel+Starkregen angekreuzt, Ziel-Variable 231 (wie Tessies eigene Tesla-Aktion)', ($byName['Blitz – Fenster schließen']['Typ'] ?? null) === 'fenster' && ($byName['Blitz – Fenster schließen']['KatSturm'] ?? false) === true && ($byName['Blitz – Fenster schließen']['KatHagel'] ?? false) === true && ($byName['Blitz – Fenster schließen']['KatStarkregen'] ?? false) === true && ($byName['Blitz – Fenster schließen']['ZielVariableID'] ?? null) === 231);
 check('"Fenster" ohne "schließen" wird NICHT vorgeschlagen (Stichwort-Spezifität -- sonst auch Fenster-offen-Sensoren betroffen)', !in_array('Blitz – Fenster', array_column($actions, 'Name'), true) && !in_array(232, array_column($actions, 'ZielVariableID'), true));
-check('alle acht Treffer standardmäßig aktiv', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 8);
+check('Blitz – Heckklappe öffnen/schließen -> Typ kofferraum, Zustands-Variable automatisch verlinkt (234, "Tür-/Klappenstatus"), AKTIV', ($byName['Blitz – Heckklappe öffnen/schließen']['Typ'] ?? null) === 'kofferraum' && ($byName['Blitz – Heckklappe öffnen/schließen']['ZielVariableID'] ?? null) === 233 && ($byName['Blitz – Heckklappe öffnen/schließen']['ZustandsVariableID'] ?? null) === 234 && ($byName['Blitz – Heckklappe öffnen/schließen']['Aktiv'] ?? null) === true);
+check('Schneemobil – Heckklappe öffnen/schließen -> OHNE auffindbare Zustands-Variable bleibt die Zeile INAKTIV (Sicherheitssperre statt Raten)', ($byName['Schneemobil – Heckklappe öffnen/schließen']['Typ'] ?? null) === 'kofferraum' && ($byName['Schneemobil – Heckklappe öffnen/schließen']['ZustandsVariableID'] ?? null) === 0 && ($byName['Schneemobil – Heckklappe öffnen/schließen']['Aktiv'] ?? null) === false);
+check('neun der zehn Treffer standardmäßig aktiv (nur Schneemobil-Heckklappe bewusst nicht, mangels Zustands-Variable)', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 9);
 
 // Ende-zu-Ende: decodeSchutzaktionen() muss die angekreuzten Kästchen korrekt
 // in die normalisierte 'Kategorien'-Liste übersetzen (für die Zuordnungslogik

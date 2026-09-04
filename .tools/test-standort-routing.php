@@ -324,5 +324,36 @@ check('RequestAction wurde genau einmal aufgerufen', count($GLOBALS['whub_test_r
 check('RequestAction schaltet auf "Ein" (true), kein Zielwert nötig', ($GLOBALS['whub_test_requestActionCalls'][0] ?? null) === [301, true]);
 check('KEIN Auto-Aus wird geplant (anders als bei Sirene -- ein automatisches Wiederöffnen der Fenster wäre falsch)', $hub7->ReadAttributeString('PendingSirenOff') === '[]');
 
+echo "\n== fireProtectiveAction(): Typ 'kofferraum' (Sicherheitssperre gegen Teslas Umschalt-Kofferraum-Befehl) ==\n";
+$kofferraumBasis = [
+    'Name' => 'Blitz – Heckklappe öffnen/schließen', 'Typ' => 'kofferraum', 'ZielVariableID' => 401,
+    'ZielWert' => 0.0, 'ZielSkriptID' => 0, 'AutoOffSekunden' => 0,
+];
+$GLOBALS['whub_test_variableValues'][401] = 0; // Ziel-(Umschalt-)Variable muss nur existieren
+
+// Fall 1: keine Zustands-Variable konfiguriert -> darf NICHT auslösen.
+$hub8 = new WarnHub();
+$hub8->Create();
+$GLOBALS['whub_test_requestActionCalls'] = [];
+callPrivate($hub8, 'fireProtectiveAction', [$kofferraumBasis + ['ZustandsVariableID' => 0]]);
+check('ohne Zustands-Variable wird NICHT ausgelöst (sonst könnte der Umschalt-Befehl öffnen statt schließen)', count($GLOBALS['whub_test_requestActionCalls']) === 0);
+
+// Fall 2: Zustands-Variable vorhanden, aber Kofferraum ist laut Wert NICHT offen -> darf nicht auslösen.
+$GLOBALS['whub_test_variableValues'][402] = 'Frunk'; // nur Frunk offen, Kofferraum bereits zu
+$hub9 = new WarnHub();
+$hub9->Create();
+$GLOBALS['whub_test_requestActionCalls'] = [];
+callPrivate($hub9, 'fireProtectiveAction', [$kofferraumBasis + ['ZustandsVariableID' => 402]]);
+check('Kofferraum laut Zustands-Variable bereits zu ("Frunk" allein) -> KEIN Auslösen', count($GLOBALS['whub_test_requestActionCalls']) === 0);
+
+// Fall 3: Zustands-Variable zeigt den Kofferraum als offen an -> jetzt darf ausgelöst werden.
+$GLOBALS['whub_test_variableValues'][403] = 'Frunk, Kofferraum';
+$hub10 = new WarnHub();
+$hub10->Create();
+$GLOBALS['whub_test_requestActionCalls'] = [];
+callPrivate($hub10, 'fireProtectiveAction', [$kofferraumBasis + ['ZustandsVariableID' => 403]]);
+check('Kofferraum laut Zustands-Variable offen ("Frunk, Kofferraum") -> löst genau einmal aus', count($GLOBALS['whub_test_requestActionCalls']) === 1);
+check('RequestAction schaltet die richtige Ziel-Variable (401) auf "Ein"', ($GLOBALS['whub_test_requestActionCalls'][0] ?? null) === [401, true]);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

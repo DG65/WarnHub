@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.13';
-    private const NEWS_VERSION = '0.1.0-beta.13';
+    private const DOC_VERSION = '0.1.0-beta.14';
+    private const NEWS_VERSION = '0.1.0-beta.14';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -143,6 +143,12 @@ class WarnHub extends IPSModule
         // (act_close_windows, sendet Teslas gerichteten close_windows-Befehl
         // -- sicher blind auslösbar, kein Umschalt-Risiko).
         'fenster' => ['fenster schließen', 'close_windows'],
+        // Trifft Tessies eigene Aktion "Heckklappe öffnen/schließen"
+        // (act_rear_trunk). Anders als bei "fenster" wird zusätzlich nach
+        // einer passenden Zustands-Variable UNTER DERSELBEN INSTANZ gesucht
+        // (Name enthält "klappenstatus", z. B. Tessies "Tür-/Klappenstatus")
+        // -- Sonderbehandlung direkt im Suchlauf unten, siehe dortigen Kommentar.
+        'kofferraum' => ['heckklappe'],
         'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn'],
     ];
 
@@ -284,7 +290,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
                 ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie oder einer Geofency-Bridge -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Sirene" im Namen -- Letzteres passt insbesondere zu Tessies eigener Tesla-Aktion). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor (alle gefundenen WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen). Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -390,7 +396,7 @@ class WarnHub extends IPSModule
 
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Sirenen, Skripte)',
+            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Kofferraum, Sirenen, Skripte)',
             'expanded' => false,
             'items' => [
                 ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, Autofenster schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
@@ -401,7 +407,8 @@ class WarnHub extends IPSModule
                         'caption' => 'Felder je Aktionstyp',
                         'items' => [
                             ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-/Markisen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren/eingefahren, bitte am eigenen Aktor prüfen).'],
-                            ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern). WICHTIG: Die Heckklappe/der Kofferraum lässt sich NICHT automatisiert sichern -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Dafür müsste zuerst der aktuelle Öffnungszustand bekannt sein.'],
+                            ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern).'],
+                            ['type' => 'Label', 'caption' => 'Kofferraum/Heckklappe schließen: WICHTIG -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Deshalb zusätzlich zur Ziel-Variable zwingend eine Zustands-Variable angeben, die aktuell offene Klappen namentlich nennt (z. B. Tessies "Tür-/Klappenstatus") -- ausgelöst wird nur, wenn "Kofferraum" oder "Heckklappe" darin vorkommt, sonst passiert nichts. Ohne gültige Zustands-Variable feuert die Aktion GAR NICHT (Sicherheitssperre, kein Raten).'],
                             ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
                             ['type' => 'Label', 'caption' => 'Skript ausführen: Ziel-Skript statt Ziel-Variable/Zielwert.'],
                             ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise Sturm + Hagel an, bei Fenster schließen zusätzlich Starkregen.'],
@@ -411,7 +418,7 @@ class WarnHub extends IPSModule
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster schließen/Sirene durchsuchen',
+                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster schließen/Heckklappe/Sirene durchsuchen',
                     'onClick' => 'echo WHUB_DiscoverSchutzaktionen($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
@@ -430,6 +437,7 @@ class WarnHub extends IPSModule
                         ['caption' => 'Nur Standort (leer=alle festen)', 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ['caption' => 'Ziel-Variable', 'name' => 'ZielVariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
                         ['caption' => 'Zielwert', 'name' => 'ZielWert', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                        ['caption' => 'Zustands-Variable (nur Kofferraum)', 'name' => 'ZustandsVariableID', 'width' => '190px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
                         ['caption' => 'Ziel-Skript', 'name' => 'ZielSkriptID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectScript']],
                         ['caption' => 'Auto-Aus (s)', 'name' => 'AutoOffSekunden', 'width' => '100px', 'add' => 60, 'edit' => ['type' => 'NumberSpinner', 'minValue' => 0]],
                     ],
@@ -494,6 +502,7 @@ class WarnHub extends IPSModule
             ['caption' => 'Markise einfahren', 'value' => 'markise'],
             ['caption' => 'Garagentor schließen', 'value' => 'garage'],
             ['caption' => 'Fenster schließen (z. B. Tesla)', 'value' => 'fenster'],
+            ['caption' => 'Kofferraum/Heckklappe schließen (nur mit Zustands-Variable)', 'value' => 'kofferraum'],
             ['caption' => 'Akustischer Alarm', 'value' => 'sirene'],
             ['caption' => 'Skript ausführen', 'value' => 'skript'],
         ];
@@ -803,7 +812,7 @@ class WarnHub extends IPSModule
         return array_map('mb_strtolower', $names);
     }
 
-    /** @return array<int,array{Name:string,Aktiv:bool,Typ:string,Kategorien:array<int,string>,MinSeverity:int,StandortFilter:string,ZielVariableID:int,ZielWert:float,ZielSkriptID:int,AutoOffSekunden:int}> */
+    /** @return array<int,array{Name:string,Aktiv:bool,Typ:string,Kategorien:array<int,string>,MinSeverity:int,StandortFilter:string,ZielVariableID:int,ZielWert:float,ZustandsVariableID:int,ZielSkriptID:int,AutoOffSekunden:int}> */
     private function decodeSchutzaktionen(): array
     {
         $raw = json_decode($this->ReadPropertyString('Schutzaktionen'), true);
@@ -833,6 +842,7 @@ class WarnHub extends IPSModule
                 'StandortFilter' => (string) ($a['StandortFilter'] ?? ''),
                 'ZielVariableID' => (int) ($a['ZielVariableID'] ?? 0),
                 'ZielWert' => (float) ($a['ZielWert'] ?? 0),
+                'ZustandsVariableID' => (int) ($a['ZustandsVariableID'] ?? 0),
                 'ZielSkriptID' => (int) ($a['ZielSkriptID'] ?? 0),
                 'AutoOffSekunden' => (int) ($a['AutoOffSekunden'] ?? 60),
             ];
@@ -863,6 +873,28 @@ class WarnHub extends IPSModule
             $obj = @IPS_GetObject($childID);
             if (is_array($obj) && (int) $obj['ObjectType'] === 2 && $this->isActionableVariable($childID)) {
                 return $childID;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Sucht unter der ELTERN-Instanz von $variableID eine Geschwister-
+     * Variable, deren Name $needle enthält (z. B. "klappenstatus", passend
+     * zu Tessies "Tür-/Klappenstatus") -- für den Kofferraum/Heckklappe-
+     * Schutzaktionstyp, der zwingend eine Zustands-Variable NEBEN der
+     * Ziel-(Umschalt-)Variable braucht (siehe fireProtectiveAction()).
+     */
+    private function findSiblingVariableByNameSubstring(int $variableID, string $needle): ?int
+    {
+        $parentID = @IPS_GetParent($variableID) ?: 0;
+        if ($parentID <= 0) {
+            return null;
+        }
+        foreach (@IPS_GetChildrenIDs($parentID) ?: [] as $siblingID) {
+            $obj = @IPS_GetObject($siblingID);
+            if (is_array($obj) && (int) $obj['ObjectType'] === 2 && mb_stripos((string) $obj['ObjectName'], $needle) !== false) {
+                return $siblingID;
             }
         }
         return null;
@@ -925,6 +957,7 @@ class WarnHub extends IPSModule
             // Wasser rein wie bei Sturm/Hagel (anders als Raffstore/Markise, die
             // primär gegen Wind-/Hagelschaden schützen).
             'fenster' => ['Kategorien' => ['sturm', 'hagel', 'starkregen'], 'MinSeverity' => 3, 'AutoOff' => 0],
+            'kofferraum' => ['Kategorien' => ['sturm', 'hagel', 'starkregen'], 'MinSeverity' => 3, 'AutoOff' => 0],
             'sirene' => ['Kategorien' => [], 'MinSeverity' => 4, 'AutoOff' => 60],
         ];
 
@@ -977,15 +1010,30 @@ class WarnHub extends IPSModule
                     }
                 }
 
+                // Kofferraum/Heckklappe braucht zwingend eine Zustands-
+                // Variable (siehe fireProtectiveAction()) -- wird unter
+                // DERSELBEN Instanz gesucht wie die gefundene Ziel-Variable
+                // (Name enthält "klappenstatus", trifft Tessies "Tür-/
+                // Klappenstatus"). Kein Treffer = Zeile trotzdem anlegen,
+                // aber inaktiv lassen statt so zu tun als sei sie sicher
+                // nutzbar -- Nutzer muss die Variable dann selbst nachtragen.
+                $zustandsVariableID = 0;
+                $rowActive = true;
+                if ($actionType === 'kofferraum') {
+                    $zustandsVariableID = $this->findSiblingVariableByNameSubstring($variableID, 'klappenstatus') ?? 0;
+                    $rowActive = $zustandsVariableID > 0;
+                }
+
                 $defaults = $typeDefaults[$actionType];
                 $row = [
                     'Name' => $displayName,
-                    'Aktiv' => true,
+                    'Aktiv' => $rowActive,
                     'Typ' => $actionType,
                     'MinSeverity' => $defaults['MinSeverity'],
                     'StandortFilter' => '',
                     'ZielVariableID' => $variableID,
                     'ZielWert' => 0.0,
+                    'ZustandsVariableID' => $zustandsVariableID,
                     'ZielSkriptID' => 0,
                     'AutoOffSekunden' => $defaults['AutoOff'],
                 ];
@@ -1002,10 +1050,10 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Schutzaktionen', 'values', json_encode($rows));
         $this->UpdateFormField('Schutzaktionen', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Markise/Garage/Fenster schließen/Sirene im Objektbaum gefunden.';
+            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Markise/Garage/Fenster schließen/Heckklappe/Sirene im Objektbaum gefunden.';
         }
         return sprintf(
-            '✅ %d neue Schutzaktion(en) gefunden und aktiviert (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken.',
+            '✅ %d neue Schutzaktion(en) gefunden (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken. Kofferraum/Heckklappe-Treffer ohne automatisch gefundene Zustands-Variable bleiben aus Sicherheitsgründen INAKTIV -- Zustands-Variable von Hand ergänzen und dann aktivieren.',
             $added
         );
     }
@@ -2160,15 +2208,38 @@ class WarnHub extends IPSModule
             // Fenster schließen: immer "Ein" schalten, wie bei Sirene -- KEIN
             // Zielwert nötig. Anders als bei Sirene aber KEIN Auto-Aus: ein
             // automatisches "Fenster wieder öffnen" nach der Warnung wäre
-            // fachlich falsch und sicherheitsrelevant unerwünscht. Bewusst
-            // NICHT für die Heckklappe/den Kofferraum nutzbar -- Teslas
-            // Kofferraum-Befehl ist ein reiner Umschalter (kein "schließen",
-            // nur "auslösen"), ein Aufruf bei bereits geschlossener Klappe
-            // würde sie ÖFFNEN. Siehe Popup-Hilfe im Formular.
+            // fachlich falsch und sicherheitsrelevant unerwünscht. Teslas
+            // close_windows-Befehl ist gerichtet (nicht umgeschaltet) --
+            // deshalb ohne Zustandsprüfung sicher blind auslösbar, anders als
+            // der Kofferraum-Typ unten.
             if ($action['Typ'] === 'fenster') {
                 $ok = @RequestAction($action['ZielVariableID'], true);
                 if (!$ok) {
                     $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Fenster schließen): RequestAction fehlgeschlagen.');
+                }
+                return;
+            }
+
+            // Kofferraum/Heckklappe schließen: Teslas Kofferraum-Befehl ist
+            // ein reiner UMSCHALTER ohne Richtung (kein "schließen", nur
+            // "auslösen") -- ein blindes Auslösen bei bereits geschlossener
+            // Klappe würde sie ÖFFNEN. Live verifiziert 04.09.2026 (an
+            // Dietmars "Kohlekasten"): die Zustands-Variable listet AKTUELL
+            // offene Klappen kommagetrennt (z. B. "Frunk, Kofferraum"), leer
+            // = alles zu. Ohne gültige Zustands-Variable wird deshalb aus
+            // Sicherheitsgründen GAR NICHT ausgelöst, statt zu raten.
+            if ($action['Typ'] === 'kofferraum') {
+                if ($action['ZustandsVariableID'] <= 0 || !IPS_VariableExists($action['ZustandsVariableID'])) {
+                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Kofferraum/Heckklappe): keine gültige Zustands-Variable konfiguriert -- kein automatisches Auslösen, da der Umschalt-Befehl sonst öffnen statt schließen könnte.');
+                    return;
+                }
+                $zustand = (string) GetValue($action['ZustandsVariableID']);
+                if (mb_stripos($zustand, 'kofferraum') === false && mb_stripos($zustand, 'heckklappe') === false) {
+                    return; // bereits geschlossen -- nichts zu tun, kein Fehler
+                }
+                $ok = @RequestAction($action['ZielVariableID'], true);
+                if (!$ok) {
+                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Kofferraum/Heckklappe): RequestAction fehlgeschlagen.');
                 }
                 return;
             }
