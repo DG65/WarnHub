@@ -333,9 +333,35 @@ echo "\n== fetchWetterstation(): eigener Schwellwert wird respektiert ==\n";
 $hub5 = new WarnHub();
 $hub5->Create();
 $hub5->SetProp('WetterstationInstanceID', 10);
-$hub5->SetProp('WetterstationWindboeSchwelle', 100.0);
-$GLOBALS['whub_test_values'] = [101 => 90.0, 102 => 0.0]; // unter dem hochgesetzten eigenen Schwellwert
-check('hochgesetzter eigener Schwellwert (100 km/h) -> 90 km/h löst NICHT mehr aus', callPrivate($hub5, 'fetchWetterstation') === []);
+// Alle drei Stufen müssen angehoben werden -- sie wirken unabhängig
+// voneinander, eine einzelne höhere Moderate-Stufe allein würde die
+// niedrigere Severe-/Extreme-Stufe nicht überschreiben.
+$hub5->SetProp('WetterstationWindSchwelleModerate', 120.0);
+$hub5->SetProp('WetterstationWindSchwelleSevere', 150.0);
+$hub5->SetProp('WetterstationWindSchwelleExtreme', 200.0);
+$GLOBALS['whub_test_values'] = [101 => 90.0, 102 => 0.0]; // unter allen drei hochgesetzten Schwellwerten
+check('alle drei Stufen hochgesetzt -> 90 km/h löst NICHT mehr aus', callPrivate($hub5, 'fetchWetterstation') === []);
+
+echo "\n== windSeverityForSpeed(): drei Stufen, Standardwerte 40/65/90 km/h ==\n";
+$hub5b = new WarnHub();
+$hub5b->Create();
+check('39 km/h -> unter der niedrigsten Stufe, keine Warnung (null)', callPrivate($hub5b, 'windSeverityForSpeed', [39.0]) === null);
+check('40 km/h (Moderate-Grenze) -> "Moderate"', callPrivate($hub5b, 'windSeverityForSpeed', [40.0]) === 'Moderate');
+check('64.9 km/h -> weiterhin "Moderate" (noch unter Severe)', callPrivate($hub5b, 'windSeverityForSpeed', [64.9]) === 'Moderate');
+check('65 km/h (Severe-Grenze) -> "Severe"', callPrivate($hub5b, 'windSeverityForSpeed', [65.0]) === 'Severe');
+check('89.9 km/h -> weiterhin "Severe" (noch unter Extreme)', callPrivate($hub5b, 'windSeverityForSpeed', [89.9]) === 'Severe');
+check('90 km/h (Extreme-Grenze) -> "Extreme"', callPrivate($hub5b, 'windSeverityForSpeed', [90.0]) === 'Extreme');
+check('150 km/h -> weiterhin "Extreme" (Deckel, keine höhere Stufe)', callPrivate($hub5b, 'windSeverityForSpeed', [150.0]) === 'Extreme');
+
+echo "\n== fetchWetterstation(): meldet die tatsächlich erreichte Stufe als severity, nicht mehr pauschal Severe ==\n";
+$hub5c = new WarnHub();
+$hub5c->Create();
+$hub5c->SetProp('WetterstationInstanceID', 10);
+$GLOBALS['whub_test_values'] = [101 => 45.0, 102 => 0.0]; // 45 km/h -> Moderate, nicht Severe
+$resultModerate = callPrivate($hub5c, 'fetchWetterstation');
+check('45 km/h löst bereits aus (Moderate-Stufe, Standard 40 km/h) -- vorher hätte der pauschale 70-km/h-Wert das NICHT gemeldet', count($resultModerate) === 1);
+check('severity ist "Moderate", nicht mehr pauschal "Severe"', $resultModerate[0]['severity'] === 'Moderate');
+check('Beschreibung nennt die Stufe beim Namen', str_contains($resultModerate[0]['description'], 'Moderate'));
 
 echo "\n== DiscoverWetterstation(): korrekte Instanz über exakte Froggit-GUID gefunden ==\n";
 $hub6 = new WarnHub();

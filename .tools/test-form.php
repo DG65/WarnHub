@@ -269,6 +269,16 @@ foreach ($datenquellenPanel['items'] ?? [] as $item) {
 check('Popup "Was bedeutet dieser Wert?" (Dosisleistung/Verweildauer) steht im Datenquellen-Panel', $bfsPopup !== null);
 check('Popup enthält mindestens 5 Einordnungszeilen', $bfsPopup !== null && count($bfsPopup['popup']['items'] ?? []) >= 5);
 
+$windPopup = null;
+foreach ($datenquellenPanel['items'] ?? [] as $item) {
+    if (($item['type'] ?? '') === 'PopupButton' && str_contains($item['caption'] ?? '', 'Welchen Schwellwert')) {
+        $windPopup = $item;
+        break;
+    }
+}
+check('Popup "Welchen Schwellwert wähle ich?" (Windböen-Einordnung) steht im Datenquellen-Panel', $windPopup !== null);
+check('Popup erklärt alle drei Stufen (Moderate/Severe/Extreme)', $windPopup !== null && count($windPopup['popup']['items'] ?? []) >= 4);
+
 $standortePanel = null;
 foreach ($decoded['elements'] as $el) {
     if (($el['caption'] ?? '') === '📍  Standorte (Umkreis-Definition)') {
@@ -288,7 +298,9 @@ check('Button "Fahrzeug-/Standort-Variablen suchen" (mobiler Standort) steht im 
 check('Feld "WetterstationInstanceID" (eigene Wetterstation) vorhanden', findByName($decoded['elements'], 'WetterstationInstanceID') !== null);
 check('manuelles Feld "WetterstationWindVariableID" (andere Fabrikate, z. B. KNX) vorhanden', findByName($decoded['elements'], 'WetterstationWindVariableID') !== null);
 check('manuelles Feld "WetterstationRegenVariableID" (andere Fabrikate, z. B. KNX) vorhanden', findByName($decoded['elements'], 'WetterstationRegenVariableID') !== null);
-check('Schwellwert-Feld "WetterstationWindboeSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationWindboeSchwelle') !== null);
+check('Schwellwert-Feld "WetterstationWindSchwelleModerate" vorhanden', findByName($decoded['elements'], 'WetterstationWindSchwelleModerate') !== null);
+check('Schwellwert-Feld "WetterstationWindSchwelleSevere" vorhanden', findByName($decoded['elements'], 'WetterstationWindSchwelleSevere') !== null);
+check('Schwellwert-Feld "WetterstationWindSchwelleExtreme" vorhanden', findByName($decoded['elements'], 'WetterstationWindSchwelleExtreme') !== null);
 check('Schwellwert-Feld "WetterstationRegenrateSchwelle" vorhanden', findByName($decoded['elements'], 'WetterstationRegenrateSchwelle') !== null);
 $wetterstationBtn = null;
 foreach ($datenquellenPanel['items'] ?? [] as $item) {

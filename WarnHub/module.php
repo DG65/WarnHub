@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.27';
-    private const NEWS_VERSION = '0.1.0-beta.27';
+    private const DOC_VERSION = '0.1.0-beta.28';
+    private const NEWS_VERSION = '0.1.0-beta.28';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -329,7 +329,9 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyInteger('WetterstationWindVariableID', 0);
         $this->RegisterPropertyInteger('WetterstationRegenVariableID', 0);
-        $this->RegisterPropertyFloat('WetterstationWindboeSchwelle', 70.0);
+        $this->RegisterPropertyFloat('WetterstationWindSchwelleModerate', 40.0);
+        $this->RegisterPropertyFloat('WetterstationWindSchwelleSevere', 65.0);
+        $this->RegisterPropertyFloat('WetterstationWindSchwelleExtreme', 90.0);
         $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
         $this->RegisterPropertyBoolean('PushAktiv', true);
@@ -558,7 +560,24 @@ class WarnHub extends IPSModule
                 ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)'],
                 ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)'],
                 ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindboeSchwelle', 'caption' => 'Schwellwert Windböe (km/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'Label', 'caption' => 'Windböe -- drei Schwellwerte statt einem: eine Markise ist deutlich windempfindlicher als ein robustes Raffstore. Jede Schutzaktions-Zeile wählt über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert.'],
+                [
+                    'type' => 'PopupButton',
+                    'caption' => 'Welchen Schwellwert wähle ich?',
+                    'popup' => [
+                        'caption' => 'Windböen-Schwellwerte -- Einordnung',
+                        'items' => [
+                            ['type' => 'Label', 'caption' => 'Die Standardwerte lehnen sich an die amtlichen DWD-Windwarnstufen an (Windböen ab 50 km/h, Sturmböen 65-89 km/h, schwere Sturmböen 90-104 km/h) -- die Moderate-Stufe liegt bewusst darunter, weil Sachschutz (Markise, Raffstore) mehr Vorlauf braucht als eine reine Personen-Warnung.'],
+                            ['type' => 'Label', 'caption' => 'Moderate (Standard 40 km/h): knapp über EN-13561-Windwiderstandsklasse 2 (bis 38 km/h) -- die Grenze, ab der eine durchschnittliche Wohnhaus-Markise gefährdet ist. Empfehlung für Markisen/Sonnensegel: "Ab Schweregrad" auf Moderate setzen.'],
+                            ['type' => 'Label', 'caption' => 'Severe (Standard 65 km/h): entspricht DWDs "Sturmböen". Empfehlung für Standard-Raffstore/Rollladen/Garagentor: "Ab Schweregrad" auf Severe setzen.'],
+                            ['type' => 'Label', 'caption' => 'Extreme (Standard 90 km/h): entspricht DWDs "schwere Sturmböen" -- nur für besonders robuste Systeme oder als allgemeiner Auffangwert sinnvoll.'],
+                            ['type' => 'Label', 'caption' => 'Die tatsächliche Windwiderstandsklasse hängt vom Produkt, den Führungsschienen und der Montage ab -- die Herstellerangabe (falls vorhanden) hat immer Vorrang vor diesen Richtwerten.'],
+                        ],
+                    ],
+                ],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleModerate', 'caption' => 'Schwellwert Windböe -- Moderate (km/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleSevere', 'caption' => 'Schwellwert Windböe -- Severe (km/h)', 'digits' => 1, 'minValue' => 1],
+                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleExtreme', 'caption' => 'Schwellwert Windböe -- Extreme (km/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenrateSchwelle', 'caption' => 'Schwellwert Regenrate (mm/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
@@ -1022,6 +1041,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach im Objektbaum in den Bereich des WebFronts verlinken, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation: zweites unterstütztes Modul (Sainlogic/ELV via Wunderground-Protokoll) sowie zwei manuelle Wind-/Regen-Auswahlfelder für JEDES andere Fabrikat (KNX, Netatmo, TFA, Homematic, ...) -- keine automatische Erkennung möglich, da diese Module/KNX keine einheitliche Benennung verwenden, aber jede beliebige Variable im System lässt sich direkt auswählen'],
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation: drittes unterstütztes Modul (Meteobridge/Meteohub, deckt als Aggregator zusätzlich weitere Marken wie DAVIS ab) sowie ein letzter Rückfall bei der Suche über das Symcon-Standardprofil (findet z. B. eine bereits profilierte KNX-Wetterstation automatisch). Wichtiger Fix: Windgeschwindigkeiten in m/s (kommt bei manchen Modulen/KNX vor) werden jetzt korrekt in km/h umgerechnet -- vorher hätte eine m/s-Variable stumm gegen den km/h-Schwellwert verglichen werden können'],
+                ['type' => 'Label', 'caption' => '• Windböe: drei Schwellwerte (Moderate/Severe/Extreme, Standard 40/65/90 km/h, an DWDs eigene Warnstufen angelehnt) statt einem pauschalen Wert -- eine Markise ist windempfindlicher als ein Raffstore. Jede Schutzaktions-Zeile wählt über ihr bestehendes "Ab Schweregrad"-Feld selbst, ab welcher Stufe sie reagiert; neu ins Popup "Welchen Schwellwert wähle ich?" im Datenquellen-Panel'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1316,9 +1336,16 @@ class WarnHub extends IPSModule
         // (Raffstore/Markise) decken beide realistischen Gefahren in EINER
         // Zeile ab (Dietmars ausdrücklicher Wunsch 04.09.2026: "abhaken"
         // statt mehrerer Zeilen).
+        // Markise bewusst MIT NIEDRIGEREM Schweregrad als Raffstore (2=Moderate
+        // statt 3=Severe): Markisen sind windempfindlicher (meist EN-13561-
+        // Windwiderstandsklasse 1-3, bis ca. 38-49 km/h) als ein robustes
+        // Raffstore -- die eigene Wetterstation meldet bei Windböen jetzt
+        // gestuft (Moderate/Severe/Extreme, siehe windSeverityForSpeed()),
+        // Dietmars Nachfrage 04.09.2026, ob 70 km/h pauschal für beide
+        // Aktionstypen sinnvoll ist.
         $typeDefaults = [
             'raffstore' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 3, 'AutoOff' => 0],
-            'markise' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 3, 'AutoOff' => 0],
+            'markise' => ['Kategorien' => ['sturm', 'hagel'], 'MinSeverity' => 2, 'AutoOff' => 0],
             'garage' => ['Kategorien' => [], 'MinSeverity' => 3, 'AutoOff' => 0], // leer = jede Kategorie
             // Auch Starkregen -- ein offenes Fenster lässt bei Dauerregen genauso
             // Wasser rein wie bei Sturm/Hagel (anders als Raffstore/Markise, die
@@ -2349,6 +2376,48 @@ class WarnHub extends IPSModule
         return $value;
     }
 
+    /**
+     * Ordnet eine gemessene Windböe (km/h) einer der drei konfigurierbaren
+     * Schwellwertstufen zu -- angelehnt an DWDs eigene Warnstufen (Windböen
+     * ab 50 km/h, Sturmböen 65-89 km/h, schwere Sturmböen 90-104 km/h),
+     * aber mit niedrigerem Moderate-Standardwert (40 statt 50 km/h), weil
+     * Sachschutz (Markise, Raffstore) mehr Vorlauf braucht als eine reine
+     * Personen-Warnung (siehe EN-13561-Windwiderstandsklassen für Markisen,
+     * Klasse 2 endet bei 38 km/h). Jede Schutzaktions-Zeile kann so über
+     * ihr bestehendes "Ab Schweregrad"-Feld selbst wählen, ab welcher Stufe
+     * sie reagiert -- z. B. eine empfindliche Markise schon ab Moderate,
+     * ein robustes Raffstore erst ab Severe/Extreme. Dietmars Frage
+     * 04.09.2026, ob 70 km/h pauschal für Markise UND Jalousie sinnvoll
+     * ist (Antwort: nein, siehe README/Formular-Popup). null = unter der
+     * niedrigsten Stufe, keine Warnung.
+     */
+    private function windSeverityForSpeed(float $windboe): ?string
+    {
+        $extreme = $this->ReadPropertyFloat('WetterstationWindSchwelleExtreme');
+        if ($extreme <= 0) {
+            $extreme = 90.0;
+        }
+        $severe = $this->ReadPropertyFloat('WetterstationWindSchwelleSevere');
+        if ($severe <= 0) {
+            $severe = 65.0;
+        }
+        $moderate = $this->ReadPropertyFloat('WetterstationWindSchwelleModerate');
+        if ($moderate <= 0) {
+            $moderate = 40.0;
+        }
+
+        if ($windboe >= $extreme) {
+            return 'Extreme';
+        }
+        if ($windboe >= $severe) {
+            return 'Severe';
+        }
+        if ($windboe >= $moderate) {
+            return 'Moderate';
+        }
+        return null;
+    }
+
     private function fetchWetterstation(): array
     {
         $instanceID = $this->ReadPropertyInteger('WetterstationInstanceID');
@@ -2373,10 +2442,6 @@ class WarnHub extends IPSModule
             return [];
         }
 
-        $windboeSchwelle = $this->ReadPropertyFloat('WetterstationWindboeSchwelle');
-        if ($windboeSchwelle <= 0) {
-            $windboeSchwelle = 70.0;
-        }
         $regenrateSchwelle = $this->ReadPropertyFloat('WetterstationRegenrateSchwelle');
         if ($regenrateSchwelle <= 0) {
             $regenrateSchwelle = 25.0;
@@ -2387,7 +2452,8 @@ class WarnHub extends IPSModule
 
         if ($windboeID !== null) {
             $windboe = $this->readWindSpeedKmh($windboeID);
-            if ($windboe >= $windboeSchwelle) {
+            $severity = $this->windSeverityForSpeed($windboe);
+            if ($severity !== null) {
                 $out[] = [
                     'identifier' => 'wetterstation-windboe-' . $windIdentSuffix,
                     'source' => 'wetterstation',
@@ -2395,12 +2461,12 @@ class WarnHub extends IPSModule
                     'event' => 'Sturm (eigene Messung)',
                     'headline' => sprintf('Eigene Wetterstation: Windböe %s km/h', number_format($windboe, 1, ',', '.')),
                     'description' => sprintf(
-                        'Lokal gemessene Windböe %s km/h (eigener Schwellwert %s km/h) -- unabhängig von amtlichen Warnungen, eigener Schwellwert, keine amtliche Klassifikation.',
+                        'Lokal gemessene Windböe %s km/h, Stufe "%s" -- unabhängig von amtlichen Warnungen, eigene Schwellwerte, keine amtliche Klassifikation.',
                         number_format($windboe, 1, ',', '.'),
-                        number_format($windboeSchwelle, 1, ',', '.')
+                        $severity
                     ),
                     'instruction' => '',
-                    'severity' => 'Severe',
+                    'severity' => $severity,
                     'effective' => null,
                     'onset' => null,
                     'expires' => null,

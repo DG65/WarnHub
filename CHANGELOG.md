@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.0-beta.28 (2026-09-04)
+
+- Windböe-Schwellwert der eigenen Wetterstation: drei konfigurierbare
+  Stufen (Moderate/Severe/Extreme) statt einem pauschalen Wert (bisher
+  fest 70 km/h, immer als "Severe" gemeldet). Standardwerte 40/65/90 km/h,
+  an DWDs eigene Windwarnstufen angelehnt (Windböen ab 50, Sturmböen
+  65-89, schwere Sturmböen 90-104 km/h) -- die Moderate-Stufe liegt
+  bewusst darunter, weil Sachschutz mehr Vorlauf braucht als eine reine
+  Personen-Warnung (EN-13561-Windwiderstandsklasse 2 für Markisen endet
+  bei 38 km/h). `windSeverityForSpeed()` meldet jetzt die tatsächlich
+  erreichte Stufe statt pauschal "Severe" -- jede Schutzaktions-Zeile
+  nutzt dafür ihr bereits vorhandenes Feld "Ab Schweregrad", um selbst zu
+  wählen, ab welcher Stufe sie reagiert. Neuer Standard für automatisch
+  gefundene Markisen-Zeilen: "Ab Schweregrad" = Moderate statt Severe
+  (windempfindlicher als ein Raffstore, das weiterhin bei Severe bleibt).
+  Neues Popup "Welchen Schwellwert wähle ich?" im Datenquellen-Panel
+  erklärt EN-13561-Windwiderstandsklassen und den DWD-Vergleich.
+  Recherchiert und mit Dietmar abgestimmt 04.09.2026: der bisherige feste
+  70-km/h-Wert war für Markisen (übliche Windwiderstandsklasse 1-3, bis
+  28/38/49 km/h) zu hoch angesetzt.
+
 ## 0.1.0-beta.27 (2026-09-04)
 
 - Drittes unterstütztes Wetterstations-Modul: elueckel/Symcon_Meteobridge_Meteohub
