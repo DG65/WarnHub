@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.3';
-    private const NEWS_VERSION = '0.1.0-beta.3';
+    private const DOC_VERSION = '0.1.0-beta.4';
+    private const NEWS_VERSION = '0.1.0-beta.4';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -388,6 +388,12 @@ class WarnHub extends IPSModule
                     'type' => 'Button',
                     'caption' => '🔎 Jetzt prüfen',
                     'onClick' => 'echo WHUB_Poll($id);',
+                ],
+                ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'],
+                [
+                    'type' => 'Button',
+                    'caption' => '🧪 Testbenachrichtigung senden',
+                    'onClick' => 'echo WHUB_TestPush($id);',
                 ],
             ],
         ];
@@ -1380,6 +1386,24 @@ class WarnHub extends IPSModule
             $result['cancelled'],
             $result['actionsTriggered']
         );
+    }
+
+    /** Schickt eine harmlose Testbenachrichtigung an alle aktivierten Push-Ziele, unabhängig von echten Warnungen -- zum Prüfen, ob der Zustellweg (WebFront/Kachel-Visualisierung, Signalton) tatsächlich ankommt. */
+    public function TestPush(): string
+    {
+        $active = array_filter($this->decodeWebFronts(), fn ($w) => $w['Aktiv']);
+        if (count($active) === 0) {
+            return '⚠️ Kein aktiviertes Push-Ziel -- oben in "🔔 Benachrichtigung" mindestens eine Instanz aktivieren.';
+        }
+        $sent = $this->pushToAllWebfronts(
+            '🧪 WarnHub Testbenachrichtigung',
+            'Wenn diese Meldung ankommt, funktioniert der Zustellweg. Keine echte Warnung.',
+            $this->ReadPropertyString('PushSound')
+        );
+        if ($sent === 0) {
+            return sprintf('⚠️ Test fehlgeschlagen -- an keines der %d aktivierten Ziele konnte zugestellt werden (siehe Systemprotokoll).', count($active));
+        }
+        return sprintf('✅ Testbenachrichtigung an %d von %d aktivierten Ziel(en) gesendet.', $sent, count($active));
     }
 
     private function processWarnings(array $warnings): array

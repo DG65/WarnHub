@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.4 (2026-09-04)
+
+- Fix: Push-Ziele-Liste zeigte Name/Instanz-ID nicht an (fehlendes `edit` je Spalte bei
+  `type: List`).
+- Neuer Knopf "🧪 Testbenachrichtigung senden" (Panel "Prüfung & Status") -- schickt eine
+  harmlose Testmeldung an alle aktivierten Push-Ziele, unabhängig von einer echten Warnung.
+
 ## 0.1.0-beta.3 (2026-09-04)
 
 - Fix: Konfigurationsformular ließ sich nach dem letzten Update nicht mehr öffnen
