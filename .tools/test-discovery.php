@@ -17,6 +17,11 @@ const OTHER_MODULE_GUID = '{00000000-0000-0000-0000-000000000000}';
 // exakte GUID liefert null Treffer, erst die Namenssuche ("kachel" im
 // Modulnamen) findet die echte Instanz.
 const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
+const TELEGRAM_BOT_GUID = '{32464EBD-4CCC-6174-4031-5AA374F7CD8D}';
+// Ebenfalls bewusst über eine Fake-GUID + Namenssuche aufgelöst, analog zu
+// KACHEL_VISU_GUID_ACTUAL -- prüft den Rückfallpfad auch für den zweiten,
+// neu hinzugekommenen Push-Kanal (nicht nur den ersten).
+const PUSHOVER_GUID_ACTUAL = '{22222222-2222-2222-2222-222222222222}';
 
 // Kleiner Fake-Objektbaum:
 //   0 (Root)
@@ -34,6 +39,8 @@ const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
 //    +- 20 Instanz "WebFront Familie" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 21 Instanz "WebFront Gast" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 22 Instanz "Dietmar" (Kachel-Visualisierung, NUR über Namenssuche auffindbar)
+//    +- 26 Instanz "Familie Bot" (Telegram, exakte GUID liefert Treffer)
+//    +- 27 Instanz "Dietmar Pushover" (Pushover, NUR über Namenssuche auffindbar)
 //    +- 23 Instanz "Blitz" (Auto, wie Tessies TessieVehicle)
 //        +- 231 Var "Fenster schließen" (aktionsfähig -- Treffer, Typ fenster)
 //        +- 232 Var "Fenster" (aktionsfähig, ABER ohne "schließen" -- KEIN
@@ -48,7 +55,7 @@ const KACHEL_VISU_GUID_ACTUAL = '{11111111-1111-1111-1111-111111111111}';
 //              aber KEINE Zustands-Variable auffindbar -> Zeile bleibt
 //              inaktiv, Sicherheitssperre statt Raten)
 $GLOBALS['whub_test_tree'] = [
-    0 => [10, 20, 21, 22, 23, 25],
+    0 => [10, 20, 21, 22, 26, 27, 23, 25],
     10 => [11, 12, 13, 14, 15, 16, 17, 18],
     11 => [111],
     12 => [121],
@@ -62,6 +69,8 @@ $GLOBALS['whub_test_tree'] = [
     20 => [],
     21 => [],
     22 => [],
+    26 => [],
+    27 => [],
     23 => [231, 232, 233, 234],
     25 => [251],
 ];
@@ -79,6 +88,8 @@ $GLOBALS['whub_test_objects'] = [
     20 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Familie'],
     21 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Gast'],
     22 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar'],
+    26 => ['ObjectType' => 1, 'ObjectName' => 'Familie Bot'],
+    27 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar Pushover'],
     23 => ['ObjectType' => 1, 'ObjectName' => 'Blitz'],
     25 => ['ObjectType' => 1, 'ObjectName' => 'Schneemobil'],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Position'],
@@ -114,10 +125,13 @@ $GLOBALS['whub_test_instancesByModule'] = [
     WEBFRONT_GUID => [20, 21],
     KACHEL_VISU_GUID => [], // exakte GUID liefert bewusst NICHTS -- Namenssuche muss greifen
     KACHEL_VISU_GUID_ACTUAL => [22],
+    TELEGRAM_BOT_GUID => [26],
+    PUSHOVER_GUID_ACTUAL => [27],
 ];
 $GLOBALS['whub_test_moduleNames'] = [
     WEBFRONT_GUID => 'WebFront',
     KACHEL_VISU_GUID_ACTUAL => 'Kachel Visualisierung',
+    PUSHOVER_GUID_ACTUAL => 'Pushover',
     OTHER_MODULE_GUID => 'Irgendwas',
 ];
 
@@ -293,17 +307,19 @@ function check(string $label, bool $ok): void
 $hub = new WarnHub();
 $hub->Create();
 
-echo "== WebFront-/Kachel-Visualisierung-Discovery ==\n";
+echo "== WebFront-/Kachel-Visualisierung-/Telegram-/Pushover-Discovery ==\n";
 $msg = $hub->DiscoverWebFronts();
-check('meldet 3 neue Ziele (2× WebFront exakte GUID + 1× Kachel-Visu nur über Namenssuche)', str_contains($msg, '3 neue'));
+check('meldet 5 neue Ziele (2× WebFront + 1× Kachel-Visu + 1× Telegram exakte GUID + 1× Pushover nur über Namenssuche)', str_contains($msg, '5 neue'));
 [$field, $key, $valuesJson] = $hub->lastValuesUpdate('WebFronts');
 check('schreibt in das Feld "WebFronts"', $field === 'WebFronts');
 $rows = json_decode($valuesJson, true);
-check('3 Zeilen gefunden', count($rows) === 3);
-check('alle drei standardmäßig aktiv', $rows[0]['Aktiv'] === true && $rows[1]['Aktiv'] === true && $rows[2]['Aktiv'] === true);
+check('5 Zeilen gefunden', count($rows) === 5);
+check('alle fünf standardmäßig aktiv', count(array_filter($rows, fn ($r) => $r['Aktiv'] === true)) === 5);
 $byId = array_column($rows, null, 'InstanceID');
 check('Instanz 20/21 als Typ "webfront" erkannt (exakte GUID)', ($byId[20]['Typ'] ?? null) === 'webfront' && ($byId[21]['Typ'] ?? null) === 'webfront');
 check('Instanz 22 ("Dietmar") als Typ "kachel" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer)', ($byId[22]['Typ'] ?? null) === 'kachel');
+check('Instanz 26 ("Familie Bot") als Typ "telegram" erkannt (exakte GUID)', ($byId[26]['Typ'] ?? null) === 'telegram');
+check('Instanz 27 ("Dietmar Pushover") als Typ "pushover" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer)', ($byId[27]['Typ'] ?? null) === 'pushover');
 
 // Nutzer deaktiviert "WebFront Gast" (id 21) und speichert (Property).
 foreach ($rows as &$r) {

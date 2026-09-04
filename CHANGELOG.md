@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.0-beta.21 (2026-09-04)
+
+- Mehrkanal-Push: neben WebFront und Kachel-Visualisierung jetzt auch
+  Telegram (offizielles Symcon-Modul symcon/TelegramBot, `TB_SendMessage`)
+  und Pushover (Community-Modul timo-u/Symcon_Pushover, `TUPO_SendMessage`)
+  als Push-Ziele. Beide Funktionssignaturen direkt gegen den echten
+  module.php-Quellcode der jeweiligen GitHub-Repos verifiziert, nicht nur
+  gegen deren README. Discovery/Formular/Aktivierung nutzen dieselbe,
+  bereits bestehende WebFronts-Liste + denselben Such-Mechanismus wie
+  WebFront/Kachel-Visualisierung -- nur zwei zusätzliche GUIDs und zwei
+  zusätzliche Typ-Optionen, keine neue Infrastruktur. Telegram fasst
+  Titel+Text zu einer Nachricht zusammen (kennt keinen separaten Titel);
+  Pushover erhält Titel und Text getrennt sowie eine aus dem Schweregrad
+  abgeleitete Priorität (Severe/Extreme -> hoch). Ohne eigenen Telegram-Bot/
+  Pushover-Account nicht selbst live gegenprüfbar -- geringeres Risiko als
+  bei der Hagelschutz-Beta, da beide Module etabliert und der Quellcode
+  direkt eingesehen wurde, aber ausdrücklich als "ungetestet" in der Doku
+  vermerkt. Dietmars ausdrücklicher Wunsch 04.09.2026 ("IPSView,
+  Mehrkanal-Push und eine Warnungs-Historie packen wir nun an."), erster
+  von drei Teilen.
+
 ## 0.1.0-beta.20 (2026-09-04)
 
 - BETA, ausdrücklich als ungetestet gekennzeichnet: eigene VKF-Hagelschutz-

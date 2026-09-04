@@ -38,6 +38,16 @@ function VISU_PostNotificationEx(int $id, string $title, string $text, string $i
     $GLOBALS['whub_test_pushCalls'][] = ['kachel', $id, $title, $text, $sound];
     return true;
 }
+function TB_SendMessage(int $id, string $text): bool
+{
+    $GLOBALS['whub_test_pushCalls'][] = ['telegram', $id, $text];
+    return true;
+}
+function TUPO_SendMessage(int $id, string $title, string $message, int $priority = 0): bool
+{
+    $GLOBALS['whub_test_pushCalls'][] = ['pushover', $id, $title, $message, $priority];
+    return true;
+}
 function IPS_GetInstanceListByModuleID(string $guid): array
 {
     return [];
@@ -215,6 +225,29 @@ $GLOBALS['whub_test_pushCalls'] = [];
 $sent = callPrivate($hub2, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
 check('meldet 2 zugestellte Pushes ohne Filter', $sent === 2);
 check('beide Ziele wurden tatsächlich angesprochen', count($GLOBALS['whub_test_pushCalls']) === 2);
+
+echo "\n== pushToAllWebfronts(): Mehrkanal-Push (Telegram TB_SendMessage, Pushover TUPO_SendMessage) ==\n";
+$hub4 = new WarnHub();
+$hub4->Create();
+$hub4->SetProp('WebFronts', json_encode([
+    ['InstanceID' => 201, 'Name' => 'Telegram Familie', 'Typ' => 'telegram', 'Aktiv' => true],
+    ['InstanceID' => 202, 'Name' => 'Pushover Dietmar', 'Typ' => 'pushover', 'Aktiv' => true],
+]));
+$GLOBALS['whub_test_pushCalls'] = [];
+$sent = callPrivate($hub4, 'pushToAllWebfronts', ['🚨 Sturm', 'Achtung Sturm', 'alarm', [], 'Severe']);
+check('meldet 2 zugestellte Pushes (Telegram + Pushover)', $sent === 2);
+$telegramCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'telegram'))[0] ?? null;
+check('Telegram-Aufruf fand statt (TB_SendMessage)', $telegramCall !== null);
+check('Telegram: Titel und Text zu EINER Nachricht zusammengefasst (TB_SendMessage kennt keinen Titel)', $telegramCall !== null && $telegramCall[2] === "🚨 Sturm\nAchtung Sturm");
+$pushoverCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'pushover'))[0] ?? null;
+check('Pushover-Aufruf fand statt (TUPO_SendMessage)', $pushoverCall !== null);
+check('Pushover: Titel und Text bleiben GETRENNT (TUPO_SendMessage kennt einen eigenen Titel)', $pushoverCall !== null && $pushoverCall[2] === '🚨 Sturm' && $pushoverCall[3] === 'Achtung Sturm');
+check('Pushover: Severity "Severe" wird zu Priorität 1 (hoch)', $pushoverCall !== null && $pushoverCall[4] === 1);
+
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub4, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm', [], 'Minor']);
+$pushoverCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'pushover'))[0] ?? null;
+check('Pushover: Severity "Minor" (bzw. ohne Angabe) bleibt Priorität 0 (normal)', $pushoverCall !== null && $pushoverCall[4] === 0);
 
 echo "\n== Ende-zu-Ende: mobiler Standort mit eigenem Push-Ziel über processWarnings() ==\n";
 $hub3 = new WarnHub();

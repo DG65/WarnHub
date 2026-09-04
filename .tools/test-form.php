@@ -203,6 +203,18 @@ foreach ($schutzaktionenListe['columns'] ?? [] as $col) {
 }
 $typOptions = array_column($typSpalte['edit']['options'] ?? [], 'value');
 check('Schutzaktionstyp "fenster" (Fenster schließen, z. B. Tesla) steht zur Auswahl', in_array('fenster', $typOptions, true));
+
+$webfrontsListe = findByName($decoded['elements'], 'WebFronts');
+$pushTypSpalte = null;
+foreach ($webfrontsListe['columns'] ?? [] as $col) {
+    if (($col['name'] ?? null) === 'Typ') {
+        $pushTypSpalte = $col;
+        break;
+    }
+}
+$pushTypOptions = array_column($pushTypSpalte['edit']['options'] ?? [], 'value');
+check('Push-Ziel-Typ "telegram" steht zur Auswahl (Mehrkanal-Push)', in_array('telegram', $pushTypOptions, true));
+check('Push-Ziel-Typ "pushover" steht zur Auswahl (Mehrkanal-Push)', in_array('pushover', $pushTypOptions, true));
 check('Schutzaktionstyp "kofferraum" (Kofferraum/Heckklappe schließen) steht zur Auswahl', in_array('kofferraum', $typOptions, true));
 check('Schutzaktionen: Spalte "ZustandsVariableID" vorhanden (Sicherheitsprüfung vor dem Kofferraum-Umschalten)', findByName($schutzaktionenListe['columns'], 'ZustandsVariableID') !== null);
 

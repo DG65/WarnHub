@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.20';
-    private const NEWS_VERSION = '0.1.0-beta.20';
+    private const DOC_VERSION = '0.1.0-beta.21';
+    private const NEWS_VERSION = '0.1.0-beta.21';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -179,6 +179,17 @@ class WarnHub extends IPSModule
     // dispatcht dieselbe Stelle, die WFC_PushNotification für WHUB_WEBFRONT_GUID
     // aufruft, für DIESE GUID stattdessen an VISU_PostNotificationEx().
     private const KACHEL_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
+
+    // Telegram (offizielles Symcon-Modul symcon/TelegramBot, Prefix TB) und
+    // Pushover (Community-Modul timo-u/Symcon_Pushover, Prefix TUPO) --
+    // beide GUIDs direkt gegen den module.json-Quellcode der jeweiligen
+    // GitHub-Repos verifiziert (04.09.2026), nicht nur gegen deren README.
+    // Anders als bei Hagelschutz Schweiz stand hier kein eigenes Testgerät
+    // zur Verfügung (kein eigener Telegram-Bot/Pushover-Account) -- die
+    // Funktionssignaturen selbst sind aber direkt aus dem echten
+    // module.php-Quellcode entnommen, nicht geraten.
+    private const TELEGRAM_BOT_GUID = '{32464EBD-4CCC-6174-4031-5AA374F7CD8D}';
+    private const PUSHOVER_GUID = '{CAA4B646-5571-4B72-8897-7A3739B25C99}';
 
     // Froggit-Wetterstation (Modul "Froggit", Vendor HS) -- GUID live an
     // Dietmars System verifiziert (04.09.2026, Instanz #32052 "Wetterstation").
@@ -490,15 +501,16 @@ class WarnHub extends IPSModule
             'caption' => '🔔  Benachrichtigung',
             'expanded' => true,
             'items' => [
-                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte WebFront-/Kachel-Visualisierung-Instanzen (auch Handy)'],
-                ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton', 'options' => $this->soundOptions()],
+                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte Push-Ziele (WebFront/Kachel-Visualisierung/Telegram/Pushover, auch Handy)'],
+                ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton (nur WebFront/Kachel-Visualisierung)', 'options' => $this->soundOptions()],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 WebFront-Instanzen suchen',
+                    'caption' => '🔎 Push-Ziele suchen',
                     'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
                 ],
                 ['type' => 'Label', 'caption' => $this->webfrontStatusLine()],
-                ['type' => 'Label', 'caption' => 'Sucht sowohl klassische WebFront-Instanzen als auch Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
+                ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul) und Pushover-Instanzen (Community-Modul). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
+                ['type' => 'Label', 'caption' => 'Telegram/Pushover: Anbindung anhand des echten Quellcodes der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
                 [
                     'type' => 'List',
                     'name' => 'WebFronts',
@@ -507,7 +519,12 @@ class WarnHub extends IPSModule
                     'delete' => true,
                     'columns' => [
                         ['caption' => 'Name', 'name' => 'Name', 'width' => '220px', 'edit' => ['type' => 'ValidationTextBox', 'enabled' => false]],
-                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '140px', 'edit' => ['type' => 'Select', 'options' => [['caption' => 'WebFront', 'value' => 'webfront'], ['caption' => 'Kachel-Visualisierung', 'value' => 'kachel']]]],
+                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '180px', 'edit' => ['type' => 'Select', 'options' => [
+                            ['caption' => 'WebFront', 'value' => 'webfront'],
+                            ['caption' => 'Kachel-Visualisierung', 'value' => 'kachel'],
+                            ['caption' => 'Telegram', 'value' => 'telegram'],
+                            ['caption' => 'Pushover', 'value' => 'pushover'],
+                        ]]],
                         ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '80px', 'edit' => ['type' => 'CheckBox']],
                     ],
@@ -761,6 +778,12 @@ class WarnHub extends IPSModule
         foreach ($this->findInstancesByModuleNameSubstring(self::KACHEL_VISU_GUID, 'kachel') as $instanceID => $moduleName) {
             $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'kachel'];
         }
+        foreach ($this->findInstancesByModuleNameSubstring(self::TELEGRAM_BOT_GUID, 'telegram') as $instanceID => $moduleName) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'telegram'];
+        }
+        foreach ($this->findInstancesByModuleNameSubstring(self::PUSHOVER_GUID, 'pushover') as $instanceID => $moduleName) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'pushover'];
+        }
         return $out;
     }
 
@@ -809,7 +832,7 @@ class WarnHub extends IPSModule
             return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
         if ($added === 0) {
-            return '⚠️ Weder WebFront- noch Kachel-Visualisierung-Instanzen im Objektbaum gefunden.';
+            return '⚠️ Weder WebFront-, Kachel-Visualisierung-, Telegram-Bot- noch Pushover-Instanzen im Objektbaum gefunden.';
         }
         return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
     }
@@ -819,7 +842,7 @@ class WarnHub extends IPSModule
         $rows = $this->decodeWebFronts();
         $active = count(array_filter($rows, fn ($w) => $w['Aktiv']));
         if (count($rows) === 0) {
-            return 'ℹ️ Noch keine Push-Ziele gesucht -- oben "🔎 WebFront-Instanzen suchen" klicken.';
+            return 'ℹ️ Noch keine Push-Ziele gesucht -- oben "🔎 Push-Ziele suchen" klicken.';
         }
         if ($active === 0) {
             return sprintf('⚠️ %d Push-Ziel(e) gefunden, aber keines aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.', count($rows));
@@ -860,7 +883,7 @@ class WarnHub extends IPSModule
             'caption' => '👋  Wozu dieses Modul?',
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz -- Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei, Pegelstände, Radioaktivität) plus europaweite Wetterwarnungen (deckt Österreich/Schweiz mit ab) und optional die eigene Wetterstation als Sicherheitsnetz -- und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt, auch mobile Standorte im Ausland.'],
-                ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront- und Kachel-Visualisierung-Geräten (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
+                ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront-, Kachel-Visualisierung-, Telegram- und Pushover-Zielen (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckPurposeIntro($id);'],
             ],
         ];
@@ -894,6 +917,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Neue Datenquelle für Österreich: direkte GeoSphere-Austria-Anbindung (warnungen.zamg.at) -- koordinatengenau statt Namensabgleich, übernimmt für österreichische Standorte automatisch von Meteoalarm, sobald aktiviert'],
                 ['type' => 'Label', 'caption' => '• Neue Datenquelle für die Schweiz: amtliche Hochwasser-Gefahrenstufen (BAFU/LINDAS) -- echte behördliche Klassifikation (1-5), nicht nur ein eigener Schwellwert'],
                 ['type' => 'Label', 'caption' => '• BETA (ungetestet): eigene VKF-Hagelschutz-Signalbox (Schweiz) als Datenquelle -- eigenes Panel, Rückmeldungen willkommen'],
+                ['type' => 'Label', 'caption' => '• Mehrkanal-Push: neben WebFront/Kachel-Visualisierung jetzt auch Telegram (offizielles Symcon-Modul) und Pushover (Community-Modul) als Push-Ziele -- einfach "🔎 Push-Ziele suchen" erneut klicken, vorhandene Telegram-Bot-/Pushover-Instanzen werden automatisch gefunden'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2699,7 +2723,8 @@ class WarnHub extends IPSModule
                             $this->buildPushTitle($w['severity'], $w['event']),
                             $this->buildPushText($standort['Name'], $w, $nameMatched),
                             $pushSound,
-                            $pushZiele
+                            $pushZiele,
+                            $w['severity']
                         );
                     }
                     $newlyPushed++;
@@ -2829,15 +2854,17 @@ class WarnHub extends IPSModule
 
     /**
      * Pusht an alle aktivierten Ziele -- je nach Typ per WFC_PushNotification
-     * (WebFront) oder VISU_PostNotificationEx (Kachel-Visualisierung), siehe
+     * (WebFront), VISU_PostNotificationEx (Kachel-Visualisierung),
+     * TB_SendMessage (Telegram) oder TUPO_SendMessage (Pushover), siehe
      * discoverPushTargets(). $onlyNames (bereits über parsePushZielNames()
      * kleingeschrieben) schränkt optional auf namentlich genannte Ziele ein
      * -- leer = an alle aktivierten Ziele (bisheriges Verhalten), genutzt für
      * Standorte mit eigenem "Push nur an ..."-Filter (z. B. ein mobiler
      * Standort soll nur das zugehörige Handy benachrichtigen, nicht auch das
-     * der anderen Person).
+     * der anderen Person). $severity steuert nur die Pushover-Priorität
+     * (Severe/Extreme -> hohe Priorität) und bleibt sonst ungenutzt.
      */
-    private function pushToAllWebfronts(string $title, string $text, string $sound, array $onlyNames = []): int
+    private function pushToAllWebfronts(string $title, string $text, string $sound, array $onlyNames = [], string $severity = ''): int
     {
         $sent = 0;
         foreach ($this->decodeWebFronts() as $w) {
@@ -2863,6 +2890,26 @@ class WarnHub extends IPSModule
                     continue;
                 }
                 $ok = @VISU_PostNotificationEx($w['InstanceID'], $title, $text, 'Alert', $sound, 0);
+            } elseif ($w['Typ'] === 'telegram') {
+                // TB_SendMessage() (offizielles Symcon-Modul symcon/TelegramBot)
+                // kennt keinen separaten Titel -- Titel+Text deshalb zu einer
+                // Nachricht zusammengefasst.
+                if (!function_exists('TB_SendMessage')) {
+                    $this->LogError('pushToAllWebfronts', 'TB_SendMessage ist nicht verfügbar (kein Telegram-Bot-Modul installiert).');
+                    continue;
+                }
+                $ok = @TB_SendMessage($w['InstanceID'], $title . "\n" . $text);
+            } elseif ($w['Typ'] === 'pushover') {
+                // TUPO_SendMessage() (Community-Modul timo-u/Symcon_Pushover)
+                // kennt Titel getrennt vom Text sowie eine Priorität -- Severe/
+                // Extreme werden als "hohe Priorität" (1) markiert, alles
+                // andere als normal (0).
+                if (!function_exists('TUPO_SendMessage')) {
+                    $this->LogError('pushToAllWebfronts', 'TUPO_SendMessage ist nicht verfügbar (kein Pushover-Modul installiert).');
+                    continue;
+                }
+                $priority = in_array($severity, ['Severe', 'Extreme'], true) ? 1 : 0;
+                $ok = @TUPO_SendMessage($w['InstanceID'], $title, $text, $priority);
             } else {
                 if (!function_exists('WFC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');

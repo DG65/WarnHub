@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.20-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.21-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -11,8 +11,9 @@ Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegelstände, Radi
 direkte amtliche Quellen für Österreich (GeoSphere Austria) und die Schweiz
 (BAFU-Hochwasser-Gefahrenstufen), europaweite Wetterwarnungen für 39 Länder sowie optional die
 eigene Wetterstation als unabhängiges Sicherheitsnetz -- gefiltert auf den selbst definierten
-Umkreis um eigene (auch mobile) Standorte, mit Push-Benachrichtigung an
-WebFront-/Kachel-Visualisierung-Geräte und optionalen Schutzaktionen.
+Umkreis um eigene (auch mobile) Standorte, mit Mehrkanal-Push-Benachrichtigung an
+WebFront-/Kachel-Visualisierung-Geräte, Telegram und Pushover sowie optionalen
+Schutzaktionen.
 
 ## Was tut dieses Modul?
 
@@ -71,8 +72,10 @@ Push-Ziele benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleich
 genutzten Standorten).
 
 Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen **aktivierten**
-WebFront- und Kachel-Visualisierung-Instanzen (automatisch im Objektbaum gefunden und
-vorausgewählt, auch am Handy; einzelne Instanzen lassen sich abwählen) und können optional
+Push-Zielen -- WebFront- und Kachel-Visualisierung-Instanzen sowie, falls installiert,
+Telegram-Bot- (offizielles Symcon-Modul) und Pushover-Instanzen (Community-Modul), jeweils
+automatisch im Objektbaum gefunden und vorausgewählt, auch am Handy; einzelne Ziele lassen
+sich abwählen -- und können optional
 **Schutzaktionen** auslösen --
 z. B. Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Autofenster
 schließen, Kofferraum/Heckklappe schließen (mit zwingender Sicherheitsprüfung gegen ein
@@ -104,8 +107,9 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
    "Fahrzeug-/Standort-Variablen suchen" für einen mobilen Standort (Tessie/Geofency).
 2. Datenquellen prüfen (NINA ist standardmäßig aktiv, alle anderen optional zusätzlich) --
    für eine eigene Wetterstation reicht meist der Knopf "Wetterstation suchen".
-3. Push-Benachrichtigung: Knopf "WebFront-Instanzen suchen" klicken (findet sowohl
-   klassische WebFront-Instanzen als auch Kachel-Visualisierung-Instanzen).
+3. Push-Benachrichtigung: Knopf "Push-Ziele suchen" klicken (findet WebFront-Instanzen,
+   Kachel-Visualisierung-Instanzen sowie -- falls installiert -- Telegram-Bot- und
+   Pushover-Instanzen).
 4. Optional: Knopf "Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster
    schließen/Heckklappe/Sirene durchsuchen" klicken.
 
@@ -114,7 +118,8 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
 Die Standort-, Datenquellen-, Push-Ziel- und Schutzaktionen-Suche folgen demselben Prinzip:
 gefundene Treffer werden als **bereits aktivierte** Zeile vorgeschlagen (ein gefundener
 mobiler Standort ist sofort mit den Live-Variablen verknüpft, eine gefundene Wetterstation
-ist sofort einsatzbereit, Push geht an jede gefundene WebFront-/Kachel-Visualisierung-Instanz,
+ist sofort einsatzbereit, Push geht an jedes gefundene Ziel (WebFront/Kachel-Visualisierung/
+Telegram/Pushover),
 jede gefundene Raffstore-/Jalousie-/Markise-/Garage-/Fenster-/Sirene-Steuerung ist ab der
 nächsten passenden Warnung scharf) -- nicht gewünschte Treffer lassen sich einfach über die
 Aktiv-Spalte abwählen. Eine erneute Suche
@@ -182,6 +187,16 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   aber mangels eigener Signalbox nicht live gegengeprüft -- anders als jede andere Quelle in
   diesem Modul. Setzt eine physisch bei einem konkreten Schweizer Gebäude registrierte
   Signalbox voraus (hagelschutz-einfach-automatisch.ch, kein reiner Software-Zugang).
+- Telegram- und Pushover-Push sind ebenfalls **ohne eigenen Bot-/Account-Zugang nicht live
+  gegengeprüft** -- die aufgerufenen Funktionen (`TB_SendMessage` bzw. `TUPO_SendMessage`)
+  stammen aber direkt aus dem echten Quellcode der jeweiligen, etablierten Symcon-Module
+  (nicht nur deren Dokumentation), das Risiko ist damit geringer als bei der Hagelschutz-Beta.
+  Voraussetzung ist jeweils eine bereits eingerichtete TelegramBot- bzw. Pushover-Instanz --
+  WarnHub bindet nur an, richtet den Bot/Account selbst nicht ein. Telegram kennt in der
+  aufgerufenen Funktion keinen separaten Titel; Titel und Text werden deshalb zu einer
+  Nachricht zusammengefasst. Der Signalton (oben einstellbar) gilt nur für WebFront/
+  Kachel-Visualisierung -- Telegram und Pushover verwenden ihre eigene, in der jeweiligen App
+  konfigurierte Benachrichtigungstonauswahl.
   Rückmeldungen zur Funktionsfähigkeit sind ausdrücklich willkommen.
 
 ## Lizenz
