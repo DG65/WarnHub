@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0-beta.35 (2026-09-05)
+
+- Store-Review-Fixes (Checkliste aus dem NRG-Stack angewendet, obwohl
+  WarnHub kein NRG-Stack-Mitglied ist): `vendor` in `module.json` von
+  "DG65" auf "" korrigiert -- das Feld ist für den Hersteller des
+  angebundenen Geräts/Diensts gedacht, nicht den Modulentwickler (der
+  steht schon in `library.json`s `author`), und WarnHub bündelt viele
+  amtliche Quellen statt ein einzelnes Fabrikat. `aliases` von
+  "Warn- und Alarmmeldungen (Deutschland)" auf "... (Deutschland,
+  Österreich, Schweiz)" aktualisiert -- war seit der D-A-CH-Erweiterung
+  in beta.17 stale. Dietmars Wunsch 05.09.2026 ("Ja, mach beides gleich
+  mit.").
+
 ## 0.1.0-beta.34 (2026-09-05)
 
 - Danksagung an Sepp Lausch ergänzt (README "Danksagung"-Abschnitt und
