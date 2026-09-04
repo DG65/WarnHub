@@ -264,7 +264,12 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_LookupCoordinates($id, $GeoLookupOrt);',
                 ],
                 ['type' => 'Label', 'caption' => 'Ermittelt Breiten-/Längengrad über OpenStreetMap Nominatim (kostenlos, kein Zugangsschlüssel) und zeigt sie zum Übertragen in die Tabelle oben an -- schreibt nichts automatisch in eine Zeile.'],
-                ['type' => 'SelectLocation', 'name' => 'KartenStandort', 'caption' => 'Oder auf der Karte auswählen'],
+                [
+                    'type' => 'SelectLocation',
+                    'name' => 'KartenStandort',
+                    'caption' => 'Oder auf der Karte auswählen',
+                    'value' => $this->mapDefaultLocation(),
+                ],
                 [
                     'type' => 'Button',
                     'caption' => '📍 Kartenpunkt als Standort übernehmen',
@@ -840,6 +845,23 @@ class WarnHub extends IPSModule
             return null; // Standort-Instanz existiert, ist aber nicht konfiguriert
         }
         return ['lat' => $lat, 'lon' => $lon];
+    }
+
+    /**
+     * Startpunkt der Kartenauswahl -- Symcons Systemstandort, falls
+     * konfiguriert (spart das sonst nötige Wegscrollen vom Atlantik/„Null
+     * Island" bei 0/0, Dietmars Fund 04.09.2026). Ohne konfigurierten
+     * Systemstandort geografische Mitte Deutschlands als neutraler
+     * Ersatzwert -- besser als 0/0, aber keine Rätselraterei über den
+     * tatsächlichen Wohnort.
+     */
+    private function mapDefaultLocation(): array
+    {
+        $loc = $this->getSystemLocation();
+        if ($loc !== null) {
+            return ['latitude' => $loc['lat'], 'longitude' => $loc['lon']];
+        }
+        return ['latitude' => 51.1657, 'longitude' => 10.4515];
     }
 
     /** Nur in die offene Formularmaske schreiben, "Übernehmen" bleibt der bewusste letzte Schritt -- Muster wie MeterHubVirtual::AddDevice(). */
