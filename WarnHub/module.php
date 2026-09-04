@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.23';
-    private const NEWS_VERSION = '0.1.0-beta.23';
+    private const DOC_VERSION = '0.1.0-beta.24';
+    private const NEWS_VERSION = '0.1.0-beta.24';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -357,6 +357,8 @@ class WarnHub extends IPSModule
         $this->MaintainVariable('HoechsterSchweregrad', 'Höchster Schweregrad', VARIABLETYPE_INTEGER, 'WHUB.Schweregrad', 2, true);
         $this->MaintainVariable('StatusText', 'Status', VARIABLETYPE_STRING, '', 3, true);
         $this->MaintainVariable('LetztePruefung', 'Letzte Prüfung', VARIABLETYPE_INTEGER, '~UnixTimestamp', 4, true);
+        $this->MaintainVariable('KachelStatus', 'Kachel (kompakt)', VARIABLETYPE_STRING, '~HTMLBox', 5, true);
+        $this->MaintainVariable('KachelUebersicht', 'Kachel (Übersicht)', VARIABLETYPE_STRING, '~HTMLBox', 6, true);
         $this->refreshStatusVariables();
 
         $hasSource = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
@@ -395,6 +397,8 @@ class WarnHub extends IPSModule
         @$this->SetValue('HoechsterSchweregrad', $highest);
         @$this->SetValue('StatusText', $statusText);
         @$this->SetValue('LetztePruefung', $lastTs);
+        @$this->SetValue('KachelStatus', $this->renderKachelStatus($active, $lastTs));
+        @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs));
     }
 
     // ----------------------------------------------------------------
@@ -667,6 +671,7 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_Poll($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'],
+                ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: zwei weitere Variablen ("Kachel (kompakt)", "Kachel (Übersicht)") im Objektbaum enthalten fertiges, eigenständiges HTML -- einfach per Drag & Drop in ein WebFront/eine Kachel-Visualisierung ziehen (Anzeigetyp "HTML"), kein eigenes Bauen nötig. Passen sich automatisch an Hell/Dunkel an. Ohne echtes WebFront hier nicht selbst gegenprüfbar -- Rückmeldungen willkommen.'],
                 ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'],
                 ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'],
                 [
@@ -988,6 +993,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• IPSView-tauglich: vier neue Statusvariablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) für ein eigenes Dashboard -- WarnHub war bisher komplett "headless" (nur Push + Konsole)'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen lassen sich jetzt je Alarmtyp einzeln testen ("🌪️ Sturm testen" usw.) -- löst sofort alle passenden aktiven Aktionen aus, unabhängig von einer echten Warnung, praktisch um z. B. die Raffstore-Ansteuerung ohne Warten auf den nächsten Sturm zu prüfen'],
                 ['type' => 'Label', 'caption' => '• Warnungs-Historie: bis zu 500 vergangene Warnungen/Entwarnungen über die neue Funktion WHUB_GetHistory() abrufbar -- für eigene Auswertungen/Skripte, auch wenn Push zwischenzeitlich ausgeschaltet war'],
+                ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach per Drag & Drop ins WebFront ziehen, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2955,6 +2961,191 @@ class WarnHub extends IPSModule
             $text .= ' (Namensabgleich, keine Warnfläche verfügbar.)';
         }
         return $this->truncateBytes($text, 256);
+    }
+
+    // ----------------------------------------------------------------
+    //  Kacheln (WebFront-/Kachel-Visualisierung, ~HTMLBox-Variablen)
+    // ----------------------------------------------------------------
+
+    // Apples eigene HIG-Systemfarben (macOS Tahoe/"Liquid Glass"-Optik,
+    // Dietmars ausdrücklicher Wunsch 04.09.2026) -- bewusst NICHT identisch
+    // mit den Material-artigen Farben des WHUB.Schweregrad-Profils (das
+    // dient der Symcon-Konsole, hier geht es um die eigene HTML-Kachel).
+    private const TILE_SEVERITY_COLOR = [
+        'Unknown'  => '#8E8E93', // systemGray
+        'Minor'    => '#0A84FF', // systemBlue
+        'Moderate' => '#FFD60A', // systemYellow
+        'Severe'   => '#FF9F0A', // systemOrange
+        'Extreme'  => '#FF453A', // systemRed
+    ];
+    private const TILE_COLOR_OK = '#30D158'; // systemGreen, "keine aktive Warnung"
+
+    private function hexToRgba(string $hex, float $alpha): string
+    {
+        $hex = ltrim($hex, '#');
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+        return sprintf('rgba(%d,%d,%d,%s)', $r, $g, $b, $alpha);
+    }
+
+    /** @return array{rank:int,severity:string} höchster Schweregrad unter den aktiven Warnungen, 'Unknown'/-1 wenn keine aktiv. */
+    private function highestActiveSeverity(array $active): array
+    {
+        $rank = -1;
+        $severity = 'Unknown';
+        foreach ($active as $w) {
+            $r = self::SEVERITY_RANK[$w['severity'] ?? 'Unknown'] ?? 0;
+            if ($r > $rank) {
+                $rank = $r;
+                $severity = $w['severity'] ?? 'Unknown';
+            }
+        }
+        return ['rank' => $rank, 'severity' => $severity];
+    }
+
+    private function relativeMinutesText(int $ts): string
+    {
+        if ($ts === 0) {
+            return 'noch nie geprüft';
+        }
+        $minutes = (int) round((time() - $ts) / 60);
+        if ($minutes <= 0) {
+            return 'gerade eben geprüft';
+        }
+        if ($minutes < 60) {
+            return 'vor ' . $minutes . ' Min. geprüft';
+        }
+        return 'vor ' . (int) round($minutes / 60) . ' Std. geprüft';
+    }
+
+    /** Gemeinsamer <style>-Block beider Kacheln -- pro Kachel eigener Klassen-Namensraum (.whub-status/.whub-overview), damit beide unabhängig als Kachel-Visualisierung eingebunden werden können, ohne sich gegenseitig zu beeinflussen. */
+    private function tileStyleBlock(): string
+    {
+        return <<<'CSS'
+<style>
+.whub-status,.whub-overview{all:initial;display:block;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;color:#1D1D1F;}
+.whub-status *,.whub-overview *{box-sizing:border-box;}
+.whub-status{padding:14px 16px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,0.65),rgba(255,255,255,0.30));backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,0.45);box-shadow:0 8px 28px rgba(0,0,0,0.12),inset 0 1px 0 rgba(255,255,255,0.55);}
+.whub-overview{padding:16px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,0.55),rgba(255,255,255,0.22));backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,0.4);box-shadow:0 8px 32px rgba(0,0,0,0.12),inset 0 1px 0 rgba(255,255,255,0.5);}
+@media (prefers-color-scheme:dark){
+.whub-status,.whub-overview{color:#F5F5F7;}
+.whub-status{background:linear-gradient(160deg,rgba(72,72,78,0.55),rgba(44,44,48,0.35));border-color:rgba(255,255,255,0.14);box-shadow:0 8px 28px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.08);}
+.whub-overview{background:linear-gradient(160deg,rgba(60,60,67,0.5),rgba(36,36,40,0.32));border-color:rgba(255,255,255,0.12);box-shadow:0 8px 32px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.07);}
+}
+.whub-badge{display:flex;align-items:center;gap:14px;}
+.whub-badge-icon{flex:0 0 auto;width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;}
+.whub-badge-text{min-width:0;}
+.whub-badge-title{font-size:15px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.whub-badge-sub{font-size:12px;opacity:0.6;margin-top:2px;}
+.whub-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.whub-header-icon{font-size:16px;}
+.whub-header-title{font-size:13px;font-weight:700;letter-spacing:0.2px;flex:1 1 auto;}
+.whub-header-time{font-size:11px;opacity:0.55;}
+.whub-card{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;margin-bottom:8px;border-radius:16px;background:rgba(255,255,255,0.38);border-left:4px solid #8E8E93;}
+@media (prefers-color-scheme:dark){.whub-card{background:rgba(255,255,255,0.07);}}
+.whub-card:last-child{margin-bottom:0;}
+.whub-card-icon{flex:0 0 auto;font-size:18px;line-height:1.3;}
+.whub-card-body{min-width:0;flex:1 1 auto;}
+.whub-card-title{font-size:14px;font-weight:600;line-height:1.3;}
+.whub-card-sub{font-size:11.5px;opacity:0.62;margin-top:2px;line-height:1.35;}
+.whub-more{font-size:11.5px;opacity:0.55;text-align:center;margin-top:4px;}
+.whub-empty{display:flex;align-items:center;gap:12px;padding:2px 2px;}
+.whub-empty-icon{flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:rgba(48,209,88,0.16);display:flex;align-items:center;justify-content:center;font-size:19px;}
+.whub-empty-text{font-size:14px;font-weight:600;}
+</style>
+CSS;
+    }
+
+    /**
+     * Kompakte Status-Kachel (Badge: ein Farbkreis + Kurztext) -- gedacht für
+     * eine kleine Kachel im Dashboard-Raster, macOS-Tahoe-"Liquid Glass"-Optik
+     * (durchscheinender, weichgezeichneter Hintergrund, hell/dunkel-adaptiv
+     * über prefers-color-scheme). Dietmars ausdrücklicher Wunsch 04.09.2026
+     * ("eine oder auch mehrere Kacheln"). Ohne echtes WebFront nicht selbst
+     * gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis.
+     */
+    private function renderKachelStatus(array $active, int $lastTs): string
+    {
+        $count = count($active);
+        if ($count === 0) {
+            $icon = '✅';
+            $color = self::TILE_COLOR_OK;
+            $title = 'Keine aktive Warnung';
+        } else {
+            $top = $this->highestActiveSeverity($active);
+            $icon = self::SEVERITY_ICON[$top['severity']] ?? '⚠️';
+            $color = self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown'];
+            $title = $count === 1 ? '1 aktive Warnung' : $count . ' aktive Warnungen';
+        }
+        $sub = htmlspecialchars($this->relativeMinutesText($lastTs));
+
+        return $this->tileStyleBlock() . <<<HTML
+<div class="whub-status">
+  <div class="whub-badge">
+    <div class="whub-badge-icon" style="background:{$this->hexToRgba($color, 0.18)};">{$icon}</div>
+    <div class="whub-badge-text">
+      <div class="whub-badge-title">{$title}</div>
+      <div class="whub-badge-sub">{$sub}</div>
+    </div>
+  </div>
+</div>
+HTML;
+    }
+
+    /**
+     * Übersichts-Kachel: Liste der aktuell aktiven Warnungen als eigene
+     * Karten (Farbe/Icon je Schweregrad), macOS-Tahoe-"Liquid Glass"-Optik.
+     * Zeigt maximal 8 Karten (Dashboard-Kacheln sollen nicht ausufern) --
+     * darüber ein Hinweis "+N weitere". Ohne echtes WebFront nicht selbst
+     * gegenprüfbar -- Rückmeldungen willkommen.
+     */
+    private function renderKachelUebersicht(array $active, int $lastTs): string
+    {
+        $time = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr' : '--:--';
+        $body = '';
+
+        if (count($active) === 0) {
+            $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">Keine aktive Warnung</div></div>';
+        } else {
+            $shown = array_slice($active, 0, 8);
+            foreach ($shown as $w) {
+                $severity = $w['severity'] ?? 'Unknown';
+                $color = self::TILE_SEVERITY_COLOR[$severity] ?? self::TILE_SEVERITY_COLOR['Unknown'];
+                $icon = self::SEVERITY_ICON[$severity] ?? 'ℹ️';
+                $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower(trim($w['event'] ?? '') !== '' ? $w['event'] : 'Warnung'), MB_CASE_TITLE));
+                $sub = htmlspecialchars($w['standort'] ?? '');
+                if (!empty($w['expires'])) {
+                    $expTs = strtotime((string) $w['expires']);
+                    if ($expTs !== false) {
+                        $sub .= ' · bis ' . htmlspecialchars(date('H:i', $expTs)) . ' Uhr';
+                    }
+                }
+                $body .= <<<HTML
+<div class="whub-card" style="border-left-color:{$color};">
+  <div class="whub-card-icon">{$icon}</div>
+  <div class="whub-card-body">
+    <div class="whub-card-title">{$eventLabel}</div>
+    <div class="whub-card-sub">{$sub}</div>
+  </div>
+</div>
+HTML;
+            }
+            if (count($active) > 8) {
+                $body .= '<div class="whub-more">+' . (count($active) - 8) . ' weitere</div>';
+            }
+        }
+
+        return $this->tileStyleBlock() . <<<HTML
+<div class="whub-overview">
+  <div class="whub-header">
+    <span class="whub-header-icon">🛡️</span>
+    <span class="whub-header-title">WarnHub</span>
+    <span class="whub-header-time">{$time}</span>
+  </div>
+  {$body}
+</div>
+HTML;
     }
 
     /**

@@ -193,10 +193,13 @@ check('"AktiveWarnungen" wird gepflegt', in_array('AktiveWarnungen', $idents, tr
 check('"HoechsterSchweregrad" wird gepflegt', in_array('HoechsterSchweregrad', $idents, true));
 check('"StatusText" wird gepflegt', in_array('StatusText', $idents, true));
 check('"LetztePruefung" wird gepflegt', in_array('LetztePruefung', $idents, true));
+check('"KachelStatus" (kompakte Kachel) wird gepflegt', in_array('KachelStatus', $idents, true));
+check('"KachelUebersicht" (Übersichts-Kachel) wird gepflegt', in_array('KachelUebersicht', $idents, true));
 $byIdent = array_column($GLOBALS['whub_test_maintainCalls'], null, 0);
 check('"HoechsterSchweregrad" nutzt das WHUB.Schweregrad-Profil', ($byIdent['HoechsterSchweregrad'][3] ?? null) === 'WHUB.Schweregrad');
 check('"LetztePruefung" nutzt das Standard-Zeitstempel-Profil', ($byIdent['LetztePruefung'][3] ?? null) === '~UnixTimestamp');
-check('alle vier werden dauerhaft gehalten (keep=true, nicht an ein Property gekoppelt)', $byIdent['AktiveWarnungen'][5] === true);
+check('beide Kacheln nutzen das Standard-HTMLBox-Profil', ($byIdent['KachelStatus'][3] ?? null) === '~HTMLBox' && ($byIdent['KachelUebersicht'][3] ?? null) === '~HTMLBox');
+check('alle sechs werden dauerhaft gehalten (keep=true, nicht an ein Property gekoppelt)', $byIdent['AktiveWarnungen'][5] === true && $byIdent['KachelStatus'][5] === true);
 
 echo "\n== ApplyChanges(): Statusvariablen spiegeln sofort den letzten bekannten Stand (kein Warten auf den nächsten Poll) ==\n";
 $hub2 = new WarnHub();
@@ -212,6 +215,9 @@ check('"AktiveWarnungen" = 2', ($GLOBALS['whub_test_setValueCalls']['AktiveWarnu
 check('"HoechsterSchweregrad" = 3 (Severe, der höhere der beiden aktiven Warnungen)', ($GLOBALS['whub_test_setValueCalls']['HoechsterSchweregrad'] ?? null) === 3);
 check('"StatusText" nennt die Anzahl', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['StatusText'] ?? ''), '2 aktive'));
 check('"LetztePruefung" übernimmt LastPollTs unverändert', ($GLOBALS['whub_test_setValueCalls']['LetztePruefung'] ?? null) === 1700000000);
+check('"KachelStatus" nennt die Anzahl (2 aktive Warnungen)', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['KachelStatus'] ?? ''), '2 aktive Warnungen'));
+check('"KachelStatus" enthält das Icon des höchsten Schweregrads (🚨 für Severe)', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['KachelStatus'] ?? ''), '🚨'));
+check('"KachelUebersicht" enthält gültiges, nicht-leeres HTML', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['KachelUebersicht'] ?? ''), 'whub-overview'));
 
 echo "\n== refreshStatusVariables(): Randfälle ==\n";
 $hub3 = new WarnHub();
@@ -222,6 +228,8 @@ check('ohne jemals durchgeführte Prüfung: "AktiveWarnungen" = 0', ($GLOBALS['w
 check('ohne jemals durchgeführte Prüfung: "HoechsterSchweregrad" = 0 (keine aktive Warnung)', ($GLOBALS['whub_test_setValueCalls']['HoechsterSchweregrad'] ?? null) === 0);
 check('ohne jemals durchgeführte Prüfung: "StatusText" nennt das explizit', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['StatusText'] ?? ''), 'keine Prüfung'));
 check('ohne jemals durchgeführte Prüfung: "LetztePruefung" = 0', ($GLOBALS['whub_test_setValueCalls']['LetztePruefung'] ?? null) === 0);
+check('ohne jemals durchgeführte Prüfung: "KachelStatus" zeigt den grünen "Keine aktive Warnung"-Zustand', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['KachelStatus'] ?? ''), 'Keine aktive Warnung'));
+check('ohne jemals durchgeführte Prüfung: "KachelUebersicht" zeigt denselben leeren Zustand', str_contains((string) ($GLOBALS['whub_test_setValueCalls']['KachelUebersicht'] ?? ''), 'whub-empty'));
 
 echo "\n== TestSchutzaktionen(): je Alarmtyp einzeln testbar ==\n";
 $hub4 = new WarnHub();

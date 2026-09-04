@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.23-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.24-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -152,6 +152,22 @@ Letzte Prüfung) -- Anknüpfungspunkt für ein selbst gebautes Dashboard, z. B. 
 IPSView kennt keinen eigenen Push-Kanal, sondern baut Views ausschließlich aus vorhandenen
 Symcon-Objekt-IDs zusammen -- eine gesonderte Einrichtung in WarnHub selbst ist deshalb nicht
 nötig, die Variablen stehen automatisch im Objektbaum der Instanz.
+
+## Fertige WebFront-Kacheln
+
+Zwei weitere Variablen enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig,
+einfach per Drag & Drop in ein WebFront/eine Kachel-Visualisierung ziehen (Anzeigetyp "HTML"):
+
+- **Kachel (kompakt)** -- ein Badge mit Farbkreis (Signalfarbe nach höchstem aktivem
+  Schweregrad, grün = keine aktive Warnung), Anzahl und "zuletzt geprüft"-Zeitangabe. Für ein
+  kleines Kachel-Raster.
+- **Kachel (Übersicht)** -- Liste der aktuell aktiven Warnungen als eigene Karten (Icon,
+  Ereignis, Standort, Gültigkeitsende), bis zu 8 gleichzeitig, darüber ein "+N weitere"-Hinweis.
+
+Beide im modernen, durchscheinenden "Liquid Glass"-Stil (macOS Tahoe), hell/dunkel-adaptiv
+über `prefers-color-scheme` -- komplett eigenständiges HTML/CSS, keine externen
+Abhängigkeiten. Werden automatisch nach jeder Prüfung aktualisiert, ohne eigene Einrichtung.
+Ohne echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
 
 ## Grenzen
 

@@ -299,5 +299,21 @@ check('Button "Wetterstation suchen" steht im Datenquellen-Panel', $wetterstatio
 
 check('Feld "SchutzaktionVorlaufMinuten" (Vorlauf vor Gültigkeitsbeginn) im Schutzaktionen-Panel vorhanden', findByName($decoded['elements'], 'SchutzaktionVorlaufMinuten') !== null);
 
+$pruefungPanel = null;
+foreach ($decoded['elements'] as $el) {
+    if (str_contains($el['caption'] ?? '', 'Prüfung & Status')) {
+        $pruefungPanel = $el;
+        break;
+    }
+}
+$kachelHinweis = null;
+foreach ($pruefungPanel['items'] ?? [] as $item) {
+    if (str_contains($item['caption'] ?? '', 'Kachel (kompakt)')) {
+        $kachelHinweis = $item;
+        break;
+    }
+}
+check('Hinweis auf die fertigen WebFront-Kacheln steht im Prüfung & Status-Panel', $kachelHinweis !== null);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

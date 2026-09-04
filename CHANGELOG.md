@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-beta.24 (2026-09-04)
+
+- Zwei fertige WebFront-Kacheln (`~HTMLBox`-Variablen "Kachel (kompakt)" und
+  "Kachel (Übersicht)") -- kein eigenes Bauen nötig, einfach per Drag & Drop
+  ins WebFront ziehen. "Kachel (kompakt)" zeigt einen Farbkreis-Badge
+  (Signalfarbe nach höchstem aktivem Schweregrad) + Anzahl + "zuletzt
+  geprüft". "Kachel (Übersicht)" listet die aktiven Warnungen als eigene
+  Karten (bis zu 8, darüber "+N weitere"). Modernes, durchscheinendes
+  "Liquid Glass"-Design (macOS Tahoe), hell/dunkel-adaptiv über
+  `prefers-color-scheme`, komplett eigenständiges HTML/CSS ohne externe
+  Abhängigkeiten. Werden wie die IPSView-Statusvariablen direkt nach
+  "Übernehmen" und nach jedem Poll() aktualisiert. Dietmars ausdrücklicher
+  Wunsch 04.09.2026 ("eine oder auch mehrere Kacheln... im macOS Tahoe
+  Stil"), aufgegriffen aus meiner eigenen früheren Einschätzung, dass dem
+  Modul noch eine Visualisierungs-Kachel fehlt. Ohne echtes WebFront nicht
+  selbst gegenprüfbar (Design lokal als Vorschau verifiziert, siehe
+  .tools/test-tiles.php) -- Rückmeldungen willkommen.
+
 ## 0.1.0-beta.23 (2026-09-04)
 
 - Warnungs-Historie: neues Attribut `WarnHistory` protokolliert jede neue
