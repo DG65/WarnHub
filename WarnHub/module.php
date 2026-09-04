@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.19';
-    private const NEWS_VERSION = '0.1.0-beta.19';
+    private const DOC_VERSION = '0.1.0-beta.20';
+    private const NEWS_VERSION = '0.1.0-beta.20';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -235,6 +235,21 @@ class WarnHub extends IPSModule
     ];
     private const BAFU_HYDRO_LEVEL_SEVERITY = [2 => 'Moderate', 3 => 'Severe', 4 => 'Severe', 5 => 'Extreme'];
 
+    // BETA -- Hagelschutz-Signalbox der VKF (hagelschutz-einfach-automatisch.ch,
+    // meteo.netitservices.com). Protokoll aus der offiziellen VKF-PDF-Doku UND
+    // dem Quellcode des aktiven ioBroker-Adapters ice987987/ioBroker.hagelschutz
+    // gegengeprüft 04.09.2026 (identischer Aufbau: einfacher GET, keine
+    // Kopfzeilen/Auth, response.data.currentState). MANGELS eigener Signalbox
+    // konnte der Live-Abruf selbst NICHT gegengeprüft werden (einzige Ausnahme
+    // von der sonst in diesem Modul durchgehend befolgten "live verifizieren"-
+    // Regel) -- deshalb bewusst als Beta gekennzeichnet. Die vollständige
+    // Poll-URL (nicht nur deviceId/hwtypeId einzeln) wird als EIN Feld
+    // gespeichert -- Vorbild ioBroker-Adapter, dessen Issue #156 ("Support new
+    // API endpoint") zeigt, dass sich das URL-Format zwischen
+    // Signalbox-Generationen/Zeitpunkten unterscheiden kann; ein selbst
+    // zusammengebautes Template wäre dagegen nicht robust.
+    private const HAGELSCHUTZ_CH_URL_PREFIX = 'https://meteo.netitservices.com/api/';
+
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
     // (Deutsch, DWD/MoWaS-Vokabular -- siehe reale Beispiele in .tools/test-geo.php).
     private const CATEGORY_KEYWORDS = [
@@ -280,6 +295,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleGeosphereAt', false);
         $this->RegisterPropertyBoolean('QuelleBafuHydroCh', false);
         $this->RegisterPropertyInteger('BafuHydroSchwelle', 3);
+        $this->RegisterPropertyString('HagelschutzPollUrl', '');
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyFloat('WetterstationWindboeSchwelle', 70.0);
         $this->RegisterPropertyFloat('WetterstationRegenrateSchwelle', 25.0);
@@ -345,7 +361,7 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG), optional amtliche Hochwasser-Gefahrenstufen für die Schweiz (BAFU/LINDAS) sowie optional die eigene Wetterstation als unabhängiges Sicherheitsnetz.'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG), optional amtliche Hochwasser-Gefahrenstufen für die Schweiz (BAFU/LINDAS), optional die eigene Wetterstation als unabhängiges Sicherheitsnetz sowie -- BETA, ungetestet -- optional die eigene VKF-Hagelschutz-Signalbox (Schweiz).'],
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
@@ -454,6 +470,18 @@ class WarnHub extends IPSModule
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationWindboeSchwelle', 'caption' => 'Schwellwert Windböe (km/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenrateSchwelle', 'caption' => 'Schwellwert Regenrate (mm/h)', 'digits' => 1, 'minValue' => 1],
                 ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
+            ],
+        ];
+
+        $form['elements'][] = [
+            'type' => 'ExpansionPanel',
+            'caption' => '🧪  BETA: Hagelschutz Schweiz (VKF-Signalbox)',
+            'expanded' => false,
+            'items' => [
+                ['type' => 'Label', 'caption' => 'AUSDRÜCKLICH BETA -- ungetestet: Diese Anbindung wurde ausschließlich aus der offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut. Ohne eigene Signalbox konnte der Live-Abruf selbst nicht gegengeprüft werden -- die sonst in diesem Modul durchgehend befolgte "live verifizieren"-Regel wird hier bewusst ausgesetzt. Rückmeldungen (funktioniert/funktioniert nicht) sind ausdrücklich willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
+                ['type' => 'Label', 'caption' => 'Setzt eine physisch bei einem konkreten Schweizer Gebäude registrierte VKF-Hagelschutz-Signalbox voraus (hagelschutz-einfach-automatisch.ch) -- kein reiner Software-Zugang. Ohne eigene Signalbox einfach leer lassen, dann bleibt diese Quelle inaktiv.'],
+                ['type' => 'ValidationTextBox', 'name' => 'HagelschutzPollUrl', 'caption' => 'Poll-URL der eigenen Signalbox'],
+                ['type' => 'Label', 'caption' => 'Die vollständige Adresse aus der eigenen Signalbox-Konfiguration eintragen (Format https://meteo.netitservices.com/api/v1/devices/<deviceId>/poll?hwtypeId=<HID>) -- nicht selbst aus deviceId/hwtypeId zusammensetzen, da sich das Format zwischen Signalbox-Generationen unterscheiden kann. Meldet eine Hagelwarnung am Symcon-Systemstandort, sobald die Signalbox "currentState" ungleich 0 zurückgibt (inkl. Testalarm).'],
             ],
         ];
 
@@ -865,6 +893,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Meteoalarm deckt neben Deutschland auch Österreich und die Schweiz ab -- WarnHub eignet sich damit für den gesamten deutschsprachigen Raum (D-A-CH), nicht nur für Deutschland'],
                 ['type' => 'Label', 'caption' => '• Neue Datenquelle für Österreich: direkte GeoSphere-Austria-Anbindung (warnungen.zamg.at) -- koordinatengenau statt Namensabgleich, übernimmt für österreichische Standorte automatisch von Meteoalarm, sobald aktiviert'],
                 ['type' => 'Label', 'caption' => '• Neue Datenquelle für die Schweiz: amtliche Hochwasser-Gefahrenstufen (BAFU/LINDAS) -- echte behördliche Klassifikation (1-5), nicht nur ein eigener Schwellwert'],
+                ['type' => 'Label', 'caption' => '• BETA (ungetestet): eigene VKF-Hagelschutz-Signalbox (Schweiz) als Datenquelle -- eigenes Panel, Rückmeldungen willkommen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2438,6 +2467,57 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  BETA -- Hagelschutz-Signalbox (VKF, hagelschutz-einfach-automatisch.ch)
+    //  siehe Konstanten-Kommentar oben. Bindet ein physisch bei einem
+    //  konkreten Schweizer Gebäude registriertes Hagelwarn-Gerät ein -- die
+    //  volle Poll-URL kommt 1:1 aus der Konfiguration der eigenen Signalbox,
+    //  WarnHub baut sie nicht selbst zusammen.
+    // ----------------------------------------------------------------
+
+    private function fetchHagelschutzCh(): array
+    {
+        $url = trim($this->ReadPropertyString('HagelschutzPollUrl'));
+        if ($url === '' || strpos($url, self::HAGELSCHUTZ_CH_URL_PREFIX) !== 0) {
+            return []; // leer oder erkennbar keine echte Signalbox-URL -- nichts abrufen, nicht raten
+        }
+        $json = $this->httpGetJson($url);
+        return $this->parseHagelschutzChResponse($json);
+    }
+
+    /** Vom HTTP-Abruf getrennt, damit sich die Auswertung ohne Netzzugriff testen lässt. */
+    private function parseHagelschutzChResponse(?array $json): array
+    {
+        if ($json === null || !array_key_exists('currentState', $json)) {
+            return [];
+        }
+        $state = (int) $json['currentState'];
+        if ($state === 0) {
+            return []; // 0 = kein Hagel -- laut Doku "encouraged to treat ... as zero and non-zero"
+        }
+        $loc = $this->getSystemLocation();
+        if ($loc === null) {
+            $this->LogError('fetchHagelschutzCh', 'Kein konfigurierter Symcon-Systemstandort -- Hagelwarnung kann nicht platziert werden (keine geratene Position).');
+            return [];
+        }
+        return [[
+            'identifier' => 'hagelschutz-ch-' . $this->InstanceID,
+            'source' => 'hagelschutz_ch',
+            'msgType' => 'Alert',
+            'event' => 'Hagel',
+            'headline' => 'Hagelschutz-Signalbox: Hagelwarnung aktiv' . ($state === 2 ? ' (Testalarm)' : ''),
+            'description' => 'Signal der eigenen VKF-Hagelschutz-Signalbox (meteo.netitservices.com) -- amtlich in dem Sinne, dass die Prognose von SRF Meteo/VKF stammt, aber ein Gerätesignal ohne eigene Warnflächen-Geometrie.',
+            'instruction' => '',
+            'severity' => 'Severe',
+            'effective' => null,
+            'onset' => null,
+            'expires' => null,
+            'areaDesc' => 'Eigene Hagelschutz-Signalbox',
+            'rings' => [],
+            'circles' => [['lat' => $loc['lat'], 'lon' => $loc['lon'], 'radiusKm' => 3.0]],
+        ]];
+    }
+
+    // ----------------------------------------------------------------
     //  Abfragezyklus: Poll, Matching, Push, Schutzaktionen
     // ----------------------------------------------------------------
 
@@ -2476,6 +2556,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleBafuHydroCh')) {
             $warnings = array_merge($warnings, $this->fetchBafuHydroCh());
+        }
+        if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
+            $warnings = array_merge($warnings, $this->fetchHagelschutzCh());
         }
         if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
             $warnings = array_merge($warnings, $this->fetchWetterstation());

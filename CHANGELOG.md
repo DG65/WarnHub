@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.0-beta.20 (2026-09-04)
+
+- BETA, ausdrücklich als ungetestet gekennzeichnet: eigene VKF-Hagelschutz-
+  Signalbox (Schweiz, hagelschutz-einfach-automatisch.ch) als Datenquelle,
+  eigenes Panel. Protokoll aus der offiziellen VKF-PDF-Dokumentation UND
+  dem Quellcode des aktiven ioBroker-Adapters ice987987/ioBroker.hagelschutz
+  gegengeprüft (identischer Aufbau bestätigt) -- mangels eigener Signalbox
+  konnte der Live-Abruf selbst aber nicht verifiziert werden, einzige
+  Ausnahme von der sonst im Modul durchgehend befolgten "live
+  verifizieren"-Regel. Die vollständige Poll-URL wird als ein Feld
+  gespeichert statt selbst aus deviceId/hwtypeId zusammengesetzt --
+  Vorbild ioBroker-Adapter, dessen offenes Issue #156 zeigt, dass sich das
+  URL-Format zwischen Signalbox-Generationen unterscheiden kann. Dietmars
+  ausdrücklicher Wunsch 04.09.2026, um auch Schweizer Symcon-Nutzern ohne
+  eigenes Testgerät einen Weg zu bieten.
+- README: Links zu den offiziellen Symcon-Installationsanleitungen aller
+  gängigen Betriebssysteme (Windows/macOS/Linux/Docker/Raspberry
+  Pi/Synology/QNAP) bei den PHP-Erweiterungen curl/ZipArchive ergänzt.
+
 ## 0.1.0-beta.19 (2026-09-04)
 
 - Neue Datenquelle für die Schweiz: amtliche BAFU-Hochwasser-Gefahrenstufen

@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.19-informational)
+![Modul Version](https://img.shields.io/badge/Modul-0.1.0--beta.20-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -47,6 +47,11 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Schwellwert überschreitet. Ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein
   tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. Eine
   Objektbaum-Suche findet eine passende Station automatisch.
+- **VKF-Hagelschutz-Signalbox** (Schweiz, `meteo.netitservices.com`) -- **BETA, ungetestet**:
+  optional, bindet eine physisch bei einem konkreten Schweizer Gebäude registrierte
+  Hagelschutz-Signalbox ein (hagelschutz-einfach-automatisch.ch). Aus der offiziellen
+  VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut, mangels
+  eigener Signalbox aber nicht live gegengeprüft -- Rückmeldungen willkommen.
 
 PEGELONLINE, BfS ODL-Info und die eigene Wetterstation kennen keine amtliche
 Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen selbst definierten Schwellwert,
@@ -133,7 +138,17 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   Meldungstypen), wird sie sicherheitshalber **nicht** automatisch zugeordnet -- keine
   geratene Präzision.
 - Die direkte DWD-Anbindung braucht die PHP-Erweiterungen `curl` und `ZipArchive`. Fehlen
-  sie, liefert NINA weiterhin DWD-Wetterwarnungen, nur ohne das zusätzliche Detail.
+  sie, liefert NINA weiterhin DWD-Wetterwarnungen, nur ohne das zusätzliche Detail. Wie PHP-
+  Erweiterungen nachinstalliert werden, hängt vom Betriebssystem der Symcon-Installation ab --
+  offizielle Installationsanleitungen:
+  [Windows](https://www.symcon.de/de/service/dokumentation/installation/windows/),
+  [macOS](https://www.symcon.de/de/service/dokumentation/installation/macos/),
+  [Linux](https://www.symcon.de/de/service/dokumentation/installation/linux/),
+  [Docker](https://www.symcon.de/de/service/dokumentation/installation/docker/),
+  [Raspberry Pi](https://www.symcon.de/de/service/dokumentation/installation/raspberry-pi/),
+  [Synology](https://www.symcon.de/de/service/dokumentation/installation/synology/),
+  [QNAP](https://www.symcon.de/de/service/dokumentation/installation/qnap/). Bei SymBox oder
+  einem Catan-Controller ist das nicht nötig -- dort ist PHP fest vorkonfiguriert.
 - Meteoalarm liefert keine Warnfläche, nur benannte Verwaltungsgebiete -- der Abgleich läuft
   über einen Namensvergleich (Standort per Reverse-Geocoding einem Kreis/einer Region
   zugeordnet), nicht geometrisch. Ungenauer als die übrigen Quellen, im Meldungstext
@@ -162,6 +177,12 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   Wert. Die Schweiz kennt aktuell keine vergleichbare amtliche, öffentlich zugängliche API für
   allgemeine Unwetterwarnungen (Sturm/Hagel/Starkregen) -- dafür bleibt Meteoalarm vorerst die
   einzig verfügbare Quelle.
+- Die VKF-Hagelschutz-Anbindung ist **BETA und ungetestet**: das Protokoll ist aus der
+  offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut,
+  aber mangels eigener Signalbox nicht live gegengeprüft -- anders als jede andere Quelle in
+  diesem Modul. Setzt eine physisch bei einem konkreten Schweizer Gebäude registrierte
+  Signalbox voraus (hagelschutz-einfach-automatisch.ch, kein reiner Software-Zugang).
+  Rückmeldungen zur Funktionsfähigkeit sind ausdrücklich willkommen.
 
 ## Lizenz
 

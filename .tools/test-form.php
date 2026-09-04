@@ -183,6 +183,16 @@ check('"QuelleGeosphereAt"-Checkbox vorhanden (koordinatengenaue Österreich-War
 check('"QuelleBafuHydroCh"-Checkbox vorhanden (Schweizer Hochwassergefahr)', findByName($decoded['elements'], 'QuelleBafuHydroCh') !== null);
 check('Schwellwert-Feld "BafuHydroSchwelle" vorhanden', findByName($decoded['elements'], 'BafuHydroSchwelle') !== null);
 
+$hagelschutzPanel = null;
+foreach ($decoded['elements'] as $el) {
+    if (str_contains($el['caption'] ?? '', 'BETA: Hagelschutz Schweiz')) {
+        $hagelschutzPanel = $el;
+        break;
+    }
+}
+check('eigenes, klar als BETA gekennzeichnetes Panel "Hagelschutz Schweiz" vorhanden', $hagelschutzPanel !== null);
+check('Feld "HagelschutzPollUrl" steht in diesem Panel', findByName($hagelschutzPanel['items'] ?? [], 'HagelschutzPollUrl') !== null);
+
 $schutzaktionenListe = findByName($decoded['elements'], 'Schutzaktionen');
 $typSpalte = null;
 foreach ($schutzaktionenListe['columns'] ?? [] as $col) {
