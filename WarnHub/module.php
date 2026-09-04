@@ -318,9 +318,9 @@ class WarnHub extends IPSModule
                     'add' => false,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '220px'],
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '220px', 'edit' => ['type' => 'ValidationTextBox', 'enabled' => false]],
                         ['caption' => 'Typ', 'name' => 'Typ', 'width' => '140px', 'edit' => ['type' => 'Select', 'options' => [['caption' => 'WebFront', 'value' => 'webfront'], ['caption' => 'Kachel-Visualisierung', 'value' => 'kachel']]]],
-                        ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px'],
+                        ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '80px', 'edit' => ['type' => 'CheckBox']],
                     ],
                 ],
