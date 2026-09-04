@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '0.1.0-beta.10';
-    private const NEWS_VERSION = '0.1.0-beta.10';
+    private const DOC_VERSION = '0.1.0-beta.11';
+    private const NEWS_VERSION = '0.1.0-beta.11';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/PLATZHALTER-warnhub-thread-folgt/00000';
@@ -373,6 +373,7 @@ class WarnHub extends IPSModule
                             ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
                             ['type' => 'Label', 'caption' => 'Skript ausführen: Ziel-Skript statt Ziel-Variable/Zielwert.'],
                             ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise bereits Sturm + Hagel an.'],
+                            ['type' => 'Label', 'caption' => 'Leeres "Nur Standort" bedeutet "alle FESTEN Standorte", NICHT auch mobile (Live-Standort-gebundene, siehe Standorte-Panel) -- sonst würde z. B. ein Sturm über Hamburg, den nur der mobile Standort meldet, die zuhause verbaute Jalousie einfahren. Das gilt automatisch für jede Aktion, keine Einrichtung nötig.'],
                         ],
                     ],
                 ],
@@ -394,7 +395,7 @@ class WarnHub extends IPSModule
                         ['caption' => 'Typ', 'name' => 'Typ', 'width' => '190px', 'add' => 'raffstore', 'edit' => ['type' => 'Select', 'options' => $this->actionTypeOptions()]],
                         ...array_map(fn ($f) => ['caption' => $f[1], 'name' => $f[0], 'width' => '75px', 'add' => false, 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
                         ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
-                        ['caption' => 'Nur Standort (leer=alle)', 'name' => 'StandortFilter', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => 'Nur Standort (leer=alle festen)', 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
                         ['caption' => 'Ziel-Variable', 'name' => 'ZielVariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
                         ['caption' => 'Zielwert', 'name' => 'ZielWert', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
                         ['caption' => 'Ziel-Skript', 'name' => 'ZielSkriptID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectScript']],
@@ -748,6 +749,12 @@ class WarnHub extends IPSModule
             $lon = (float) GetValue($standort['QuellVarLon']);
         }
         return ['lat' => $lat, 'lon' => $lon];
+    }
+
+    /** Ein Standort gilt als "mobil", sobald mindestens eine Live-Standort-Variable gebunden ist (siehe resolveStandortCoords()). */
+    private function isStandortMobil(array $standort): bool
+    {
+        return $standort['QuellVarLat'] > 0 || $standort['QuellVarLon'] > 0;
     }
 
     /**
@@ -1746,6 +1753,21 @@ class WarnHub extends IPSModule
 
                 foreach ($actions as $idx => $action) {
                     if ($action['StandortFilter'] !== '' && $action['StandortFilter'] !== $standort['Name']) {
+                        continue;
+                    }
+                    // Schutzaktionen hängen an fest verbauten Geräten (Jalousie,
+                    // Markise, Garage, Sirene) -- OHNE explizit gesetzten
+                    // Standort-Filter dürfen sie deshalb NUR von einem festen
+                    // Standort ausgelöst werden, nie von einem mobilen
+                    // (Live-Standort-gebundenen). Sonst würde z. B. ein Sturm
+                    // über Hamburg -- der nur den mobilen Standort "unterwegs"
+                    // trifft -- die zuhause verbaute Jalousie einfahren
+                    // (Dietmars Nachfrage 04.09.2026, direkt nach Einführung
+                    // des mobilen Standorts). Wer eine Aktion GEZIELT an einen
+                    // mobilen Standort binden will, kann das weiterhin über den
+                    // expliziten Namen im Filter tun -- nur das leere "alle"
+                    // schließt mobile Standorte automatisch aus.
+                    if ($action['StandortFilter'] === '' && $this->isStandortMobil($standort)) {
                         continue;
                     }
                     // Leere Kategorien-Auswahl = Aktion gilt für JEDE Kategorie.

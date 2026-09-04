@@ -46,6 +46,12 @@ function IPS_GetModuleList(): array
 {
     return [];
 }
+$GLOBALS['whub_test_requestActionCalls'] = [];
+function RequestAction(int $variableID, $value): bool
+{
+    $GLOBALS['whub_test_requestActionCalls'][] = [$variableID, $value];
+    return true;
+}
 
 class IPSModule
 {
@@ -240,6 +246,69 @@ $result = callPrivate($hub3, 'processWarnings', [[$warning]]);
 check('Warnung wird als aktiv erkannt (Live-Standort lag im Warnkreis)', $result['activeCount'] === 1);
 check('genau 1 Push wurde verschickt', count($GLOBALS['whub_test_pushCalls']) === 1);
 check('der Push ging NUR an das dem Standort zugeordnete WebFront (101), nicht an 102', ($GLOBALS['whub_test_pushCalls'][0][1] ?? null) === 101);
+
+echo "\n== isStandortMobil() ==\n";
+check('fest (QuellVarLat/Lon = 0) gilt nicht als mobil', callPrivate($hub, 'isStandortMobil', [['QuellVarLat' => 0, 'QuellVarLon' => 0]]) === false);
+check('mit gebundener Lat-Variable gilt als mobil', callPrivate($hub, 'isStandortMobil', [['QuellVarLat' => 501, 'QuellVarLon' => 0]]) === true);
+check('mit gebundener Lon-Variable gilt ebenfalls als mobil', callPrivate($hub, 'isStandortMobil', [['QuellVarLat' => 0, 'QuellVarLon' => 502]]) === true);
+
+echo "\n== Schutzaktionen-Sicherung: Sturm über Hamburg (mobiler Standort) darf NICHT die zuhause verbaute Jalousie auslösen ==\n";
+$GLOBALS['whub_test_variableValues'] = [
+    701 => 53.5511, 702 => 9.9937, // mobiler Standort "unterwegs" -- aktuell Hamburg
+    201 => 0, // Ziel-Variable der Jalousie muss nur existieren, Wert irrelevant
+];
+$standorteMitMobil = [
+    ['Name' => 'Zuhause', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 15.0, 'MinSeverity' => 1, 'PushZielFilter' => '', 'Aktiv' => true],
+    ['Name' => 'Dietmar unterwegs', 'Ort' => '', 'Lat' => 0.0, 'Lon' => 0.0, 'QuellVarLat' => 701, 'QuellVarLon' => 702, 'RadiusKm' => 15.0, 'MinSeverity' => 1, 'PushZielFilter' => '', 'Aktiv' => true],
+];
+$jalousieAktion = [
+    'Name' => 'Jalousie Wohnzimmer', 'Aktiv' => true, 'Typ' => 'raffstore',
+    'KatSturm' => true, 'KatHagel' => false, 'KatStarkregen' => false, 'KatGewitter' => false, 'KatSchnee' => false, 'KatHitze' => false,
+    'MinSeverity' => 1, 'StandortFilter' => '', 'ZielVariableID' => 201, 'ZielWert' => 0.0, 'ZielSkriptID' => 0, 'AutoOffSekunden' => 0,
+];
+$hamburgSturm = [
+    'identifier' => 'test-hh-sturm', 'source' => 'test', 'msgType' => 'Alert', 'event' => 'Sturm',
+    'headline' => 'Sturmböen Hamburg', 'description' => '', 'instruction' => '', 'severity' => 'Severe',
+    'effective' => null, 'onset' => null, 'expires' => null, 'areaDesc' => '',
+    'rings' => [], 'circles' => [['lat' => 53.5511, 'lon' => 9.9937, 'radiusKm' => 5.0]],
+];
+
+$hub4 = new WarnHub();
+$hub4->Create();
+$hub4->SetProp('Standorte', json_encode($standorteMitMobil));
+$hub4->SetProp('Schutzaktionen', json_encode([$jalousieAktion]));
+$hub4->SetProp('PushAktiv', false);
+$GLOBALS['whub_test_requestActionCalls'] = [];
+$result = callPrivate($hub4, 'processWarnings', [[$hamburgSturm]]);
+check('Sturm wird als aktiv erkannt (trifft den mobilen Standort in Hamburg)', $result['activeCount'] === 1);
+check('Jalousie-Aktion (leerer Standort-Filter) feuert NICHT für den mobilen Standort', $result['actionsTriggered'] === 0);
+check('RequestAction wurde tatsächlich NICHT aufgerufen', count($GLOBALS['whub_test_requestActionCalls']) === 0);
+
+echo "\n== Gegenprobe: derselbe Sturm über dem FESTEN Standort 'Zuhause' löst die Jalousie weiterhin aus ==\n";
+$sturmZuhause = $hamburgSturm;
+$sturmZuhause['identifier'] = 'test-zuhause-sturm';
+$sturmZuhause['circles'] = [['lat' => 48.4785, 'lon' => 7.9448, 'radiusKm' => 5.0]];
+$hub5 = new WarnHub();
+$hub5->Create();
+$hub5->SetProp('Standorte', json_encode($standorteMitMobil));
+$hub5->SetProp('Schutzaktionen', json_encode([$jalousieAktion]));
+$hub5->SetProp('PushAktiv', false);
+$GLOBALS['whub_test_requestActionCalls'] = [];
+$result = callPrivate($hub5, 'processWarnings', [[$sturmZuhause]]);
+check('Sturm über dem festen Standort "Zuhause" löst die Jalousie weiterhin automatisch aus', $result['actionsTriggered'] === 1);
+check('RequestAction wurde für die richtige Ziel-Variable (201) aufgerufen', ($GLOBALS['whub_test_requestActionCalls'][0][0] ?? null) === 201);
+
+echo "\n== Gegenprobe: ausdrücklicher Standort-Filter auf den mobilen Standort hebt die Sperre gezielt auf ==\n";
+$jalousieMobilGefiltert = $jalousieAktion;
+$jalousieMobilGefiltert['StandortFilter'] = 'Dietmar unterwegs';
+$hub6 = new WarnHub();
+$hub6->Create();
+$hub6->SetProp('Standorte', json_encode($standorteMitMobil));
+$hub6->SetProp('Schutzaktionen', json_encode([$jalousieMobilGefiltert]));
+$hub6->SetProp('PushAktiv', false);
+$GLOBALS['whub_test_requestActionCalls'] = [];
+$result = callPrivate($hub6, 'processWarnings', [[$hamburgSturm]]);
+check('mit explizit auf den mobilen Standort gesetztem Filter feuert die Aktion trotzdem (bewusster Opt-in)', $result['actionsTriggered'] === 1);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

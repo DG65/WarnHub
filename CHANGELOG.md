@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-beta.11 (2026-09-04)
+
+- Fix/Absicherung (automatisch, keine Einrichtung nötig): Eine Schutzaktion
+  ohne explizit gesetzten "Nur Standort"-Filter feuert jetzt NUR noch von
+  einem festen Standort aus, nie von einem mobilen (Live-Standort-
+  gebundenen). Ohne diese Sperre hätte z. B. ein Sturm über Hamburg, der
+  nur den mobilen Standort "unterwegs" trifft, die zuhause verbaute
+  Jalousie eingefahren -- Dietmars Nachfrage direkt nach Einführung des
+  mobilen Standorts in beta.10. Wer eine Aktion ausdrücklich an einen
+  mobilen Standort binden will, kann das weiterhin per Namen im Filter tun.
+
 ## 0.1.0-beta.10 (2026-09-04)
 
 - Standorte können jetzt an zwei Variablen (Lat/Lon) gebunden werden, statt
