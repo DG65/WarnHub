@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.2 (2026-09-05)
+
+- Fix: Push an WebFront-Instanzen (`WFC_PushNotification`) konnte bei
+  einzelnen Zielen mit "Test fehlgeschlagen -- an keines der aktivierten
+  Ziele konnte zugestellt werden" scheitern, während andere Ziele
+  funktionierten. Ursache: der letzte Funktionsparameter ist laut
+  offizieller Symcon-Doku eine `TargetID` fürs Deep-Linking beim Antippen
+  der Nachricht (0 = kein Sprungziel) -- keine Sender-/Absender-Instanz-ID.
+  WarnHub übergab dort fälschlich die eigene Instanz-ID, die innerhalb
+  einer fremden WebFront-Instanz kein gültiges/sichtbares Objekt sein
+  muss und die Zustellung dort scheitern lassen konnte. Jetzt korrekt
+  `0`. Praxis-Fund von chrschli im Symcon-Forum, 05.09.2026.
+
 ## 1.0.1 (2026-09-05)
 
 - Fix: der begleitende Hinweistext im Panel "Feedback im Symcon-Forum"

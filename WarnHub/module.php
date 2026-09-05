@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.0.1';
+    private const DOC_VERSION = '1.0.2';
     private const NEWS_VERSION = '1.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
@@ -3881,7 +3881,14 @@ HTML;
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
                     continue;
                 }
-                $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, $this->InstanceID);
+                // Letzter Parameter ist laut offizieller Doku eine TargetID zum
+                // Deep-Linking beim Antippen der Nachricht (0 = kein Sprungziel),
+                // KEINE Sender-/Absender-Instanz-ID. $this->InstanceID war hier
+                // fälschlich übergeben -- das ist innerhalb einer fremden
+                // WebFront-Instanz kein gültiges/sichtbares Objekt, wodurch der
+                // Push dort scheitern konnte (Praxis-Fund chrschli, Symcon-
+                // Forum, 05.09.2026: ein Ziel schlug fehl, ein anderes ging).
+                $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, 0);
             }
             if ($ok) {
                 $sent++;
