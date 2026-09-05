@@ -212,11 +212,15 @@ check('nutzt das Icon des HÖCHSTEN Schweregrads (🚨 für Severe, nicht ⚠️
 $statusOne = callPrivate($hub, 'renderKachelStatus', [[['identifier' => 'w1', 'severity' => 'Minor']], 1700000000]);
 check('bei genau 1 aktiver Warnung: Singular "1 aktive Warnung" statt "1 aktive Warnungen"', str_contains($statusOne, '1 aktive Warnung') && !str_contains($statusOne, '1 aktive Warnungen'));
 
-echo "\n== relativeMinutesText(): verständliche Zeitangaben ==\n";
-check('Zeitstempel 0 (nie geprüft) -> "noch nie geprüft"', callPrivate($hub, 'relativeMinutesText', [0]) === 'noch nie geprüft');
-check('gerade eben -> "gerade eben geprüft"', callPrivate($hub, 'relativeMinutesText', [time()]) === 'gerade eben geprüft');
-check('vor 5 Minuten -> "vor 5 Min. geprüft"', callPrivate($hub, 'relativeMinutesText', [time() - 5 * 60]) === 'vor 5 Min. geprüft');
-check('vor 2 Stunden -> "vor 2 Std. geprüft"', callPrivate($hub, 'relativeMinutesText', [time() - 2 * 3600]) === 'vor 2 Std. geprüft');
+echo "\n== renderKachelStatus(): absolute Uhrzeit statt (kaputter) Relativzeit ==\n";
+// Fix Praxis-Fund ralf, Symcon-Forum 05.09.2026: relativeMinutesText() wurde
+// IMMER im selben Poll()-Durchlauf berechnet, der LastPollTs erst auf
+// time() gesetzt hat -- die Kachel zeigte dadurch bis zum nächsten Poll
+// fälschlich dauerhaft "gerade eben geprüft". Jetzt absolute Uhrzeit wie
+// die Übersichts-Kachel.
+check('zeigt die absolute Uhrzeit (17:00 aus dem Test-Unix-Timestamp), nicht "gerade eben"', str_contains($statusOne, date('H:i', 1700000000) . ' Uhr geprüft'));
+$statusNie = callPrivate($hub, 'renderKachelStatus', [[], 0]);
+check('Zeitstempel 0 (nie geprüft) -> "noch nie geprüft"', str_contains($statusNie, 'noch nie geprüft'));
 
 echo "\n== hexToRgba(): korrekte Umrechnung für die Icon-Hintergrundfarbe ==\n";
 check('#FF453A (systemRed) -> rgba(255,69,58,0.18)', callPrivate($hub, 'hexToRgba', ['#FF453A', 0.18]) === 'rgba(255,69,58,0.18)');

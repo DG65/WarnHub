@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.0.2';
+    private const DOC_VERSION = '1.0.3';
     private const NEWS_VERSION = '1.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
@@ -1764,10 +1764,17 @@ class WarnHub extends IPSModule
     {
         $candidates = $this->findInstancesByModuleNameSubstring(self::FROGGIT_GUID, 'froggit');
         foreach (array_keys($candidates) as $instanceID) {
-            $windboe = $this->findChildVariableByExactName($instanceID, 'Windböe');
-            $regenrate = $this->findChildVariableByExactName($instanceID, 'Regenrate');
+            // Ident-basiert statt Namensvergleich (Praxis-Fund ralf, Symcon-
+            // Forum, 05.09.2026: Instanz nicht gefunden) -- der Name "Windböe"/
+            // "Regenrate" kommt erst aus locale.json und hängt damit von der
+            // Symcon-Systemsprache ab bzw. verschwindet bei einem manuell vom
+            // Nutzer umbenannten Objekt; die Idents "windgustmph"/"rainratein"
+            // (verifiziert gegen den echten Quellcode github.com/IPSAttain/
+            // Froggit) bleiben davon unberührt, analog zu Wolbolar/Meteobridge.
+            $windboe = $this->findChildVariableByIdent($instanceID, 'windgustmph');
+            $regenrate = $this->findChildVariableByIdent($instanceID, 'rainratein');
             if ($windboe === null || $regenrate === null) {
-                continue; // Name passt, aber die entscheidenden Felder fehlen -- kein Treffer
+                continue; // Ident passt, aber die entscheidenden Felder fehlen -- kein Treffer
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
             return sprintf('✅ Wetterstation "%s" gefunden (Froggit, Windböe/Regenrate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
@@ -3668,21 +3675,6 @@ class WarnHub extends IPSModule
         return ['rank' => $rank, 'severity' => $severity];
     }
 
-    private function relativeMinutesText(int $ts): string
-    {
-        if ($ts === 0) {
-            return 'noch nie geprüft';
-        }
-        $minutes = (int) round((time() - $ts) / 60);
-        if ($minutes <= 0) {
-            return 'gerade eben geprüft';
-        }
-        if ($minutes < 60) {
-            return 'vor ' . $minutes . ' Min. geprüft';
-        }
-        return 'vor ' . (int) round($minutes / 60) . ' Std. geprüft';
-    }
-
     /** Gemeinsamer <style>-Block beider Kacheln -- pro Kachel eigener Klassen-Namensraum (.whub-status/.whub-overview), damit beide unabhängig als Kachel-Visualisierung eingebunden werden können, ohne sich gegenseitig zu beeinflussen. */
     private function tileStyleBlock(): string
     {
@@ -3742,7 +3734,17 @@ CSS;
             $color = self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown'];
             $title = $count === 1 ? '1 aktive Warnung' : $count . ' aktive Warnungen';
         }
-        $sub = htmlspecialchars($this->relativeMinutesText($lastTs));
+        // Absolute Uhrzeit statt relativer Minutenangabe (Fix Praxis-Fund
+        // ralf, Symcon-Forum 05.09.2026): relativeMinutesText() wurde IMMER
+        // direkt im selben Poll()-Durchlauf berechnet, der LastPollTs auch
+        // erst auf time() gesetzt hat -- die "verstrichene Zeit" war dadurch
+        // rechnerisch stets ~0 und die Kachel blieb bis zum nächsten Poll
+        // für den Betrachter fälschlich bei "gerade eben geprüft" stehen,
+        // ganz gleich wie lange der letzte Check tatsächlich zurücklag.
+        // Eine echte "vor X Min." Angabe bräuchte eine client-seitig
+        // tickende Uhr (JS in der Kachel); die Übersichts-Kachel zeigt aus
+        // demselben Grund schon länger die absolute Uhrzeit statt Relativzeit.
+        $sub = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr geprüft' : 'noch nie geprüft';
         if ($snoozed) {
             $sub .= ' · 🔕 Push pausiert';
         }

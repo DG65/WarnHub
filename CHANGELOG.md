@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.3 (2026-09-05)
+
+- Fix: Froggit-Wetterstation wurde von der Objektbaum-Suche nicht gefunden,
+  obwohl installiert. `DiscoverWetterstation()` verglich bislang die
+  angezeigten Variablennamen ("Windböe"/"Regenrate") -- die kommen aber
+  erst über `locale.json` zustande und hängen damit von der Symcon-
+  Systemsprache ab bzw. verschwinden bei einem vom Nutzer umbenannten
+  Objekt. Jetzt ident-basiert (`windgustmph`/`rainratein`, verifiziert
+  gegen den echten Quellcode github.com/IPSAttain/Froggit), analog zu
+  Sainlogic/ELV und Meteobridge/Meteohub. Praxis-Fund von ralf im
+  Symcon-Forum, 05.09.2026.
+- Fix: die kompakte Kachel ("Kachel (kompakt)") zeigte im Unterzeile-Text
+  dauerhaft "gerade eben geprüft", unabhängig davon, wie lange der letzte
+  Check tatsächlich zurücklag -- die Übersichts-Kachel zeigte daneben
+  korrekt die tatsächliche Uhrzeit. Ursache: die Relativzeit-Berechnung
+  lief immer im selben `Poll()`-Durchlauf, der den Zeitstempel gerade
+  erst auf "jetzt" gesetzt hatte, wodurch "verstrichene Zeit" rechnerisch
+  stets ~0 war. Jetzt zeigt auch die kompakte Kachel die absolute Uhrzeit
+  wie die Übersichts-Kachel; die dadurch nutzlos gewordene
+  `relativeMinutesText()` wurde entfernt. Praxis-Fund von ralf im
+  Symcon-Forum, 05.09.2026.
+
 ## 1.0.2 (2026-09-05)
 
 - Fix: Push an WebFront-Instanzen (`WFC_PushNotification`) konnte bei

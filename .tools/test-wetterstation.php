@@ -20,10 +20,14 @@ const LOCATION_CONTROL_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
 const LOCATION_INSTANCE_ID = 900;
 
 // Fake-Objektbaum für DiscoverWetterstation():
-//   10 Instanz "Wetterstation" (exakte Froggit-GUID) -> 101 "Windböe"
-//      (Profil ~WindSpeed.kmh), 102 "Regenrate" (~Rainfall), 103 "Windböe
-//      (Max.) Tag" (Dekoy, exakter Namensabgleich darf sie NICHT mit 101
-//      verwechseln)
+//   10 Instanz "Wetterstation" (exakte Froggit-GUID) -> 101 Ident
+//      "windgustmph"/Anzeigename "Windböe" (Profil ~WindSpeed.kmh), 102
+//      Ident "rainratein"/Anzeigename "Regenrate" (~Rainfall), 103 Ident
+//      "maxdailygust"/Anzeigename "Windböe (Max.) Tag" (Dekoy, der
+//      Ident-Abgleich darf sie NICHT mit 101 verwechseln -- echte Idents
+//      laut Quellcode github.com/IPSAttain/Froggit, Praxis-Fund ralf,
+//      Symcon-Forum 05.09.2026: Namensabgleich fand die echte Instanz
+//      nicht)
 //   11 Instanz "Andere Wetterstation" (nur über Namenssuche "froggit"
 //      auffindbar, KEINE Windböe/Regenrate-Variable -- muss trotz
 //      Namenstreffer abgelehnt werden)
@@ -47,9 +51,9 @@ $GLOBALS['whub_test_objects'] = [
     11 => ['ObjectType' => 1, 'ObjectName' => 'Andere Wetterstation', 'ObjectIdent' => ''],
     20 => ['ObjectType' => 1, 'ObjectName' => 'Sainlogic', 'ObjectIdent' => ''],
     30 => ['ObjectType' => 1, 'ObjectName' => 'Meteobridge', 'ObjectIdent' => ''],
-    101 => ['ObjectType' => 2, 'ObjectName' => 'Windböe', 'ObjectIdent' => ''],
-    102 => ['ObjectType' => 2, 'ObjectName' => 'Regenrate', 'ObjectIdent' => ''],
-    103 => ['ObjectType' => 2, 'ObjectName' => 'Windböe (Max.) Tag', 'ObjectIdent' => ''],
+    101 => ['ObjectType' => 2, 'ObjectName' => 'Windböe', 'ObjectIdent' => 'windgustmph'],
+    102 => ['ObjectType' => 2, 'ObjectName' => 'Regenrate', 'ObjectIdent' => 'rainratein'],
+    103 => ['ObjectType' => 2, 'ObjectName' => 'Windböe (Max.) Tag', 'ObjectIdent' => 'maxdailygust'],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Innentemperatur', 'ObjectIdent' => ''],
     201 => ['ObjectType' => 2, 'ObjectName' => 'Wind gust', 'ObjectIdent' => 'Windgust'],
     202 => ['ObjectType' => 2, 'ObjectName' => 'Rain', 'ObjectIdent' => 'rainin'],
