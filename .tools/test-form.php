@@ -332,5 +332,9 @@ foreach ($pruefungPanel['items'] ?? [] as $item) {
 }
 check('Hinweis auf die fertigen WebFront-Kacheln steht im Prüfung & Status-Panel', $kachelHinweis !== null);
 
+$karteStandortField = findByName($decoded['elements'], 'KartenkachelStandort');
+check('Auswahlfeld "KartenkachelStandort" (für die Karten-Kachel) vorhanden', $karteStandortField !== null);
+check('Auswahlfeld hat immer die Option "(kein Standort ausgewählt)" (leerer Wert erlaubt)', in_array(['caption' => '(kein Standort ausgewählt)', 'value' => ''], $karteStandortField['options'] ?? [], true));
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

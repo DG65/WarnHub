@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.1.0 (2026-09-06)
+
+- "Kachel (kompakt)" und "Kachel (Übersicht)" enthalten jetzt eine kleine
+  Link-Zeile zu den drei amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).
+  Echte externe Links (kein iframe) -- neue Konstanten `DWD_MAP_URL`,
+  `ZAMG_MAP_URL`, `METEOSWISS_MAP_URL`.
+- NEU: zwei weitere fertige WebFront-Kacheln, Variablen `KachelKarte` und
+  `KachelZamg` (Objektpositionen 7/8). "Kachel (Karte)" zeigt eine
+  OpenStreetMap-Karte (Leaflet.js via CDN), zentriert auf einen im
+  Formular frei wählbaren Standort (neue Property
+  `KartenkachelStandort`, Panel "Prüfung & Status") -- auch mobile
+  Standorte, folgt deren Live-Position (`resolveStandortCoords()`).
+  Markerfarbe nach höchstem aktivem Schweregrad, neuer Helfer
+  `findStandortByName()`. "Kachel (ZAMG-Warnkarte, Österreich)" bettet
+  die offizielle ZAMG-Warnkarte per iframe ein -- zeigt aktuell ganz
+  Österreich, eine automatische Zentrierung auf einen Standort bräuchte
+  eine verifizierte Umrechnung in Österreichs Kartenprojektion (vermutlich
+  EPSG:31287) und ist bewusst noch nicht umgesetzt.
+- Wichtiger technischer Fund dabei: DWD und MeteoSchweiz senden
+  `X-Frame-Options: SAMEORIGIN` auf ihren Warnkarten-Seiten -- eine
+  Einbettung dieser beiden per iframe ist deshalb technisch nicht
+  möglich (live geprüft 06.09.2026), nur die ZAMG-Seite erlaubt das.
+  Deshalb die zwei unterschiedlichen Lösungswege (Link-Zeile für DE/CH,
+  echtes Embed nur für AT).
+- Anders als die bisherigen zwei Kacheln laden die beiden neuen bewusst
+  externe Ressourcen (Leaflet.js/OpenStreetMap-Kacheln bzw. die
+  eingebettete ZAMG-Seite selbst) -- ein Bruch mit dem bisherigen
+  "keine externen Abhängigkeiten"-Prinzip der Kacheln, an entsprechender
+  Stelle in Formular und README offen benannt.
+- GeoSphere Austria: die Warnungs-Beschreibung enthält jetzt zusätzlich
+  `meteotext` (kurze meteorologische Erklärung, z. B. "Mit einer
+  stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis 80 km/h")
+  vor Auswirkungen/Empfehlungen -- lag in der API schon immer vor, wurde
+  bisher aber nicht ausgelesen. Fund von hfichtinger (unabhängiges
+  eigenes Skript) im Symcon-Forum, 06.09.2026.
+- Alle Funde/Wünsche von Dietmar, 06.09.2026 ("Also, dann hätte ich sehr
+  gerne Meteotext, deinen Vorschlag von oben und Du könntest auch in die
+  Kacheln Kompakt und Übersicht die Links zu den drei offiziellen Karten
+  einbauen. Speziell für die Österreicher kannst du auch eine Kachel für
+  die ZAMG Karte bauen.").
+
 ## 1.0.4 (2026-09-06)
 
 - GeoSphere Austria: die Warnungs-Beschreibung enthält jetzt zusätzlich

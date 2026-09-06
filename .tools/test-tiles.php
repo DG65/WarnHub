@@ -225,5 +225,41 @@ check('Zeitstempel 0 (nie geprüft) -> "noch nie geprüft"', str_contains($statu
 echo "\n== hexToRgba(): korrekte Umrechnung für die Icon-Hintergrundfarbe ==\n";
 check('#FF453A (systemRed) -> rgba(255,69,58,0.18)', callPrivate($hub, 'hexToRgba', ['#FF453A', 0.18]) === 'rgba(255,69,58,0.18)');
 
+echo "\n== officialMapLinksHtml(): Links zu den drei amtlichen Warnkarten (Dietmars Wunsch 06.09.2026) ==\n";
+$mapLinks = callPrivate($hub, 'officialMapLinksHtml', []);
+check('enthält den DWD-Link', str_contains($mapLinks, 'dwd.de'));
+check('enthält den ZAMG-Link', str_contains($mapLinks, 'zamg.at'));
+check('enthält den MeteoSchweiz-Link', str_contains($mapLinks, 'meteoswiss.admin.ch'));
+check('öffnet extern (target="_blank", rel="noopener" -- kein iframe, DWD/MeteoSchweiz sperren das per X-Frame-Options)', substr_count($mapLinks, 'target="_blank"') === 3 && substr_count($mapLinks, 'rel="noopener"') === 3);
+check('Kachel (kompakt) enthält die Kartenlinks', str_contains($statusOne, 'whub-maplinks') && str_contains($statusOne, 'zamg.at'));
+check('Kachel (Übersicht) enthält die Kartenlinks', str_contains($uebersichtEmpty, 'whub-maplinks') && str_contains($uebersichtEmpty, 'dwd.de'));
+
+echo "\n== renderKachelKarte(): Standort-zentrierte OpenStreetMap-Kachel ==\n";
+$karteLeer = callPrivate($hub, 'renderKachelKarte', [[], [], false]);
+check('ohne ausgewählten Standort: Hinweistext statt Karte', str_contains($karteLeer, 'Kein Standort'));
+check('ohne ausgewählten Standort: kein Leaflet-Skript geladen', !str_contains($karteLeer, 'leaflet'));
+
+$standort = ['Name' => 'Zuhause "Test"', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true];
+$karte = callPrivate($hub, 'renderKachelKarte', [$standort, [['identifier' => 'w1', 'severity' => 'Severe']], false]);
+check('lädt Leaflet.js von unpkg.com', str_contains($karte, 'unpkg.com/leaflet'));
+check('zentriert auf die Standort-Koordinaten (48.478500, 7.944800)', str_contains($karte, '48.478500, 7.944800'));
+check('Marker-Farbe folgt dem höchsten aktiven Schweregrad (TILE_SEVERITY_COLOR[Severe])', str_contains($karte, "color:'#FF9F0A'"));
+check('Standort-Name als sicherer JSON-String im Tooltip (Anführungszeichen im Namen escaped, kein rohes ")', str_contains($karte, 'bindTooltip(') && !str_contains($karte, 'bindTooltip("Zuhause "Test""'));
+
+$karteRuhig = callPrivate($hub, 'renderKachelKarte', [$standort, [], false]);
+check('keine aktive Warnung -> grüne Markerfarbe (TILE_COLOR_OK)', str_contains($karteRuhig, "color:'#30D158'"));
+
+echo "\n== renderKachelZamg(): eingebettete ZAMG-Warnkarte (nur Österreich, Dietmars Wunsch 06.09.2026) ==\n";
+$zamg = callPrivate($hub, 'renderKachelZamg', []);
+check('bettet die ZAMG-URL als iframe ein', str_contains($zamg, '<iframe') && str_contains($zamg, 'warnungen.zamg.at'));
+
+echo "\n== findStandortByName(): Standort-Auflösung für die Karten-Kachel-Auswahl ==\n";
+$hub->SetProp('Standorte', json_encode([
+    ['Name' => 'Zuhause', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true],
+]));
+check('findet einen konfigurierten Standort per Namen', callPrivate($hub, 'findStandortByName', ['Zuhause'])['Name'] === 'Zuhause');
+check('leerer Name -> [] (keine Auswahl getroffen)', callPrivate($hub, 'findStandortByName', ['']) === []);
+check('unbekannter Name -> [] (z. B. gelöschter Standort)', callPrivate($hub, 'findStandortByName', ['Nicht vorhanden']) === []);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

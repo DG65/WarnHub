@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.0.4';
-    private const NEWS_VERSION = '1.0';
+    private const DOC_VERSION = '1.1.0';
+    private const NEWS_VERSION = '1.1.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -250,6 +250,19 @@ class WarnHub extends IPSModule
     // offizieller Doku: WarnType 1=storm,2=rain,3=snow,4=black ice,5=thunderstorm,
     // 6=heat,7=cold; WarnLevel 1=yellow,2=orange,3=red.
     private const GEOSPHERE_AT_URL = 'https://warnungen.zamg.at/wsapp/api/getWarningsForCoords';
+
+    // Amtliche Warnkarten zum Verlinken/Einbetten (live geprüft 06.09.2026,
+    // alle drei HTTP 200). DWD und MeteoSchweiz senden `X-Frame-Options:
+    // SAMEORIGIN` -- lassen sich deshalb NICHT in ein iframe einbetten,
+    // nur extern verlinken. Die ZAMG-Kartenseite sendet keine solche Sperre
+    // (sogar `Access-Control-Allow-Origin: *`) und lässt sich embedden --
+    // die hier hinterlegte URL zeigt ganz Österreich (Dietmars eigener
+    // Fund); eine automatische Zentrierung auf einen einzelnen Standort
+    // bräuchte eine verifizierte Umrechnung nach Österreichs Kartenprojektion
+    // (vermutlich EPSG:31287) und ist bewusst noch nicht umgesetzt.
+    private const DWD_MAP_URL = 'https://www.dwd.de/DE/wetter/warnungen/warnWetter_node.html';
+    private const METEOSWISS_MAP_URL = 'https://www.meteoswiss.admin.ch/weather/hazards/hazard-map.html';
+    private const ZAMG_MAP_URL = 'https://warnungen.zamg.at/wsapp/de/alle/gesamterzeitraum/-62732,135250,865393,656783';
     private const GEOSPHERE_AT_WARNTYPE_EVENT = [
         1 => 'Sturm', 2 => 'Starkregen', 3 => 'Schnee', 4 => 'Glatteis',
         5 => 'Gewitter', 6 => 'Hitze', 7 => 'Kälte',
@@ -350,6 +363,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyString('Schutzaktionen', '[]');
         $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
         $this->RegisterPropertyString('WebFronts', '[]');
+        $this->RegisterPropertyString('KartenkachelStandort', '');
 
         $this->RegisterTimer('PollTimer', 0, 'WHUB_Poll($_IPS[\'TARGET\']);');
         $this->RegisterTimer('SirenOffTimer', 0, 'WHUB_CheckSirenOff($_IPS[\'TARGET\']);');
@@ -395,6 +409,8 @@ class WarnHub extends IPSModule
         $this->MaintainVariable('LetztePruefung', 'Letzte Prüfung', VARIABLETYPE_INTEGER, '~UnixTimestamp', 4, true);
         $this->MaintainVariable('KachelStatus', 'Kachel (kompakt)', VARIABLETYPE_STRING, '~HTMLBox', 5, true);
         $this->MaintainVariable('KachelUebersicht', 'Kachel (Übersicht)', VARIABLETYPE_STRING, '~HTMLBox', 6, true);
+        $this->MaintainVariable('KachelKarte', 'Kachel (Karte)', VARIABLETYPE_STRING, '~HTMLBox', 7, true);
+        $this->MaintainVariable('KachelZamg', 'Kachel (ZAMG-Warnkarte, Österreich)', VARIABLETYPE_STRING, '~HTMLBox', 8, true);
         $this->refreshStatusVariables();
 
         $hasSource = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
@@ -439,6 +455,8 @@ class WarnHub extends IPSModule
         @$this->SetValue('LetztePruefung', $lastTs);
         @$this->SetValue('KachelStatus', $this->renderKachelStatus($active, $lastTs, $snoozed));
         @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs, $snoozed));
+        @$this->SetValue('KachelKarte', $this->renderKachelKarte($this->findStandortByName($this->ReadPropertyString('KartenkachelStandort')), $active, $snoozed));
+        @$this->SetValue('KachelZamg', $this->renderKachelZamg());
     }
 
     // ----------------------------------------------------------------
@@ -765,7 +783,13 @@ class WarnHub extends IPSModule
             $pruefungItems[] = ['type' => 'Label', 'name' => 'WetterstationRestoreStatusLabel', 'caption' => $restoreLine];
         }
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: zwei weitere Variablen ("Kachel (kompakt)", "Kachel (Übersicht)") im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. Passen sich automatisch an Hell/Dunkel an. Ohne echtes WebFront hier nicht selbst gegenprüfbar -- Rückmeldungen willkommen.'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: vier weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)" und "Kachel (Übersicht)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Beide enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine OpenStreetMap-Karte, zentriert auf den unten gewählten Standort (auch mobile Standorte -- folgt dessen Live-Position). Markerfarbe nach höchstem aktivem Schweregrad. Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js + OpenStreetMap-Kachelbilder von unpkg.com/openstreetmap.org).'];
+        $pruefungItems[] = ['type' => 'Select', 'name' => 'KartenkachelStandort', 'caption' => 'Standort für "Kachel (Karte)"', 'options' => array_merge(
+            [['caption' => '(kein Standort ausgewählt)', 'value' => '']],
+            array_map(fn ($s) => ['caption' => $s['Name'], 'value' => $s['Name']], array_filter($this->decodeStandorte(), fn ($s) => $s['Name'] !== ''))
+        )];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🇦🇹 "Kachel (ZAMG-Warnkarte, Österreich)": bettet die offizielle ZAMG-Warnkarte direkt ein (iframe) -- speziell für österreichische Nutzer. Zeigt aktuell ganz Österreich, noch ohne automatische Zentrierung auf einen einzelnen Standort.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'];
         $pruefungItems[] = [
@@ -1147,6 +1171,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Eine bereits abgelaufene Warnung zählt nicht mehr als aktiv, auch wenn die Quelle sie verzögert weiterliefert -- Absicherung gegen veraltete Quelldaten'],
                 ['type' => 'Label', 'caption' => '• Auto-Rückstellung: wird jetzt zusätzlich in der Warnungs-Historie protokolliert (neuer Verlaufstyp "Rückstellung"), eine noch anstehende Rückstellung steht als eigene Statuszeile im Panel "Prüfung & Status"'],
                 ['type' => 'Label', 'caption' => '• Eigene Wetterstation sendet jetzt auch eine echte "✅ Entwarnung"-Push, sobald Windböe/Regenrate wieder unter dem Schwellwert liegen -- vorher gab es nur die "Sturm kommt"-Meldung, nie ein "Sturm vorbei" (die Quelle liefert selbst kein Cancel, WarnHub erkennt es jetzt anhand des eigenen Verlaufs)'],
+                ['type' => 'Label', 'caption' => '• GeoSphere Austria: die Warnungs-Beschreibung enthält jetzt zusätzlich die meteorologische Kurzerklärung der Quelle (z. B. "Mit einer stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis 80 km/h") vor Auswirkungen/Empfehlungen'],
+                ['type' => 'Label', 'caption' => '• "Kachel (kompakt)" und "Kachel (Übersicht)" enthalten jetzt unten drei kleine Links zu den amtlichen Warnkarten (DWD, ZAMG, MeteoSchweiz)'],
+                ['type' => 'Label', 'caption' => '• NEU: zwei weitere fertige WebFront-Kacheln. "Kachel (Karte)" zeigt eine OpenStreetMap-Karte, zentriert auf einen frei wählbaren Standort (auch mobile -- folgt der Live-Position), Markerfarbe nach höchstem aktivem Schweregrad. "Kachel (ZAMG-Warnkarte, Österreich)" bettet die offizielle ZAMG-Warnkarte direkt ein -- speziell für österreichische Nutzer. Beide laden anders als die bisherigen zwei Kacheln bewusst externe Ressourcen (Leaflet.js/OpenStreetMap bzw. die ZAMG-Seite selbst); eine Einbettung der DWD-/MeteoSchweiz-Warnkarten war technisch nicht möglich, beide verbieten das per X-Frame-Options'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1224,6 +1251,20 @@ class WarnHub extends IPSModule
             ];
         }
         return $out;
+    }
+
+    /** Für die Karten-Kachel (KartenkachelStandort-Property, siehe renderKachelKarte()): Standort per Namen finden, [] wenn keiner/nicht mehr vorhanden. */
+    private function findStandortByName(string $name): array
+    {
+        if ($name === '') {
+            return [];
+        }
+        foreach ($this->decodeStandorte() as $s) {
+            if ($s['Name'] === $name) {
+                return $s;
+            }
+        }
+        return [];
     }
 
     /**
@@ -3717,8 +3758,29 @@ class WarnHub extends IPSModule
 .whub-empty{display:flex;align-items:center;gap:12px;padding:2px 2px;}
 .whub-empty-icon{flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:rgba(48,209,88,0.16);display:flex;align-items:center;justify-content:center;font-size:19px;}
 .whub-empty-text{font-size:14px;font-weight:600;}
+.whub-maplinks{display:flex;gap:12px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.08);}
+.whub-maplinks a{font-size:11px;font-weight:600;text-decoration:none;color:inherit;opacity:0.65;}
+@media (prefers-color-scheme:dark){.whub-maplinks{border-top-color:rgba(255,255,255,0.12);}}
 </style>
 CSS;
+    }
+
+    /**
+     * Kompakte Link-Zeile zu den drei amtlichen Warnkarten (DWD/ZAMG/
+     * MeteoSchweiz) -- echte externe Links (kein iframe), deshalb unabhängig
+     * von der X-Frame-Options-Sperre, die DWD und MeteoSchweiz für eine
+     * Einbettung setzen (siehe Konstanten-Kommentar oben). Allgemeine,
+     * nicht personalisierte Landkarten -- immer alle drei gezeigt statt
+     * nach Standort zu filtern, kein Mehrwert durch Auswahl. Dietmars
+     * Wunsch 06.09.2026.
+     */
+    private function officialMapLinksHtml(): string
+    {
+        return '<div class="whub-maplinks">'
+            . '<a href="' . htmlspecialchars(self::DWD_MAP_URL) . '" target="_blank" rel="noopener">🇩🇪 DWD</a>'
+            . '<a href="' . htmlspecialchars(self::ZAMG_MAP_URL) . '" target="_blank" rel="noopener">🇦🇹 ZAMG</a>'
+            . '<a href="' . htmlspecialchars(self::METEOSWISS_MAP_URL) . '" target="_blank" rel="noopener">🇨🇭 MeteoSchweiz</a>'
+            . '</div>';
     }
 
     /**
@@ -3766,6 +3828,7 @@ CSS;
       <div class="whub-badge-sub">{$sub}</div>
     </div>
   </div>
+  {$this->officialMapLinksHtml()}
 </div>
 HTML;
     }
@@ -3824,6 +3887,76 @@ HTML;
     <span class="whub-header-time">{$time}</span>
   </div>
   {$body}
+  {$this->officialMapLinksHtml()}
+</div>
+HTML;
+    }
+
+    /**
+     * Standort-zentrierte Karten-Kachel (OpenStreetMap via Leaflet.js, CDN) --
+     * einziger Unterschied zu den übrigen Kacheln: lädt bewusst externe
+     * Ressourcen (Leaflet-JS/CSS + OSM-Kachelbilder), keine rein
+     * eigenständige HTML/CSS-Lösung wie die kompakte/Übersichts-Kachel.
+     * Zeigt IMMER den aktuellen Standort zentriert (auch mobile, Live-
+     * Standort-gebundene -- resolveStandortCoords() liest bei jeder
+     * Prüfung neu), Markerfarbe nach höchstem aktivem Schweregrad. Zeigt
+     * bewusst noch KEINE einzelnen Warnflächen (Polygon/Kreis) -- die
+     * werden aktuell nicht dauerhaft gespeichert (nur Anzeige-Felder in
+     * LastActiveWarningsJson), das wäre eine eigene Erweiterung. Dietmars
+     * Wunsch 06.09.2026. Ohne echtes WebFront nicht selbst gegenprüfbar --
+     * Rückmeldungen willkommen.
+     */
+    private function renderKachelKarte(array $standort, array $active, bool $snoozed = false): string
+    {
+        if ($standort === []) {
+            return $this->tileStyleBlock() . <<<HTML
+<div class="whub-status">
+  <div class="whub-empty">
+    <div class="whub-empty-icon">🗺️</div>
+    <div class="whub-empty-text">Kein Standort für die Karten-Kachel ausgewählt (siehe Panel "Prüfung &amp; Status")</div>
+  </div>
+</div>
+HTML;
+        }
+        $coords = $this->resolveStandortCoords($standort);
+        $latStr = number_format($coords['lat'], 6, '.', '');
+        $lonStr = number_format($coords['lon'], 6, '.', '');
+        $top = count($active) > 0 ? $this->highestActiveSeverity($active) : null;
+        $color = $top !== null ? (self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown']) : self::TILE_COLOR_OK;
+        $nameJs = json_encode((string) $standort['Name'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        $mapId = 'whubmap' . substr(md5((string) $this->InstanceID . $standort['Name']), 0, 10);
+
+        return $this->tileStyleBlock() . <<<HTML
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="whub-status" style="padding:0;overflow:hidden;">
+  <div id="{$mapId}" style="width:100%;height:220px;border-radius:22px;"></div>
+  <script>
+  (function(){
+    var el = document.getElementById('{$mapId}');
+    if (!el || typeof L === 'undefined') { return; }
+    var map = L.map(el, {zoomControl:false, attributionControl:false}).setView([{$latStr}, {$lonStr}], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18}).addTo(map);
+    L.circleMarker([{$latStr}, {$lonStr}], {radius:10, color:'{$color}', fillColor:'{$color}', fillOpacity:0.85, weight:2}).addTo(map).bindTooltip({$nameJs});
+  })();
+  </script>
+</div>
+HTML;
+    }
+
+    /**
+     * ZAMG-Warnkarte fest eingebettet (iframe) -- speziell für Österreich,
+     * Dietmars Wunsch 06.09.2026. Zeigt derzeit ganz Österreich
+     * (self::ZAMG_MAP_URL), noch OHNE automatische Zentrierung auf einen
+     * einzelnen Standort (siehe Konstanten-Kommentar oben) -- bewusste V1-
+     * Einschränkung statt einer ungeprüften Projektionsrechnung.
+     */
+    private function renderKachelZamg(): string
+    {
+        $url = htmlspecialchars(self::ZAMG_MAP_URL);
+        return $this->tileStyleBlock() . <<<HTML
+<div class="whub-status" style="padding:0;overflow:hidden;">
+  <iframe src="{$url}" style="width:100%;height:320px;border:0;border-radius:22px;" loading="lazy" title="ZAMG-Warnkarte Österreich"></iframe>
 </div>
 HTML;
     }
