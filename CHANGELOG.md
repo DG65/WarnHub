@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.4 (2026-09-06)
+
+- GeoSphere Austria: die Warnungs-Beschreibung enthält jetzt zusätzlich
+  `meteotext` (kurze meteorologische Erklärung, z. B. "Mit einer
+  stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis 80 km/h")
+  vor Auswirkungen/Empfehlungen -- lag in der API schon immer vor, wurde
+  bisher aber nicht ausgelesen. Fund von hfichtinger (unabhängiges
+  eigenes Skript) im Symcon-Forum, 06.09.2026.
+
 ## 1.0.3 (2026-09-05)
 
 - Fix: Froggit-Wetterstation wurde von der Objektbaum-Suche nicht gefunden,

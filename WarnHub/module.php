@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.0.3';
+    private const DOC_VERSION = '1.0.4';
     private const NEWS_VERSION = '1.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
@@ -3022,11 +3022,19 @@ class WarnHub extends IPSModule
             $startTs = isset($props['rawinfo']['start']) ? (int) $props['rawinfo']['start'] : null;
             $endTs = isset($props['rawinfo']['end']) ? (int) $props['rawinfo']['end'] : null;
             $event = self::GEOSPHERE_AT_WARNTYPE_EVENT[$wtype] ?? 'Warnung';
-            $description = trim((string) ($props['auswirkungen'] ?? ''));
-            $empfehlungen = trim((string) ($props['empfehlungen'] ?? ''));
-            if ($empfehlungen !== '') {
-                $description = $description !== '' ? $description . ' ' . $empfehlungen : $empfehlungen;
-            }
+            // meteotext (meteorologische Kurzerklärung, z. B. "Mit einer
+            // stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis
+            // 80 km/h") liefert die API zusätzlich zu auswirkungen/
+            // empfehlungen mit, wurde bisher aber nicht ausgelesen -- Fund
+            // von hfichtinger (unabhängiges Skript) im Symcon-Forum,
+            // 06.09.2026, per eigener Testfixture (Fund von damals, echte
+            // API-Antwort) bestätigt.
+            $descriptionParts = array_filter([
+                trim((string) ($props['meteotext'] ?? '')),
+                trim((string) ($props['auswirkungen'] ?? '')),
+                trim((string) ($props['empfehlungen'] ?? '')),
+            ], fn ($part) => $part !== '');
+            $description = implode(' ', $descriptionParts);
             $out[] = [
                 'identifier' => 'geosphere-at-' . $warnId,
                 'source' => 'geosphere_at',
