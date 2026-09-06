@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.1.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.2.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -12,7 +12,7 @@ direkte amtliche Quellen für Österreich (GeoSphere Austria) und die Schweiz
 (BAFU-Hochwasser-Gefahrenstufen), europaweite Wetterwarnungen für 39 Länder sowie optional die
 eigene Wetterstation als unabhängiges Sicherheitsnetz -- gefiltert auf den selbst definierten
 Umkreis um eigene (auch mobile) Standorte, mit Mehrkanal-Push-Benachrichtigung an
-WebFront-/Kachel-Visualisierung-Geräte, Telegram und Pushover sowie optionalen
+WebFront-/Kachel-Visualisierung-Geräte, Telegram, Pushover und E-Mail sowie optionalen
 Schutzaktionen.
 
 ## Was tut dieses Modul?
@@ -98,9 +98,11 @@ genutzten Standorten).
 
 Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen **aktivierten**
 Push-Zielen -- WebFront- und Kachel-Visualisierung-Instanzen sowie, falls installiert,
-Telegram-Bot- (offizielles Symcon-Modul) und Pushover-Instanzen (Community-Modul), jeweils
-automatisch im Objektbaum gefunden und vorausgewählt, auch am Handy; einzelne Ziele lassen
-sich abwählen -- und können optional
+Telegram-Bot- (offizielles Symcon-Modul), Pushover- (Community-Modul) und SMTP-Instanzen
+(offizielles Symcon-Modul, für E-Mail), jeweils automatisch im Objektbaum gefunden und
+vorausgewählt, auch am Handy; einzelne Ziele lassen sich abwählen. Eine gefundene SMTP-Instanz
+kennt anders als die übrigen Typen nur den Versandweg, nicht den Empfänger -- deshalb zunächst
+inaktiv angelegt, bis eine Zieladresse eingetragen ist. Aktive Warnungen können optional
 **Schutzaktionen** auslösen --
 z. B. Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Autofenster
 schließen, Kofferraum/Heckklappe schließen (mit zwingender Sicherheitsprüfung gegen ein
@@ -154,7 +156,9 @@ Die Standort-, Datenquellen-, Push-Ziel- und Schutzaktionen-Suche folgen demselb
 gefundene Treffer werden als **bereits aktivierte** Zeile vorgeschlagen (ein gefundener
 mobiler Standort ist sofort mit den Live-Variablen verknüpft, eine gefundene Wetterstation
 ist sofort einsatzbereit, Push geht an jedes gefundene Ziel (WebFront/Kachel-Visualisierung/
-Telegram/Pushover),
+Telegram/Pushover/E-Mail) -- **Ausnahme E-Mail**: eine gefundene SMTP-Instanz kennt nur den
+Versandweg, nicht den Empfänger, und wird deshalb zunächst inaktiv angelegt, bis eine
+Zieladresse eingetragen ist --
 jede gefundene Raffstore-/Jalousie-/Markise-/Garage-/Fenster-/Sirene-Steuerung ist ab der
 nächsten passenden Warnung scharf) -- nicht gewünschte Treffer lassen sich einfach über die
 Aktiv-Spalte abwählen. Eine erneute Suche
@@ -299,6 +303,13 @@ echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   Nachricht zusammengefasst. Der Signalton (oben einstellbar) gilt nur für WebFront/
   Kachel-Visualisierung -- Telegram und Pushover verwenden ihre eigene, in der jeweiligen App
   konfigurierte Benachrichtigungstonauswahl.
+- E-Mail-Push (SMTP): die aufgerufene Funktion `SMTP_SendMailEx` wurde live gegen eine echte
+  IP-Symcon-Instanz verifiziert (Funktionssignatur, Modul-GUID) -- solider abgesichert als
+  Telegram/Pushover, aber genau wie dort ohne eigenen Testversand nicht vollständig
+  gegengeprüft. Voraussetzung ist eine bereits eingerichtete SMTP-Instanz (Mailserver-
+  Zugangsdaten) -- WarnHub versendet nur darüber, richtet keinen eigenen Mailserver-Zugang
+  ein. Titel wird zum Betreff, Text zum HTML-Inhalt (automatische HTML-Erkennung von Symcon
+  am `<html>`-Wrapper).
   Rückmeldungen zur Funktionsfähigkeit sind ausdrücklich willkommen.
 
 ## Lizenz

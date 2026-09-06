@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.1.0';
-    private const NEWS_VERSION = '1.1.0';
+    private const DOC_VERSION = '1.2.0';
+    private const NEWS_VERSION = '1.2.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -190,6 +190,12 @@ class WarnHub extends IPSModule
     // module.php-Quellcode entnommen, nicht geraten.
     private const TELEGRAM_BOT_GUID = '{32464EBD-4CCC-6174-4031-5AA374F7CD8D}';
     private const PUSHOVER_GUID = '{CAA4B646-5571-4B72-8897-7A3739B25C99}';
+    // Symcon-Kernmodul "SMTP" -- live gegen Dietmars eigene IP-Symcon-Instanz
+    // verifiziert (IPS_GetModuleList(), 06.09.2026), da kein öffentliches
+    // GitHub-Repo existiert (Kernmodul, kein Community-/Store-Modul).
+    // SMTP_SendMailEx($InstanzID, $Empfänger, $Betreff, $Inhalt) erkennt HTML
+    // automatisch am <html>...</html>-Wrapper (seit Symcon 7.0, offizielle Doku).
+    private const SMTP_GUID = '{375EAF21-35EF-4BC4-83B3-C780FD8BD88A}';
 
     // Froggit-Wetterstation (Modul "Froggit", Vendor HS) -- GUID live an
     // Dietmars System verifiziert (04.09.2026, Instanz #32052 "Wetterstation").
@@ -651,7 +657,7 @@ class WarnHub extends IPSModule
             'caption' => '🔔  Benachrichtigung',
             'expanded' => true,
             'items' => [
-                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte Push-Ziele (WebFront/Kachel-Visualisierung/Telegram/Pushover, auch Handy)'],
+                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte Push-Ziele (WebFront/Kachel-Visualisierung/Telegram/Pushover/E-Mail, auch Handy)'],
                 ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton (nur WebFront/Kachel-Visualisierung)', 'options' => $this->soundOptions()],
                 [
                     'type' => 'Button',
@@ -659,8 +665,9 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
                 ],
                 ['type' => 'Label', 'caption' => $this->webfrontStatusLine()],
-                ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul) und Pushover-Instanzen (Community-Modul). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
-                ['type' => 'Label', 'caption' => 'Telegram/Pushover: Anbindung anhand des echten Quellcodes der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
+                ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul), Pushover- (Community-Modul) und SMTP-Instanzen (offizielles Symcon-Modul, für E-Mail). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
+                ['type' => 'Label', 'caption' => 'Telegram/Pushover/E-Mail: Anbindung anhand des echten Quellcodes bzw. der echten Funktionssignatur der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot-/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
+                ['type' => 'Label', 'caption' => 'E-Mail (SMTP): eine gefundene SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger -- deshalb zunächst INAKTIV angelegt. Erst in der Spalte "Zieladresse" die gewünschte E-Mail-Adresse eintragen, dann in der Spalte "Aktiv" aktivieren.'],
                 [
                     'type' => 'List',
                     'name' => 'WebFronts',
@@ -668,15 +675,17 @@ class WarnHub extends IPSModule
                     'add' => false,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '220px', 'edit' => ['type' => 'ValidationTextBox', 'enabled' => false]],
-                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '180px', 'edit' => ['type' => 'Select', 'options' => [
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '190px', 'edit' => ['type' => 'ValidationTextBox', 'enabled' => false]],
+                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '160px', 'edit' => ['type' => 'Select', 'options' => [
                             ['caption' => 'WebFront', 'value' => 'webfront'],
                             ['caption' => 'Kachel-Visualisierung', 'value' => 'kachel'],
                             ['caption' => 'Telegram', 'value' => 'telegram'],
                             ['caption' => 'Pushover', 'value' => 'pushover'],
+                            ['caption' => 'E-Mail (SMTP)', 'value' => 'email'],
                         ]]],
-                        ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '100px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
-                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '80px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '90px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
+                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Zieladresse (nur E-Mail)', 'name' => 'Zieladresse', 'width' => '210px', 'edit' => ['type' => 'ValidationTextBox']],
                     ],
                 ],
                 ['type' => 'Label', 'caption' => 'Ruhephase: pausiert NUR die Benachrichtigung selbst -- Erkennung und Schutzaktionen laufen unverändert weiter (z. B. im Urlaub fährt die Markise bei Sturm trotzdem ein, nur das Handy bleibt still). Ein Klick auf "🧪 Testbenachrichtigung senden" oben kommt auch während einer Pause an.'],
@@ -978,10 +987,13 @@ class WarnHub extends IPSModule
         foreach ($this->findInstancesByModuleNameSubstring(self::PUSHOVER_GUID, 'pushover') as $instanceID => $moduleName) {
             $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'pushover'];
         }
+        foreach ($this->findInstancesByModuleNameSubstring(self::SMTP_GUID, 'smtp') as $instanceID => $moduleName) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'email'];
+        }
         return $out;
     }
 
-    /** @return array<int,array{InstanceID:int,Name:string,Typ:string,Aktiv:bool}> */
+    /** @return array<int,array{InstanceID:int,Name:string,Typ:string,Aktiv:bool,Zieladresse:string}> */
     private function decodeWebFronts(): array
     {
         $raw = json_decode($this->ReadPropertyString('WebFronts'), true);
@@ -995,6 +1007,7 @@ class WarnHub extends IPSModule
                 'Name' => (string) ($w['Name'] ?? ''),
                 'Typ' => (string) ($w['Typ'] ?? 'webfront'),
                 'Aktiv' => (bool) ($w['Aktiv'] ?? true),
+                'Zieladresse' => (string) ($w['Zieladresse'] ?? ''),
             ];
         }
         return $out;
@@ -1013,12 +1026,22 @@ class WarnHub extends IPSModule
         $rows = $this->decodeWebFronts();
         $known = array_column($rows, null, 'InstanceID');
         $added = 0;
+        $addedEmail = 0;
         foreach ($foundTargets as $target) {
             if (isset($known[$target['InstanceID']])) {
                 continue;
             }
-            $rows[] = ['InstanceID' => $target['InstanceID'], 'Name' => $target['Name'], 'Typ' => $target['Typ'], 'Aktiv' => true];
+            // E-Mail (SMTP) ist anders als die übrigen Typen KEIN fertiges Ziel:
+            // die SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger --
+            // ohne von Hand eingetragene Zieladresse würde ein aktivierter
+            // Eintrag beim Versand nur scheitern. Deshalb bewusst inaktiv
+            // vorbelegt, bis die Adresse eingetragen ist (siehe Hinweistext).
+            $isEmail = $target['Typ'] === 'email';
+            $rows[] = ['InstanceID' => $target['InstanceID'], 'Name' => $target['Name'], 'Typ' => $target['Typ'], 'Aktiv' => !$isEmail, 'Zieladresse' => ''];
             $added++;
+            if ($isEmail) {
+                $addedEmail++;
+            }
         }
         $this->UpdateFormField('WebFronts', 'values', json_encode($rows));
         $this->UpdateFormField('WebFronts', 'rowCount', $this->listRowCount(count($rows), 3));
@@ -1026,7 +1049,10 @@ class WarnHub extends IPSModule
             return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
         if ($added === 0) {
-            return '⚠️ Weder WebFront-, Kachel-Visualisierung-, Telegram-Bot- noch Pushover-Instanzen im Objektbaum gefunden.';
+            return '⚠️ Weder WebFront-, Kachel-Visualisierung-, Telegram-Bot-, Pushover- noch SMTP-Instanzen im Objektbaum gefunden.';
+        }
+        if ($addedEmail > 0) {
+            return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden (insgesamt %d) -- bitte unten „Übernehmen" klicken. %d E-Mail-Ziel(e) sind noch INAKTIV: erst Zieladresse eintragen und aktivieren.', $added, count($rows), $addedEmail);
         }
         return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
     }
@@ -1174,6 +1200,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• GeoSphere Austria: die Warnungs-Beschreibung enthält jetzt zusätzlich die meteorologische Kurzerklärung der Quelle (z. B. "Mit einer stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis 80 km/h") vor Auswirkungen/Empfehlungen'],
                 ['type' => 'Label', 'caption' => '• "Kachel (kompakt)" und "Kachel (Übersicht)" enthalten jetzt unten drei kleine Links zu den amtlichen Warnkarten (DWD, ZAMG, MeteoSchweiz)'],
                 ['type' => 'Label', 'caption' => '• NEU: zwei weitere fertige WebFront-Kacheln. "Kachel (Karte)" zeigt eine OpenStreetMap-Karte, zentriert auf einen frei wählbaren Standort (auch mobile -- folgt der Live-Position), Markerfarbe nach höchstem aktivem Schweregrad. "Kachel (ZAMG-Warnkarte, Österreich)" bettet die offizielle ZAMG-Warnkarte direkt ein -- speziell für österreichische Nutzer. Beide laden anders als die bisherigen zwei Kacheln bewusst externe Ressourcen (Leaflet.js/OpenStreetMap bzw. die ZAMG-Seite selbst); eine Einbettung der DWD-/MeteoSchweiz-Warnkarten war technisch nicht möglich, beide verbieten das per X-Frame-Options'],
+                ['type' => 'Label', 'caption' => '• NEU: E-Mail als fünfter Push-Kanal (über eine bereits eingerichtete SMTP-Instanz, offizielles Symcon-Modul) -- einfach "🔎 Push-Ziele suchen" erneut klicken, eine gefundene SMTP-Instanz wird zunächst inaktiv angelegt (kennt nur den Versandweg, nicht den Empfänger), erst Zieladresse eintragen und dann aktivieren'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4019,6 +4046,24 @@ HTML;
                 }
                 $priority = in_array($severity, ['Severe', 'Extreme'], true) ? 1 : 0;
                 $ok = @TUPO_SendMessage($w['InstanceID'], $title, $text, $priority);
+            } elseif ($w['Typ'] === 'email') {
+                // SMTP_SendMailEx($InstanzID, $Empfänger, $Betreff, $Inhalt) --
+                // live gegen eine echte IP-Symcon-Instanz verifiziert, siehe
+                // SMTP_GUID-Kommentar oben. Erkennt HTML automatisch am
+                // <html>-Wrapper (seit Symcon 7.0) -- Text wird deshalb erst
+                // escaped (falls zufällig ein "<"/">" im Warntext vorkommt)
+                // und dann mit nl2br() umgebrochen, statt roh durchzureichen.
+                if (!function_exists('SMTP_SendMailEx')) {
+                    $this->LogError('pushToAllWebfronts', 'SMTP_SendMailEx ist nicht verfügbar (kein SMTP-Modul installiert).');
+                    continue;
+                }
+                $empfaenger = trim($w['Zieladresse'] ?? '');
+                if ($empfaenger === '') {
+                    $this->LogError('pushToAllWebfronts', 'E-Mail-Ziel "' . $w['Name'] . '" hat keine Zieladresse -- übersprungen.');
+                    continue;
+                }
+                $body = '<html><body>' . nl2br(htmlspecialchars($text)) . '</body></html>';
+                $ok = @SMTP_SendMailEx($w['InstanceID'], $empfaenger, $title, $body);
             } else {
                 if (!function_exists('WFC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');

@@ -48,6 +48,11 @@ function TUPO_SendMessage(int $id, string $title, string $message, int $priority
     $GLOBALS['whub_test_pushCalls'][] = ['pushover', $id, $title, $message, $priority];
     return true;
 }
+function SMTP_SendMailEx(int $id, string $empfaenger, string $betreff, string $inhalt): bool
+{
+    $GLOBALS['whub_test_pushCalls'][] = ['email', $id, $empfaenger, $betreff, $inhalt];
+    return true;
+}
 function IPS_GetInstanceListByModuleID(string $guid): array
 {
     return [];
@@ -239,16 +244,23 @@ $sent = callPrivate($hub2, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
 check('meldet 2 zugestellte Pushes ohne Filter', $sent === 2);
 check('beide Ziele wurden tatsächlich angesprochen', count($GLOBALS['whub_test_pushCalls']) === 2);
 
-echo "\n== pushToAllWebfronts(): Mehrkanal-Push (Telegram TB_SendMessage, Pushover TUPO_SendMessage) ==\n";
+echo "\n== pushToAllWebfronts(): Mehrkanal-Push (Telegram TB_SendMessage, Pushover TUPO_SendMessage, E-Mail SMTP_SendMailEx) ==\n";
 $hub4 = new WarnHub();
 $hub4->Create();
 $hub4->SetProp('WebFronts', json_encode([
     ['InstanceID' => 201, 'Name' => 'Telegram Familie', 'Typ' => 'telegram', 'Aktiv' => true],
     ['InstanceID' => 202, 'Name' => 'Pushover Dietmar', 'Typ' => 'pushover', 'Aktiv' => true],
+    ['InstanceID' => 203, 'Name' => 'Mail Dietmar', 'Typ' => 'email', 'Aktiv' => true, 'Zieladresse' => 'dietmar@example.com'],
 ]));
 $GLOBALS['whub_test_pushCalls'] = [];
 $sent = callPrivate($hub4, 'pushToAllWebfronts', ['🚨 Sturm', 'Achtung Sturm', 'alarm', [], 'Severe']);
-check('meldet 2 zugestellte Pushes (Telegram + Pushover)', $sent === 2);
+check('meldet 3 zugestellte Pushes (Telegram + Pushover + E-Mail)', $sent === 3);
+$emailCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'email'))[0] ?? null;
+check('E-Mail-Aufruf fand statt (SMTP_SendMailEx)', $emailCall !== null);
+check('E-Mail: geht an die konfigurierte Zieladresse', $emailCall !== null && $emailCall[2] === 'dietmar@example.com');
+check('E-Mail: Titel bleibt eigener Betreff (SMTP_SendMailEx kennt Betreff getrennt vom Inhalt)', $emailCall !== null && $emailCall[3] === '🚨 Sturm');
+check('E-Mail: Inhalt als HTML gekennzeichnet (<html>-Wrapper -- SMTP erkennt HTML automatisch daran)', $emailCall !== null && str_starts_with($emailCall[4], '<html>') && str_ends_with($emailCall[4], '</html>'));
+check('E-Mail: Text-Inhalt im HTML-Body enthalten', $emailCall !== null && str_contains($emailCall[4], 'Achtung Sturm'));
 $telegramCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'telegram'))[0] ?? null;
 check('Telegram-Aufruf fand statt (TB_SendMessage)', $telegramCall !== null);
 check('Telegram: Titel und Text zu EINER Nachricht zusammengefasst (TB_SendMessage kennt keinen Titel)', $telegramCall !== null && $telegramCall[2] === "🚨 Sturm\nAchtung Sturm");
@@ -261,6 +273,17 @@ $GLOBALS['whub_test_pushCalls'] = [];
 callPrivate($hub4, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm', [], 'Minor']);
 $pushoverCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'pushover'))[0] ?? null;
 check('Pushover: Severity "Minor" (bzw. ohne Angabe) bleibt Priorität 0 (normal)', $pushoverCall !== null && $pushoverCall[4] === 0);
+
+echo "\n== pushToAllWebfronts(): E-Mail-Ziel ohne Zieladresse wird übersprungen statt zu scheitern ==\n";
+$hub4b = new WarnHub();
+$hub4b->Create();
+$hub4b->SetProp('WebFronts', json_encode([
+    ['InstanceID' => 204, 'Name' => 'Mail ohne Adresse', 'Typ' => 'email', 'Aktiv' => true, 'Zieladresse' => ''],
+]));
+$GLOBALS['whub_test_pushCalls'] = [];
+$sentLeer = callPrivate($hub4b, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
+check('kein Versand ohne Zieladresse (0 zugestellt)', $sentLeer === 0);
+check('SMTP_SendMailEx wird gar nicht erst aufgerufen', count($GLOBALS['whub_test_pushCalls']) === 0);
 
 echo "\n== Ende-zu-Ende: mobiler Standort mit eigenem Push-Ziel über processWarnings() ==\n";
 $hub3 = new WarnHub();

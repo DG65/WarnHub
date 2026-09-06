@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0 (2026-09-06)
+
+- NEU: E-Mail als fünfter Push-Kanal, über eine bereits eingerichtete
+  SMTP-Instanz (offizielles Symcon-Kernmodul). Neue Konstante `SMTP_GUID`
+  -- live gegen Dietmars eigene IP-Symcon-Instanz verifiziert
+  (`IPS_GetModuleList()`, 06.09.2026), da das Kernmodul kein öffentliches
+  GitHub-Repo hat. `SMTP_SendMailEx($InstanzID, $Empfänger, $Betreff,
+  $Inhalt)`, HTML wird automatisch am `<html>`-Wrapper erkannt (seit
+  Symcon 7.0).
+- Anders als die übrigen Push-Typen kennt eine SMTP-Instanz nur den
+  Versandweg, nicht den Empfänger -- die `WebFronts`-Liste bekommt daher
+  eine neue Spalte "Zieladresse" (`decodeWebFronts()`/`Zieladresse`),
+  und eine per Objektbaum-Suche gefundene SMTP-Instanz wird bewusst
+  INAKTIV angelegt statt wie sonst automatisch aktiv, bis eine Adresse
+  eingetragen ist.
+- `pushToAllWebfronts()`: neuer `email`-Zweig, überspringt (mit
+  Log-Eintrag statt Fehlschlag) Einträge ohne Zieladresse. Text wird vor
+  dem HTML-Versand escaped und mit `nl2br()` umgebrochen.
+- Dietmars Wunsch 06.09.2026, angeregt durch hfichtingers Mail-basiertes
+  ZAMG-Skript im Symcon-Forum ("sollen wir das mit der HTML Tabelle
+  nicht auch ermöglichen, für die die es wollen?").
+
 ## 1.1.0 (2026-09-06)
 
 - "Kachel (kompakt)" und "Kachel (Übersicht)" enthalten jetzt eine kleine
