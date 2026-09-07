@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.2.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.3.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -115,6 +115,16 @@ deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf, Standard 30 Minu
 morgens eintreffende, aber erst für den Nachmittag gültige Warnung fährt die Markise also
 nicht schon morgens ein. Die Push-Benachrichtigung selbst bleibt davon unberührt und kommt
 weiterhin sofort.
+
+Manche Gefahrenquellen lassen sich nicht automatisch schließen -- allen voran ein einfaches
+Fenster oder eine Tür, dafür gibt es keinen generischen Aktor. Ist aber ein Öffnungskontakt
+vorhanden (Panel "Fenster-/Tür-Überwachung"), erkennt WarnHub, dass er offen ist, und warnt
+gezielt bei einer passenden aktiven Warnung -- statt zu schließen, wird gemeldet. Die
+Objektbaum-Suche findet Kontakte sowohl über ein klassisches Symcon-Systemprofil
+(`~Window`/`~Door`, auch `.Reversed`) als auch über die seit Symcon 9.0 neue
+Variablendarstellung mit einer "Geöffnet"/"Offen"-Option -- herstellerunabhängig, auch
+Matter-basierte Kontakte. Push kommt nur einmal je Warnung und Kontakt; schließt und öffnet
+man das Fenster erneut während derselben Warnung, kommt eine neue Meldung.
 
 Verschärft sich eine bereits gemeldete Warnung (z. B. DWD stuft von Moderate auf Severe
 hoch), kommt eine erneute Push-Benachrichtigung -- eine Abstufung dagegen nicht, um nicht
@@ -311,6 +321,16 @@ echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   ein. Titel wird zum Betreff, Text zum HTML-Inhalt (automatische HTML-Erkennung von Symcon
   am `<html>`-Wrapper).
   Rückmeldungen zur Funktionsfähigkeit sind ausdrücklich willkommen.
+- Fenster-/Tür-Überwachung: erkennt einen Kontakt nur, wenn er entweder ein klassisches
+  Symcon-Systemprofil trägt (`~Window`/`~Door`, auch `.Reversed`) oder über die seit
+  Symcon 9.0 neue Variablendarstellung eine Option mit der Caption "Geöffnet"/"Offen"
+  anbietet -- ohne eines von beidem lässt sich die Bedeutung von wahr/falsch nicht
+  zuverlässig bestimmen und WarnHub rät nicht. Live-Fund: welcher Rohwert (true/false)
+  tatsächlich "offen" bedeutet, ist **keine feste Konvention** -- Dietmars klassisches
+  `~Window`-Profil sagt `true`=offen, seine neuen (Matter-basierten) Kontakte über die
+  neue Variablendarstellung sagen für dieselbe Bedeutung `true`=geschlossen, genau
+  umgekehrt. Die Erkennung liest deshalb immer die tatsächliche Zuordnung, statt eine
+  Richtung anzunehmen.
 
 ## Lizenz
 

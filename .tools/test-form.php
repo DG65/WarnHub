@@ -336,5 +336,17 @@ $karteStandortField = findByName($decoded['elements'], 'KartenkachelStandort');
 check('Auswahlfeld "KartenkachelStandort" (für die Karten-Kachel) vorhanden', $karteStandortField !== null);
 check('Auswahlfeld hat immer die Option "(kein Standort ausgewählt)" (leerer Wert erlaubt)', in_array(['caption' => '(kein Standort ausgewählt)', 'value' => ''], $karteStandortField['options'] ?? [], true));
 
+$fensterPanel = null;
+foreach ($decoded['elements'] as $el) {
+    if (str_contains($el['caption'] ?? '', 'Fenster-/Tür-Überwachung')) {
+        $fensterPanel = $el;
+        break;
+    }
+}
+check('Panel "Fenster-/Tür-Überwachung" vorhanden', $fensterPanel !== null);
+$fensterListe = findByName($decoded['elements'], 'Fensterkontakte');
+check('Liste "Fensterkontakte" vorhanden', $fensterListe !== null);
+check('Liste hat eine Spalte "Kontakt-Variable" (SelectVariable)', (findByName($fensterListe['columns'] ?? [], 'VariableID')['edit']['type'] ?? null) === 'SelectVariable');
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

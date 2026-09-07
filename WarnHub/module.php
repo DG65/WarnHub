@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.2.0';
-    private const NEWS_VERSION = '1.2.0';
+    private const DOC_VERSION = '1.3.0';
+    private const NEWS_VERSION = '1.3.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -367,6 +367,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
         $this->RegisterPropertyString('Schutzaktionen', '[]');
+        $this->RegisterPropertyString('Fensterkontakte', '[]');
         $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
         $this->RegisterPropertyString('WebFronts', '[]');
         $this->RegisterPropertyString('KartenkachelStandort', '');
@@ -376,6 +377,7 @@ class WarnHub extends IPSModule
 
         $this->RegisterAttributeString('SeenWarnings', '{}');
         $this->RegisterAttributeString('FiredActions', '{}');
+        $this->RegisterAttributeString('SeenFensterWarnungen', '{}');
         $this->RegisterAttributeString('PendingSirenOff', '[]');
         $this->RegisterAttributeInteger('LastPollTs', 0);
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
@@ -771,6 +773,37 @@ class WarnHub extends IPSModule
                         return $buttons;
                     })(),
                 ],
+            ],
+        ];
+
+        $form['elements'][] = [
+            'type' => 'ExpansionPanel',
+            'caption' => '🪟  Fenster-/Tür-Überwachung',
+            'expanded' => false,
+            'items' => [
+                ['type' => 'Label', 'caption' => 'WarnHub kann ein Fenster oder eine Tür nicht selbst schließen -- anders als Raffstore/Markise/Garage gibt es dafür keinen generischen Aktor. Ist aber ein Öffnungskontakt vorhanden, kann WarnHub erkennen, dass er offen ist, und bei einer passenden aktiven Warnung gezielt darauf hinweisen.'],
+                [
+                    'type' => 'Button',
+                    'caption' => '🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen',
+                    'onClick' => 'echo WHUB_DiscoverFensterkontakte($id);',
+                ],
+                ['type' => 'Label', 'caption' => 'Findet Boolean-Variablen sowohl über ein klassisches Symcon-Profil (~Window/~Door, auch .Reversed) als auch über die seit Symcon 9.0 neue Variablendarstellung mit einer "Geöffnet"/"Offen"-Option -- unabhängig vom Hersteller/der Integration (z. B. auch Matter-Kontakte). Gefundene Treffer werden vorausgefüllt und mit Sturm/Hagel/Starkregen aktiviert (ein offenes Fenster lässt bei allen dreien Wind/Wasser herein). Eine erneute Suche fügt nur neue Treffer hinzu.'],
+                [
+                    'type' => 'List',
+                    'name' => 'Fensterkontakte',
+                    'rowCount' => $this->listRowCount(count($this->decodeFensterkontakte())),
+                    'add' => true,
+                    'delete' => true,
+                    'columns' => [
+                        ['caption' => 'Name', 'name' => 'Name', 'width' => '190px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                        ...array_map(fn ($f) => ['caption' => $f[1], 'name' => $f[0], 'width' => '75px', 'add' => in_array($f[0], ['KatSturm', 'KatHagel', 'KatStarkregen'], true), 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
+                        ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
+                        ['caption' => 'Nur Standort (leer=alle festen)', 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => 'Kontakt-Variable', 'name' => 'VariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                    ],
+                ],
+                ['type' => 'Label', 'caption' => 'Push kommt nur EINMAL je (Warnung, Kontakt) -- schließt man das Fenster und öffnet es später während derselben Warnung erneut, kommt eine neue Meldung. Läuft über dieselben Push-Ziele wie normale Warnungen, respektiert die Push-Ruhephase.'],
             ],
         ];
 
@@ -1201,6 +1234,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "Kachel (kompakt)" und "Kachel (Übersicht)" enthalten jetzt unten drei kleine Links zu den amtlichen Warnkarten (DWD, ZAMG, MeteoSchweiz)'],
                 ['type' => 'Label', 'caption' => '• NEU: zwei weitere fertige WebFront-Kacheln. "Kachel (Karte)" zeigt eine OpenStreetMap-Karte, zentriert auf einen frei wählbaren Standort (auch mobile -- folgt der Live-Position), Markerfarbe nach höchstem aktivem Schweregrad. "Kachel (ZAMG-Warnkarte, Österreich)" bettet die offizielle ZAMG-Warnkarte direkt ein -- speziell für österreichische Nutzer. Beide laden anders als die bisherigen zwei Kacheln bewusst externe Ressourcen (Leaflet.js/OpenStreetMap bzw. die ZAMG-Seite selbst); eine Einbettung der DWD-/MeteoSchweiz-Warnkarten war technisch nicht möglich, beide verbieten das per X-Frame-Options'],
                 ['type' => 'Label', 'caption' => '• NEU: E-Mail als fünfter Push-Kanal (über eine bereits eingerichtete SMTP-Instanz, offizielles Symcon-Modul) -- einfach "🔎 Push-Ziele suchen" erneut klicken, eine gefundene SMTP-Instanz wird zunächst inaktiv angelegt (kennt nur den Versandweg, nicht den Empfänger), erst Zieladresse eintragen und dann aktivieren'],
+                ['type' => 'Label', 'caption' => '• NEU: Fenster-/Tür-Überwachung (eigenes Panel) -- WarnHub kann ein Fenster nicht selbst schließen, erkennt aber über einen Öffnungskontakt, dass eines offen ist, und warnt gezielt bei einer passenden aktiven Warnung. Findet Kontakte über ein klassisches Symcon-Profil (~Window/~Door) UND die seit Symcon 9.0 neue Variablendarstellung (herstellerunabhängig, auch Matter-Kontakte) -- einfach "🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen" klicken'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1372,6 +1406,98 @@ class WarnHub extends IPSModule
             ];
         }
         return $out;
+    }
+
+    /**
+     * Fenster-/Tür-Überwachung: WarnHub kann ein Fenster (anders als
+     * Raffstore/Markise/Garage) nicht selbst schließen -- aber sehr wohl
+     * erkennen, dass eines offen ist, und warnen. Bewusst eine EIGENE Liste
+     * statt ein weiterer Schutzaktions-Typ, weil hier nichts geschaltet
+     * wird (kein ZielVariableID/ZielWert), sondern nur ein Zustand geprüft
+     * wird. Gleiche Optik/Felder wie bei Schutzaktionen (Kategorien/
+     * MinSeverity/StandortFilter) für Wiedererkennbarkeit. Dietmars Wunsch
+     * 07.09.2026, nach Installation eigener Öffnungskontakte.
+     * @return array<int,array{Name:string,Aktiv:bool,Kategorien:array<int,string>,MinSeverity:int,StandortFilter:string,VariableID:int}>
+     */
+    private function decodeFensterkontakte(): array
+    {
+        $raw = json_decode($this->ReadPropertyString('Fensterkontakte'), true);
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $a) {
+            $kategorien = [];
+            foreach (self::CATEGORY_FIELDS as $key => [$field, $label]) {
+                if ((bool) ($a[$field] ?? false)) {
+                    $kategorien[] = $key;
+                }
+            }
+            $out[] = [
+                'Name' => (string) ($a['Name'] ?? ''),
+                'Aktiv' => (bool) ($a['Aktiv'] ?? true),
+                'Kategorien' => $kategorien, // leer = gilt für jede Kategorie
+                'MinSeverity' => (int) ($a['MinSeverity'] ?? 3),
+                'StandortFilter' => (string) ($a['StandortFilter'] ?? ''),
+                'VariableID' => (int) ($a['VariableID'] ?? 0),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Welcher Rohwert (true/false) bei dieser Boolean-Variable "offen"
+     * bedeutet -- das ist KEINE feste Konvention, siehe Live-Fund
+     * 07.09.2026: Dietmars klassisches Symcon-Systemprofil "~Window" sagt
+     * true=offen, seine NEUEN (Matter-basierten) Fensterkontakte über die
+     * seit Symcon 9.0 neue Variablendarstellung (VariablePresentation,
+     * kein klassisches Profil mehr) sagen für dieselbe Bedeutung true=ZU,
+     * false=offen -- genau umgekehrt. Deshalb wird IMMER die tatsächliche
+     * Profil-/Vorlagen-Zuordnung gelesen statt geraten: zuerst die
+     * klassischen Profile ~Window/~Door (inkl. .Reversed), sonst die
+     * OPTIONS der neuen Vorlage nach der Caption "Geöffnet"/"Offen"
+     * durchsucht. null = keins von beidem gefunden (kein erkennbarer
+     * Fenster-/Tür-Kontakt).
+     */
+    private function contactOpenRawValue(int $variableID): ?bool
+    {
+        $var = @IPS_GetVariable($variableID);
+        if (!is_array($var)) {
+            return null;
+        }
+        $profile = (string) ($var['VariableCustomProfile'] ?: ($var['VariableProfile'] ?? ''));
+        if ($profile === '~Window' || $profile === '~Door') {
+            return true;
+        }
+        if ($profile === '~Window.Reversed' || $profile === '~Door.Reversed') {
+            return false;
+        }
+        $optionsRaw = $var['VariablePresentation']['OPTIONS'] ?? null;
+        if (is_string($optionsRaw) && $optionsRaw !== '') {
+            $options = json_decode($optionsRaw, true);
+            if (is_array($options)) {
+                foreach ($options as $opt) {
+                    $caption = mb_strtolower(trim((string) ($opt['Caption'] ?? '')));
+                    if ($caption === 'geöffnet' || $caption === 'offen') {
+                        return (bool) ($opt['Value'] ?? false);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Aktueller Zustand eines Fenster-/Tür-Kontakts -- null = Variable fehlt oder Bedeutung nicht bestimmbar (siehe contactOpenRawValue()). */
+    private function isContactOpen(int $variableID): ?bool
+    {
+        if ($variableID <= 0 || !@IPS_VariableExists($variableID)) {
+            return null;
+        }
+        $openValue = $this->contactOpenRawValue($variableID);
+        if ($openValue === null) {
+            return null;
+        }
+        return (bool) @GetValue($variableID) === $openValue;
     }
 
     private function collectObjectIDsRecursive(int $rootID = 0): array
@@ -1624,6 +1750,56 @@ class WarnHub extends IPSModule
             '✅ %d neue Schutzaktion(en) gefunden (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken. Kofferraum/Heckklappe-Treffer ohne automatisch gefundene Zustands-Variable bleiben aus Sicherheitsgründen INAKTIV -- Zustands-Variable von Hand ergänzen und dann aktivieren.',
             $added
         );
+    }
+
+    /**
+     * Durchsucht ALLE Boolean-Variablen im System nach Fenster-/Tür-Kontakten
+     * -- über contactOpenRawValue() (klassisches Profil ~Window/~Door ODER
+     * die seit Symcon 9.0 neue Variablendarstellung mit einer "Geöffnet"/
+     * "Offen"-Option, siehe dort). Anders als
+     * discoverWetterstationVariablesByProfile() werden ALLE Treffer
+     * übernommen, nicht nur ein eindeutiger einzelner -- es gibt
+     * typischerweise mehrere Fenster/Türen im Haus, nicht genau eine.
+     * Vorbelegung Sturm/Hagel/Starkregen, analog zum Schutzaktionstyp
+     * "fenster" (ein offenes Fenster lässt bei allen dreien Wasser/Wind
+     * herein). Dietmars Wunsch 07.09.2026, nach Installation eigener
+     * Öffnungskontakte.
+     */
+    public function DiscoverFensterkontakte(): string
+    {
+        $rows = json_decode($this->ReadPropertyString('Fensterkontakte'), true);
+        if (!is_array($rows)) {
+            $rows = [];
+        }
+        $known = array_column($rows, null, 'VariableID');
+        $added = 0;
+        foreach (@IPS_GetVariableList() ?: [] as $variableID) {
+            if (isset($known[$variableID]) || $this->contactOpenRawValue($variableID) === null) {
+                continue;
+            }
+            $rows[] = [
+                'Name' => (string) (@IPS_GetName($variableID) ?: ('#' . $variableID)),
+                'Aktiv' => true,
+                'KatSturm' => true,
+                'KatHagel' => true,
+                'KatStarkregen' => true,
+                'KatGewitter' => false,
+                'KatSchnee' => false,
+                'KatHitze' => false,
+                'MinSeverity' => 3,
+                'StandortFilter' => '',
+                'VariableID' => $variableID,
+            ];
+            $added++;
+        }
+        $this->UpdateFormField('Fensterkontakte', 'values', json_encode($rows));
+        $this->UpdateFormField('Fensterkontakte', 'rowCount', $this->listRowCount(count($rows)));
+        if ($added === 0) {
+            return count($rows) > 0
+                ? sprintf('ℹ️ Keine neuen Fenster-/Tür-Kontakte gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows))
+                : 'ℹ️ Keine Fenster-/Tür-Kontakte gefunden -- weder über ein klassisches Profil (~Window/~Door) noch über die neue Variablendarstellung mit einer "Geöffnet"/"Offen"-Option.';
+        }
+        return sprintf('✅ %d neue(n) Fenster-/Tür-Kontakt(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
     }
 
     /** Einmalige Abfrage, kein Formular-Feld wird automatisch befüllt -- siehe SUITE.md-Muster "nur in die offene Maske, Übernehmen bleibt bewusster letzter Schritt" (hier: gar nicht erst schreiben, nur anzeigen). */
@@ -3330,7 +3506,7 @@ class WarnHub extends IPSModule
         }
 
         $icon = $result['activeCount'] > 0 ? '⚠️' : '✅';
-        return sprintf(
+        $text = sprintf(
             '%s Prüfung abgeschlossen: %d aktive Warnung(en), %d neu gemeldet, %d hochgestuft, %d Entwarnung(en), %d Schutzaktion(en) ausgelöst.',
             $icon,
             $result['activeCount'],
@@ -3339,6 +3515,10 @@ class WarnHub extends IPSModule
             $result['cancelled'],
             $result['actionsTriggered']
         );
+        if ($result['fensterWarnungen'] > 0) {
+            $text .= sprintf(' %d Fenster-/Tür-Warnung(en).', $result['fensterWarnungen']);
+        }
+        return $text;
     }
 
     /** Schickt eine harmlose Testbenachrichtigung an alle aktivierten Push-Ziele, unabhängig von echten Warnungen -- zum Prüfen, ob der Zustellweg (WebFront/Kachel-Visualisierung, Signalton) tatsächlich ankommt. */
@@ -3427,6 +3607,8 @@ class WarnHub extends IPSModule
         $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
         $fired = json_decode($this->ReadAttributeString('FiredActions'), true) ?: [];
         $actions = array_filter($this->decodeSchutzaktionen(), fn ($a) => $a['Aktiv']);
+        $fensterkontakte = array_filter($this->decodeFensterkontakte(), fn ($k) => $k['Aktiv'] && $k['VariableID'] > 0);
+        $seenFenster = json_decode($this->ReadAttributeString('SeenFensterWarnungen'), true) ?: [];
         $pushSound = $this->ReadPropertyString('PushSound');
         // Snooze pausiert NUR die tatsächliche Zustellung -- Erkennung,
         // Warnungs-Historie und Schutzaktionen laufen unverändert weiter
@@ -3440,6 +3622,7 @@ class WarnHub extends IPSModule
         $escalated = 0;
         $cancelled = 0;
         $actionsTriggered = 0;
+        $fensterWarnungen = 0;
         $standortGeoNamesCache = [];
 
         foreach ($warnings as $w) {
@@ -3618,8 +3801,68 @@ class WarnHub extends IPSModule
                     $this->fireProtectiveAction($action);
                     $actionsTriggered++;
                 }
+
+                // Fenster-/Tür-Überwachung: kein Schalten, nur eine Warnung,
+                // wenn der Kontakt offen ist -- dieselben Standort-/Kategorie-/
+                // Schweregrad-Regeln wie bei Schutzaktionen (inkl. Sperre für
+                // unfilterte mobile Standorte, siehe oben), aber KEIN
+                // $fired-Dedupe (das bliebe für immer gesetzt) -- stattdessen
+                // eigener $seenFenster-Speicher, der weiter unten geleert
+                // wird, sobald der jeweilige Kontakt wieder geschlossen ist,
+                // damit ein erneutes Öffnen während derselben Warnung wieder
+                // eine Meldung auslöst.
+                foreach ($fensterkontakte as $kontakt) {
+                    if ($kontakt['StandortFilter'] !== '' && $kontakt['StandortFilter'] !== $standort['Name']) {
+                        continue;
+                    }
+                    if ($kontakt['StandortFilter'] === '' && $this->isStandortMobil($standort)) {
+                        continue;
+                    }
+                    if (count($kontakt['Kategorien']) > 0 && !in_array($category, $kontakt['Kategorien'], true)) {
+                        continue;
+                    }
+                    if ($this->severityRank($w['severity']) < $kontakt['MinSeverity']) {
+                        continue;
+                    }
+                    if ($this->isContactOpen($kontakt['VariableID']) !== true) {
+                        continue;
+                    }
+                    $fensterKey = $w['identifier'] . '|' . $kontakt['Name'];
+                    if (isset($seenFenster[$fensterKey])) {
+                        continue;
+                    }
+                    $seenFenster[$fensterKey] = true;
+                    $this->logHistory('fensterwarnung', $kontakt['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
+                    if ($pushAktiv) {
+                        $this->pushToAllWebfronts(
+                            '⚠️ Fenster/Tür offen',
+                            $this->truncateBytes($kontakt['Name'] . ' ist offen -- ' . $w['headline'] . '. Bitte schließen.', 256),
+                            $pushSound
+                        );
+                    }
+                    $fensterWarnungen++;
+                }
             }
         }
+
+        // Fenster-/Tür-Kontakte, die inzwischen wieder geschlossen sind: den
+        // Verlauf für GENAU diesen Kontakt zurücksetzen (unabhängig davon,
+        // zu welcher Warnung er gehörte), damit ein SPÄTERES erneutes Öffnen
+        // während derselben noch laufenden Warnung wieder eine Meldung
+        // auslöst -- anders als bei $seen/$fired oben gibt es hier keinen
+        // "Warnung nicht mehr vorhanden"-Anlass zum Aufräumen, sondern den
+        // Kontakt-Zustand selbst.
+        foreach ($fensterkontakte as $kontakt) {
+            if ($this->isContactOpen($kontakt['VariableID']) === true) {
+                continue;
+            }
+            foreach (array_keys($seenFenster) as $key) {
+                if (str_ends_with($key, '|' . $kontakt['Name'])) {
+                    unset($seenFenster[$key]);
+                }
+            }
+        }
+        $this->WriteAttributeString('SeenFensterWarnungen', json_encode($seenFenster));
 
         // Warnungen, die im aktuellen Abruf nicht mehr auftauchen (abgelaufen/
         // aus der Quelle entfernt), still aus dem "gesehen"-Speicher nehmen --
@@ -3648,6 +3891,7 @@ class WarnHub extends IPSModule
             'escalated' => $escalated,
             'cancelled' => $cancelled,
             'actionsTriggered' => $actionsTriggered,
+            'fensterWarnungen' => $fensterWarnungen,
         ];
     }
 
@@ -4239,7 +4483,7 @@ HTML;
         $log = json_decode($this->ReadAttributeString('WarnHistory'), true) ?: [];
         $log[] = [
             'ts' => time(),
-            'kind' => $kind, // 'warnung', 'entwarnung', 'eskalation' oder 'rueckstellung'
+            'kind' => $kind, // 'warnung', 'entwarnung', 'eskalation', 'rueckstellung' oder 'fensterwarnung'
             'standort' => $standortName,
             'event' => $event,
             'headline' => $headline,

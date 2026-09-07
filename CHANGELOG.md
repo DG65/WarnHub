@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.3.0 (2026-09-07)
+
+- NEU: Fenster-/Tür-Überwachung (eigenes Panel "🪟 Fenster-/Tür-
+  Überwachung", eigene Liste `Fensterkontakte`). WarnHub kann ein
+  Fenster nicht selbst schließen -- anders als Raffstore/Markise/Garage
+  gibt es dafür keinen generischen Aktor -- erkennt aber über einen
+  Öffnungskontakt, dass eines offen ist, und warnt gezielt, wenn eine
+  passende Warnung (Kategorie/Schweregrad/Standort-Filter, dieselben
+  Regeln wie bei Schutzaktionen inkl. Sperre für unfilterte mobile
+  Standorte) aktiv ist. Push kommt nur einmal je (Warnung, Kontakt) --
+  `SeenFensterWarnungen`-Verlauf wird geleert, sobald der Kontakt wieder
+  schließt, damit ein späteres erneutes Öffnen während derselben Warnung
+  erneut meldet.
+- Neue Objektbaum-Suche `WHUB_DiscoverFensterkontakte()`: findet
+  Kontakte über zwei unabhängige Wege -- klassisches Symcon-Profil
+  (`~Window`/`~Door`, auch `.Reversed`) ODER die seit Symcon 9.0 neue
+  Variablendarstellung (`VariablePresentation`) mit einer "Geöffnet"/
+  "Offen"-Option, herstellerunabhängig (z. B. auch Matter-Kontakte).
+- Wichtiger Live-Fund dabei (Dietmars eigene neu installierte
+  Öffnungskontakte, 07.09.2026): welcher Rohwert (true/false) "offen"
+  bedeutet, ist KEINE feste Konvention. Das klassische Systemprofil
+  `~Window` sagt `true`=offen; Dietmars neue (Matter-basierte) Kontakte
+  über die neue Variablendarstellung sagen für dieselbe Bedeutung
+  `true`=geschlossen -- genau umgekehrt. Neue Helfer
+  `contactOpenRawValue()`/`isContactOpen()` lesen deshalb immer die
+  tatsächliche Profil-/Vorlagen-Zuordnung, statt eine Richtung
+  anzunehmen.
+- Dietmars Wunsch 07.09.2026, direkt nach Installation eigener
+  Öffnungskontakte ("Bisher schließt Du alles was Du kannst selbst,
+  aber Du kannst ja nicht alles selbst schließen ... Du kannst aber
+  sehr wohl feststellen, dass die Fenster geöffnet sind").
+
 ## 1.2.0 (2026-09-06)
 
 - NEU: E-Mail als fünfter Push-Kanal, über eine bereits eingerichtete
