@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.5.0 (2026-09-07)
+
+- NEU: Deutscher Waldbrandgefahrenindex (DWD) als weitere Datenquelle --
+  amtliche 5-stufige Skala (1=sehr geringe Gefahr bis 5=sehr hohe
+  Gefahr). Neue Property `QuelleWaldbrandDe` + `WaldbrandDeSchwelle`
+  (Ab-Stufe, Standard 3).
+- Anders als bei den übrigen Quellen gibt es keine einzelne Datei für
+  "heute, alle Stationen", nur eine eigene gezippte CSV je Station
+  (mehrere hundert Dateien) -- ein Abruf aller Dateien bei jeder Prüfung
+  wäre unhöflich gegenüber DWDs Server. WarnHub ermittelt deshalb je
+  deutschem Standort die nächstgelegene der 484 Messstationen (eigene
+  Stationsliste im selben Datensatz-Verzeichnis, live verifiziert 484
+  Stationen) und fragt NUR deren aktuellen Wert ab -- neue Funktionen
+  `fetchWaldbrandDe()` (Standort-Iteration, analog zum Muster von
+  `fetchGeosphereAt()`), `fetchWbiStationList()`/`parseWbiStationList()`,
+  `fetchWbiStationCsv()`/`parseWbiStationCsv()`, `findNearestWbiStation()`.
+  Fetch/Parse-Trennung wie bei den übrigen Quellen, damit sich die
+  Auswertung ohne Netzzugriff testen lässt.
+- Live-Test bestätigt: nächste Station zu Offenburg ist Ohlsbach
+  (6,3 km), aktuelle WBI-Stufe 3.
+- Braucht die PHP-Erweiterung `zlib` (`gzdecode`, für die gezippten
+  Stationsdateien) -- fehlt sie, bleibt nur diese Quelle inaktiv, alle
+  anderen Quellen funktionieren unabhängig davon weiter.
+- Zweite von drei gemeinsam recherchierten neuen Quellen (nach Erdbeben
+  Schweiz) -- Dietmars Wunsch 07.09.2026 ("Ja, nächste Station Ansatz
+  bauen."). Ozon-Luftqualität folgt.
+
 ## 1.4.0 (2026-09-07)
 
 - NEU: Schweizer Erdbeben als weitere Datenquelle -- Schweizerischer

@@ -196,6 +196,8 @@ check('"QuelleGeosphereAt"-Checkbox vorhanden (koordinatengenaue Österreich-War
 check('"QuelleBafuHydroCh"-Checkbox vorhanden (Schweizer Hochwassergefahr)', findByName($decoded['elements'], 'QuelleBafuHydroCh') !== null);
 check('Schwellwert-Feld "BafuHydroSchwelle" vorhanden', findByName($decoded['elements'], 'BafuHydroSchwelle') !== null);
 check('"QuelleSedErdbebenCh"-Checkbox vorhanden (Schweizer Erdbeben)', findByName($decoded['elements'], 'QuelleSedErdbebenCh') !== null);
+check('"QuelleWaldbrandDe"-Checkbox vorhanden (Waldbrandgefahrenindex)', findByName($decoded['elements'], 'QuelleWaldbrandDe') !== null);
+check('Schwellwert-Feld "WaldbrandDeSchwelle" vorhanden', findByName($decoded['elements'], 'WaldbrandDeSchwelle') !== null);
 
 $hagelschutzPanel = null;
 foreach ($decoded['elements'] as $el) {

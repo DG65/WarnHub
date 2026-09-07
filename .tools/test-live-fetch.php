@@ -353,5 +353,22 @@ if (count($sedResult) > 0) {
     echo "  Info: [{$w['severity']}] {$w['headline']}\n";
 }
 
+echo "== Live-Abruf DWD-Waldbrandgefahrenindex (opendata.dwd.de, Stationsliste + eine Beispielstation) ==\n";
+$wbiStations = callPrivate($hub, 'fetchWbiStationList');
+check('fetchWbiStationList() liefert die echte Stationsliste (> 400 Stationen erwartet)', is_array($wbiStations) && count($wbiStations) > 400);
+if (is_array($wbiStations) && count($wbiStations) > 0) {
+    echo '  Info: ' . count($wbiStations) . " WBI-Messstationen geladen.\n";
+    $nearestToOffenburg = callPrivate($hub, 'findNearestWbiStation', [$wbiStations, 48.4785, 7.9448]);
+    check('findNearestWbiStation() findet eine Station in der Nähe von Offenburg', $nearestToOffenburg !== null && $nearestToOffenburg['distanceKm'] < 100);
+    if ($nearestToOffenburg !== null) {
+        echo "  Info: nächste Station zu Offenburg: {$nearestToOffenburg['name']} ({$nearestToOffenburg['distanceKm']} km).\n";
+        $wbiReading = callPrivate($hub, 'fetchWbiStationCsv', [$nearestToOffenburg['index']]);
+        check('fetchWbiStationCsv() liefert einen aktuellen Wert für diese Station', $wbiReading !== null && $wbiReading['wbi'] >= 1 && $wbiReading['wbi'] <= 5);
+        if ($wbiReading !== null) {
+            echo "  Info: WBI-Stufe {$wbiReading['wbi']} vom {$wbiReading['date']}.\n";
+        }
+    }
+}
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

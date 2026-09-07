@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.4.0';
-    private const NEWS_VERSION = '1.4.0';
+    private const DOC_VERSION = '1.5.0';
+    private const NEWS_VERSION = '1.5.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -311,6 +311,25 @@ class WarnHub extends IPSModule
     private const SED_MIN_MAGNITUDE = 2.5;
     private const SED_ACTIVE_SECONDS = 7200;
 
+    // DWD-Waldbrandgefahrenindex (WBI) -- live geprüft 07.09.2026. Anders als
+    // die übrigen Quellen gibt es KEINE einzelne kombinierte Datei für "heute,
+    // alle Stationen", nur eine eigene gezippte CSV JE Station (Format
+    // "Stationsindex;Datum;WBI", 5 Stufen) unter .../recomputed/recent/ --
+    // mehrere hundert Dateien. Ein Abruf ALLER Dateien bei jeder Prüfung wäre
+    // unhöflich gegenüber DWDs Server; stattdessen wird pro deutschem Standort
+    // nur die NÄCHSTGELEGENE Station abgefragt (eigene Stationsliste im selben
+    // Verzeichnis, "..._stations_list.txt", 484 Stationen mit Koordinaten --
+    // live verifiziert, KEIN Rückgriff auf eine fremde Datensatz-Stationsliste
+    // nötig/riskant). Amtliche 5-stufige Skala (1=sehr geringe Gefahr bis
+    // 5=sehr hohe Gefahr).
+    private const WBI_STATION_LIST_URL = 'https://opendata.dwd.de/climate_environment/CDC/derived_germany/fire_danger_index/woodland/recomputed/recent/derived_germany_fire_danger_index_woodland_recomputed_recent_v2-3--0_stations_list.txt';
+    private const WBI_STATION_CSV_URL_TEMPLATE = 'https://opendata.dwd.de/climate_environment/CDC/derived_germany/fire_danger_index/woodland/recomputed/recent/derived_germany_fire_danger_index_woodland_recomputed_recent_%d_v2-3--0.csv.gz';
+    private const WBI_LEVEL_LABEL = [
+        1 => 'sehr geringe Gefahr', 2 => 'geringe Gefahr', 3 => 'mittlere Gefahr',
+        4 => 'hohe Gefahr', 5 => 'sehr hohe Gefahr',
+    ];
+    private const WBI_LEVEL_SEVERITY = [1 => 'Minor', 2 => 'Minor', 3 => 'Moderate', 4 => 'Severe', 5 => 'Extreme'];
+
     // BETA -- Hagelschutz-Signalbox der VKF (hagelschutz-einfach-automatisch.ch,
     // meteo.netitservices.com). Protokoll aus der offiziellen VKF-PDF-Doku UND
     // dem Quellcode des aktiven ioBroker-Adapters ice987987/ioBroker.hagelschutz
@@ -372,6 +391,8 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleBafuHydroCh', false);
         $this->RegisterPropertyInteger('BafuHydroSchwelle', 3);
         $this->RegisterPropertyBoolean('QuelleSedErdbebenCh', false);
+        $this->RegisterPropertyBoolean('QuelleWaldbrandDe', false);
+        $this->RegisterPropertyInteger('WaldbrandDeSchwelle', 3);
         $this->RegisterPropertyString('HagelschutzPollUrl', '');
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyInteger('WetterstationWindVariableID', 0);
@@ -609,6 +630,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar. Deckt Schweizer Standorte ab -- für Deutschland liefert PEGELONLINE oben bereits Pegelstände.'],
                 ['type' => 'CheckBox', 'name' => 'QuelleSedErdbebenCh', 'caption' => 'Zusätzlich Schweizer Erdbeben (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle)'],
                 ['type' => 'Label', 'caption' => 'Amtliche seismologische Überwachung, keine Wetterquelle. Anders als bei Wetterwarnungen liefert die Quelle selbst weder eine Warnfläche noch ein "Gültig bis" -- ein Erdbeben ist ein Momentereignis. WarnHub bildet deshalb einen eigenen Kreis um das Epizentrum (Radius nach Magnitude gestuft -- eine grobe eigene Näherung, KEINE amtliche Gefährdungsfläche) und ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt es nicht mehr als aktiv. Deckt nur die Schweiz ab.'],
+                ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => 'Zusätzlich deutscher Waldbrandgefahrenindex (DWD) -- amtliche 5-stufige Skala, je Standort die nächstgelegene Messstation'],
+                ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => 'Ab Gefahrenstufe (1-5)', 'minValue' => 1, 'maxValue' => 5],
+                ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter.'],
                 ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                 [
                     'type' => 'SelectInstance',
@@ -1258,6 +1282,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: E-Mail als fünfter Push-Kanal (über eine bereits eingerichtete SMTP-Instanz, offizielles Symcon-Modul) -- einfach "🔎 Push-Ziele suchen" erneut klicken, eine gefundene SMTP-Instanz wird zunächst inaktiv angelegt (kennt nur den Versandweg, nicht den Empfänger), erst Zieladresse eintragen und dann aktivieren'],
                 ['type' => 'Label', 'caption' => '• NEU: Fenster-/Tür-Überwachung (eigenes Panel) -- WarnHub kann ein Fenster nicht selbst schließen, erkennt aber über einen Öffnungskontakt, dass eines offen ist, und warnt gezielt bei einer passenden aktiven Warnung. Findet Kontakte über ein klassisches Symcon-Profil (~Window/~Door) UND die seit Symcon 9.0 neue Variablendarstellung (herstellerunabhängig, auch Matter-Kontakte) -- einfach "🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen" klicken'],
                 ['type' => 'Label', 'caption' => '• NEU: Schweizer Erdbeben als weitere Datenquelle (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle). Keine Wetterquelle, eigener Kreis um das Epizentrum statt amtlicher Warnfläche (siehe Datenquellen-Panel für Details)'],
+                ['type' => 'Label', 'caption' => '• NEU: Deutscher Waldbrandgefahrenindex (DWD) als weitere Datenquelle -- amtliche 5-stufige Skala, je Standort automatisch die nächstgelegene der 484 DWD-Messstationen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -3509,6 +3534,162 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  DWD-Waldbrandgefahrenindex (WBI) -- siehe Konstanten-Kommentar oben.
+    //  Anders als bei den übrigen Quellen kein einzelner globaler Abruf --
+    //  je deutschem Standort wird die nächstgelegene Station ermittelt und
+    //  NUR deren aktueller Wert abgefragt (analog zum Muster von
+    //  fetchGeosphereAt(): pro Standort iterieren statt ein Land komplett
+    //  auf einmal abzurufen).
+    // ----------------------------------------------------------------
+
+    private function fetchWaldbrandDe(): array
+    {
+        $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
+        if (count($standorte) === 0) {
+            return [];
+        }
+        if (!function_exists('gzdecode')) {
+            $this->LogError('fetchWaldbrandDe', 'zlib-Erweiterung (gzdecode) fehlt -- kann die gezippten WBI-Stationsdateien nicht lesen.');
+            return [];
+        }
+        $stations = $this->fetchWbiStationList();
+        if ($stations === null) {
+            $this->LogError('fetchWaldbrandDe', 'WBI-Stationsliste (opendata.dwd.de) nicht erreichbar.');
+            return [];
+        }
+        $schwelle = $this->ReadPropertyInteger('WaldbrandDeSchwelle');
+        $stationReadings = []; // Stationsindex => Ergebnis, dedupliziert je Aufruf (mehrere Standorte können dieselbe nächste Station teilen)
+        $out = [];
+        foreach ($standorte as $standort) {
+            $coords = $this->resolveStandortCoords($standort);
+            $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
+            if ($geo['countryCode'] !== 'de') {
+                continue;
+            }
+            $nearest = $this->findNearestWbiStation($stations, $coords['lat'], $coords['lon']);
+            if ($nearest === null) {
+                continue;
+            }
+            if (!array_key_exists($nearest['index'], $stationReadings)) {
+                $stationReadings[$nearest['index']] = $this->fetchWbiStationCsv($nearest['index']);
+            }
+            $reading = $stationReadings[$nearest['index']];
+            if ($reading === null || $reading['wbi'] < $schwelle) {
+                continue;
+            }
+            $level = $reading['wbi'];
+            $dateObj = DateTime::createFromFormat('Ymd', $reading['date']);
+            $dateLabel = $dateObj !== false ? $dateObj->format('d.m.Y') : $reading['date'];
+            $out[] = [
+                'identifier' => 'waldbrand-de-' . $nearest['index'] . '-' . $reading['date'],
+                'source' => 'waldbrand_de',
+                'msgType' => 'Alert',
+                'event' => 'Waldbrandgefahr',
+                'headline' => sprintf('Waldbrandgefahrenindex Stufe %d von 5 (%s)', $level, self::WBI_LEVEL_LABEL[$level] ?? ''),
+                'description' => sprintf(
+                    'Amtlicher Waldbrandgefahrenindex, Stand %s. Nächstgelegene DWD-Messstation: %s (%.0f km entfernt).',
+                    $dateLabel,
+                    $nearest['name'],
+                    $nearest['distanceKm']
+                ),
+                'instruction' => '',
+                'severity' => self::WBI_LEVEL_SEVERITY[$level] ?? 'Moderate',
+                'effective' => null,
+                'onset' => null,
+                'expires' => null,
+                'areaDesc' => $standort['Name'],
+                'rings' => [],
+                // Kleiner Kreis exakt am Standort (wie bei GeoSphere Austria) --
+                // die Stationsauswahl hat die Ortsfrage bereits beantwortet,
+                // kein zusätzliches geometrisches Matching nötig.
+                'circles' => [['lat' => $coords['lat'], 'lon' => $coords['lon'], 'radiusKm' => 5.0]],
+            ];
+        }
+        return $out;
+    }
+
+    private function fetchWbiStationList(): ?array
+    {
+        $body = $this->httpGet(self::WBI_STATION_LIST_URL, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        return $body !== null ? $this->parseWbiStationList($body) : null;
+    }
+
+    /** Vom HTTP-Abruf getrennt, damit sich die Auswertung ohne Netzzugriff testen lässt. @return array<int,array{index:int,name:string,lat:float,lon:float}> */
+    private function parseWbiStationList(string $body): array
+    {
+        $out = [];
+        foreach (preg_split('/\r?\n/', trim($body)) as $i => $line) {
+            if ($i === 0 || trim($line) === '') {
+                continue; // Kopfzeile
+            }
+            $cols = array_map('trim', explode(';', $line));
+            if (count($cols) < 5) {
+                continue;
+            }
+            [$index, , $lat, $lon, $name] = $cols;
+            if (!is_numeric($index) || !is_numeric($lat) || !is_numeric($lon)) {
+                continue;
+            }
+            $out[] = ['index' => (int) $index, 'name' => $name, 'lat' => (float) $lat, 'lon' => (float) $lon];
+        }
+        return $out;
+    }
+
+    /** @param array<int,array{index:int,name:string,lat:float,lon:float}> $stations @return ?array{index:int,name:string,lat:float,lon:float,distanceKm:float} */
+    private function findNearestWbiStation(array $stations, float $lat, float $lon): ?array
+    {
+        $best = null;
+        $bestDistance = INF;
+        foreach ($stations as $s) {
+            $d = WHUB_Geo::haversineKm($lat, $lon, $s['lat'], $s['lon']);
+            if ($d < $bestDistance) {
+                $bestDistance = $d;
+                $best = $s;
+            }
+        }
+        if ($best === null) {
+            return null;
+        }
+        return $best + ['distanceKm' => $bestDistance];
+    }
+
+    private function fetchWbiStationCsv(int $stationIndex): ?array
+    {
+        $url = sprintf(self::WBI_STATION_CSV_URL_TEMPLATE, $stationIndex);
+        $body = $this->httpGet($url, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        if ($body === null) {
+            return null;
+        }
+        $csv = @gzdecode($body);
+        if ($csv === false || $csv === '') {
+            return null;
+        }
+        return $this->parseWbiStationCsv($csv);
+    }
+
+    /** Vom HTTP-Abruf/Entpacken getrennt, damit sich die Auswertung ohne Netzzugriff testen lässt. @return ?array{date:string,wbi:int} letzter verfügbarer Wert (Datum <= heute), null wenn leer. */
+    private function parseWbiStationCsv(string $csv): ?array
+    {
+        $today = date('Ymd');
+        $best = null;
+        foreach (preg_split('/\r?\n/', trim($csv)) as $i => $line) {
+            if ($i === 0 || trim($line) === '') {
+                continue; // Kopfzeile "Stationsindex;Datum;WBI"
+            }
+            $cols = explode(';', $line);
+            if (count($cols) < 3) {
+                continue;
+            }
+            $datum = trim($cols[1]);
+            if ($datum > $today) {
+                continue; // vorsorglich -- die Quelle liefert regulär keine Zukunftswerte
+            }
+            $best = ['date' => $datum, 'wbi' => (int) trim($cols[2])];
+        }
+        return $best;
+    }
+
+    // ----------------------------------------------------------------
     //  BETA -- Hagelschutz-Signalbox (VKF, hagelschutz-einfach-automatisch.ch)
     //  siehe Konstanten-Kommentar oben. Bindet ein physisch bei einem
     //  konkreten Schweizer Gebäude registriertes Hagelwarn-Gerät ein -- die
@@ -3601,6 +3782,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleSedErdbebenCh')) {
             $warnings = array_merge($warnings, $this->fetchSedErdbebenCh());
+        }
+        if ($this->ReadPropertyBoolean('QuelleWaldbrandDe')) {
+            $warnings = array_merge($warnings, $this->fetchWaldbrandDe());
         }
         if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
             $warnings = array_merge($warnings, $this->fetchHagelschutzCh());

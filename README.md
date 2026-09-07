@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.4.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.5.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -51,6 +51,14 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   nach Magnitude gestuft: 15/30/60/120 km -- eine grobe eigene Näherung, KEINE amtliche
   Gefährdungsfläche) sowie ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt
   ein Ereignis nicht mehr als aktiv. Deckt nur die Schweiz ab.
+- **Deutscher Waldbrandgefahrenindex** (DWD, `opendata.dwd.de`) -- optional, amtliche
+  5-stufige Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine
+  einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem
+  Standort die nächstgelegene der 484 DWD-Messstationen (eigene Stationsliste im
+  Datensatz) und fragt nur deren aktuellen Wert ab, statt alle Stationen bei jeder
+  Prüfung abzurufen. Braucht die PHP-Erweiterung `zlib` (für gzip, meist Standard) --
+  fehlt sie, bleibt nur diese Quelle inaktiv, alle anderen funktionieren unabhängig
+  davon weiter.
 - **Eigene Wetterstation** -- optional, unabhängig von allen übrigen Quellen: löst aus,
   sobald die lokal gemessene Windböe oder Regenrate den eigenen Schwellwert überschreitet.
   Beide gestuft in je drei Schwellwerten (Moderate/Severe/Extreme -- Wind Standard 40/65/90
@@ -312,6 +320,12 @@ echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   Ereignis, anders als bei den amtlich klassifizierten Quellen (BAFU, GeoSphere
   Austria). Wie stark ein Beben tatsächlich wo spürbar ist, hängt von Bodenbeschaffenheit
   und weiteren Faktoren ab, die hier nicht berücksichtigt werden.
+- Der Waldbrandgefahrenindex bezieht sich auf die NÄCHSTGELEGENE Messstation zum
+  jeweiligen Standort, nicht auf den Standort selbst -- bei größerer Entfernung zur
+  nächsten Station (dünner besiedelte Gebiete) kann der Wert lokal etwas abweichen. Der
+  Meldewert stammt aus der jüngsten in der Stationsdatei verfügbaren Zeile -- je nach
+  Aktualisierungsstand der Quelle kann das auch ein paar Tage zurückliegen, nicht
+  zwingend der heutige Tag.
 - Die VKF-Hagelschutz-Anbindung ist **BETA und ungetestet**: das Protokoll ist aus der
   offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut,
   aber mangels eigener Signalbox nicht live gegengeprüft -- anders als jede andere Quelle in
