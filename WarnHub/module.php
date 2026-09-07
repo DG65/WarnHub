@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.7.2';
-    private const NEWS_VERSION = '1.7.2';
+    private const DOC_VERSION = '1.8.0';
+    private const NEWS_VERSION = '1.8.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -487,6 +487,7 @@ class WarnHub extends IPSModule
         $this->MaintainVariable('KachelUebersicht', 'Kachel (Übersicht)', VARIABLETYPE_STRING, '~HTMLBox', 6, true);
         $this->MaintainVariable('KachelKarte', 'Kachel (Karte)', VARIABLETYPE_STRING, '~HTMLBox', 7, true);
         $this->MaintainVariable('KachelZamg', 'Kachel (ZAMG-Warnkarte, Österreich)', VARIABLETYPE_STRING, '~HTMLBox', 8, true);
+        $this->MaintainVariable('KachelAlle', 'Kachel (Alle Warnungen)', VARIABLETYPE_STRING, '~HTMLBox', 9, true);
         $this->refreshStatusVariables();
 
         $hasSource = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
@@ -533,6 +534,7 @@ class WarnHub extends IPSModule
         @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs, $snoozed));
         @$this->SetValue('KachelKarte', $this->renderKachelKarte($active, $snoozed));
         @$this->SetValue('KachelZamg', $this->renderKachelZamg());
+        @$this->SetValue('KachelAlle', $this->renderKachelAlleWarnungen($active, $lastTs, $snoozed));
     }
 
     // ----------------------------------------------------------------
@@ -901,7 +903,8 @@ class WarnHub extends IPSModule
             $pruefungItems[] = ['type' => 'Label', 'name' => 'WetterstationRestoreStatusLabel', 'caption' => $restoreLine];
         }
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: vier weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)" und "Kachel (Übersicht)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Beide enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: fünf weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)", "Kachel (Übersicht)" und "Kachel (Alle Warnungen)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Alle enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '📜 "Kachel (Alle Warnungen)": wie "Kachel (Übersicht)", aber OHNE 8er-Deckel -- scrollbare Liste aller aktiven Warnungen, sortiert nach Schweregrad. Jede Karte hat einen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt (wie die Zoomstufe bei "Kachel (Karte)"), betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine Straßenkarte (Esri) mit JEDEM aktiven Standort als eigenem, farbigen Pin (auch mobile Standorte -- folgt deren Live-Position) plus einer kleinen Legende zum Anklicken. Startansicht zeigt alle Standorte gemeinsam; ein Klick auf einen Pin/Legenden-Eintrag zoomt auf diesen -- die Wahl merkt sich der jeweilige Browser für sich (z. B. dein Handy unterwegs auf "Kohlekasten", das Tablet zuhause weiterhin auf alle bzw. den eigenen Standort). Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js von unpkg.com, Kartenkacheln von server.arcgisonline.com -- bewusst nicht OpenStreetMaps eigene Tile-Server, die für eingebettete Drittanbieter-Widgets wie diese Kachel einen Referer-Header verlangen und je nach Browser/WebFront blockieren können).'];
         $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => 'Höhe "Kachel (Karte)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur, Symcon-Forum, 07.09.2026: Karte skalierte nur in der Breite, nicht in der Höhe). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
@@ -1322,6 +1325,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)" komplett neu: zeigt jetzt ALLE aktiven Standorte gleichzeitig als eigene, farbige Pins plus eine klickbare Legende, statt nur einen fest in der Konsole ausgewählten. Grund: dieselbe Kachel-Variable geht an jeden WebFront-Betrachter gleich -- stelltest du unterwegs auf deinen eigenen Standort um, sah der Rest der Familie zuhause zwangsläufig denselben, nicht mehr den eigenen (Dietmars Fund 07.09.2026). Welcher Standort fokussiert ist, merkt sich jetzt jeder Browser für sich, die Startansicht zeigt immer alle gemeinsam. Das Feld "Standort für Kachel (Karte)" entfällt damit'],
                 ['type' => 'Label', 'caption' => '• Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile Standorte am selben Ort) konnten bei Waldbrandgefahr und österreichischen GeoSphere-Warnungen dieselbe Meldung mehrfach zeigen/verschicken statt einmal je Standort -- Praxis-Fund ruan/Andreas, Symcon-Forum ("1 Warnung + 3 Standorte -> 9 statt 3 Einträge")'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die angezeigten 8 Karten jetzt nach Schweregrad sortiert, statt einfach die ersten 8 in Ankunftsreihenfolge zu nehmen -- vorher hätte ausgerechnet die wichtigste Warnung hinter "+N weitere" verschwinden können, nur weil sie zufällig weiter hinten stand'],
+                ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne 8er-Deckel: scrollbare Liste ALLER aktiven Warnungen, nach Schweregrad sortiert. Jede Karte hat einen eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt, betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4555,6 +4559,17 @@ class WarnHub extends IPSModule
 .whub-map-pill.whub-active{background:rgba(10,132,255,0.92);color:#fff;}
 .whub-map-pill-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
 @media (prefers-color-scheme:dark){.whub-map-pill{color:#F5F5F7;background:rgba(255,255,255,0.12);}}
+.whub-allwarn-list{max-height:420px;overflow-y:auto;}
+.whub-card-dismiss{position:absolute;top:8px;right:10px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:rgba(0,0,0,0.08);opacity:0.55;cursor:pointer;line-height:1;}
+.whub-card-dismiss:hover{opacity:1;}
+@media (prefers-color-scheme:dark){.whub-card-dismiss{background:rgba(255,255,255,0.14);}}
+.whub-allwarn-reset{font-size:11.5px;font-weight:600;text-align:center;padding:10px 0 2px 0;opacity:0.65;cursor:pointer;text-decoration:underline;}
+/* .whub-card/.whub-empty setzen selbst display:flex -- ohne diese Regel
+   gewinnt das gegen das versteckende [hidden]-Attribut (gleiche Spezifität,
+   Autoren-CSS schlägt die Browser-Vorgabe), das JS-gesteuerte Ausblenden in
+   "Kachel (Alle Warnungen)" (c.hidden = ...) hätte dann optisch GAR NICHTS
+   bewirkt -- live im Browser gefunden, bevor es ausgeliefert wurde. */
+.whub-card[hidden],.whub-empty[hidden]{display:none;}
 </style>
 CSS;
     }
@@ -4692,6 +4707,191 @@ HTML;
   </div>
   {$body}
   {$this->officialMapLinksHtml()}
+</div>
+HTML;
+    }
+
+    /**
+     * Vollständige, scrollbare Warnungsliste OHNE 8er-Deckel -- Ergänzung zu
+     * "Kachel (Übersicht)" (die bleibt bewusst als kompakte Momentaufnahme
+     * fürs Dashboard), Dietmars Einwand 07.09.2026: "baue das so, dass man
+     * auch die 100. Meldung noch ansehen könnte". Jede Karte hat einen
+     * eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste mit einem
+     * Chip je aktuell vorkommendem Ereignistyp ("🚫 Waldbrandgefahr" etc.) --
+     * beides rein clientseitig in localStorage gemerkt, GENAU WIE Dietmars
+     * Entscheidung 07.09.2026 ("pro Browser/Gerät", analog zum Zoom-/Fokus-
+     * Merken bei "Kachel (Karte)"): kein Rückkanal zu Symcon, jeder
+     * Betrachter blendet nur für sich selbst aus. Ausgeblendete Warnungs-
+     * Schlüssel, die beim nächsten Rendern gar nicht mehr vorkommen (Warnung
+     * inzwischen abgelaufen), werden aus localStorage entfernt statt sich
+     * unbegrenzt anzusammeln. Push, Historie und Schutzaktionen sind von
+     * dieser rein optischen Ausblendung komplett unberührt -- die laufen
+     * serverseitig auf der VOLLEN Liste weiter.
+     */
+    private function renderKachelAlleWarnungen(array $active, int $lastTs, bool $snoozed = false): string
+    {
+        $time = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr' : '--:--';
+        if ($snoozed) {
+            $time = '🔕 ' . $time;
+        }
+        $listId = 'whuballwarn' . substr(md5((string) $this->InstanceID), 0, 10);
+
+        if (count($active) === 0) {
+            $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">Keine aktive Warnung</div></div>';
+            return $this->tileStyleBlock() . <<<HTML
+<div class="whub-overview">
+  <div class="whub-header">
+    <span class="whub-header-icon">🛡️</span>
+    <span class="whub-header-title">WarnHub -- Alle Warnungen</span>
+    <span class="whub-header-time">{$time}</span>
+  </div>
+  {$body}
+  {$this->officialMapLinksHtml()}
+</div>
+HTML;
+        }
+
+        // Wie bei "Kachel (Übersicht)" nach Schweregrad sortiert -- hier
+        // zwar ohne Deckel, aber die wichtigsten Warnungen sollen trotzdem
+        // ganz oben stehen, nicht in Ankunftsreihenfolge verstreut.
+        $sortedActive = $active;
+        usort($sortedActive, fn ($a, $b) => (self::SEVERITY_RANK[$b['severity'] ?? 'Unknown'] ?? 0) <=> (self::SEVERITY_RANK[$a['severity'] ?? 'Unknown'] ?? 0));
+
+        $eventTypes = [];
+        $cards = '';
+        foreach ($sortedActive as $w) {
+            $severity = $w['severity'] ?? 'Unknown';
+            $color = self::TILE_SEVERITY_COLOR[$severity] ?? self::TILE_SEVERITY_COLOR['Unknown'];
+            $icon = self::SEVERITY_ICON[$severity] ?? 'ℹ️';
+            $eventRaw = trim($w['event'] ?? '') !== '' ? $w['event'] : 'Warnung';
+            $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower($eventRaw), MB_CASE_TITLE));
+            $eventTypes[$eventRaw] = true;
+            $sub = htmlspecialchars($w['standort'] ?? '');
+            if (!empty($w['expires'])) {
+                $expTs = strtotime((string) $w['expires']);
+                if ($expTs !== false) {
+                    $sub .= ' · bis ' . htmlspecialchars(date('H:i', $expTs)) . ' Uhr';
+                }
+            }
+            // Schlüssel wie SeenWarnings/$pairKey (identifier|standort) --
+            // dieselbe Warnung an DIESEM Standort bleibt über Prüfungen
+            // hinweg stabil identifizierbar, auch wenn sie an einem anderen
+            // Standort ebenfalls aktiv ist (eigener Schlüssel je Standort).
+            $key = htmlspecialchars(($w['identifier'] ?? '') . '|' . ($w['standort'] ?? ''));
+            $eventAttr = htmlspecialchars($eventRaw);
+            $cards .= <<<HTML
+<div class="whub-card" data-key="{$key}" data-event="{$eventAttr}" style="border-left-color:{$color};position:relative;padding-right:36px;">
+  <div class="whub-card-icon">{$icon}</div>
+  <div class="whub-card-body">
+    <div class="whub-card-title">{$eventLabel}</div>
+    <div class="whub-card-sub">{$sub}</div>
+  </div>
+  <div class="whub-card-dismiss" title="Ausblenden">✕</div>
+</div>
+HTML;
+        }
+
+        $filterChips = '';
+        foreach (array_keys($eventTypes) as $eventRaw) {
+            $label = htmlspecialchars(mb_convert_case(mb_strtolower($eventRaw), MB_CASE_TITLE));
+            $eventAttr = htmlspecialchars($eventRaw);
+            $filterChips .= <<<HTML
+<div class="whub-map-pill" data-event="{$eventAttr}">🚫 {$label}</div>
+HTML;
+        }
+
+        return $this->tileStyleBlock() . <<<HTML
+<div class="whub-overview">
+  <div class="whub-header">
+    <span class="whub-header-icon">🛡️</span>
+    <span class="whub-header-title">WarnHub -- Alle Warnungen</span>
+    <span class="whub-header-time">{$time}</span>
+  </div>
+  <div id="{$listId}filterbar" class="whub-map-legend" style="padding:0 0 10px 0;">{$filterChips}</div>
+  <div id="{$listId}" class="whub-allwarn-list">{$cards}</div>
+  <div id="{$listId}empty" class="whub-empty" hidden style="margin-top:8px;">
+    <div class="whub-empty-icon">🙈</div>
+    <div class="whub-empty-text">Alle aktiven Warnungen ausgeblendet</div>
+  </div>
+  <div id="{$listId}reset" class="whub-allwarn-reset">Alle wieder einblenden</div>
+  {$this->officialMapLinksHtml()}
+  <script>
+  (function(){
+    var list = document.getElementById('{$listId}');
+    var filterbar = document.getElementById('{$listId}filterbar');
+    var emptyFiltered = document.getElementById('{$listId}empty');
+    var resetBtn = document.getElementById('{$listId}reset');
+    if (!list) { return; }
+    var cards = Array.prototype.slice.call(list.querySelectorAll('.whub-card'));
+    if (!cards.length) { return; }
+
+    var dismissKey = 'whub-allwarn-dismissed-{$listId}';
+    var muteKey = 'whub-allwarn-muted-{$listId}';
+    var dismissed = [];
+    var muted = [];
+    try {
+      dismissed = JSON.parse(localStorage.getItem(dismissKey) || '[]');
+      muted = JSON.parse(localStorage.getItem(muteKey) || '[]');
+    } catch (e) {}
+    if (!Array.isArray(dismissed)) { dismissed = []; }
+    if (!Array.isArray(muted)) { muted = []; }
+
+    // Gespeicherte Ausblend-Schlüssel, die es jetzt gar nicht mehr gibt
+    // (Warnung inzwischen abgelaufen), aufräumen statt für immer behalten.
+    var currentKeys = cards.map(function (c) { return c.getAttribute('data-key'); });
+    dismissed = dismissed.filter(function (k) { return currentKeys.indexOf(k) !== -1; });
+    try { localStorage.setItem(dismissKey, JSON.stringify(dismissed)); } catch (e) {}
+
+    function applyVisibility() {
+      var anyVisible = false;
+      cards.forEach(function (c) {
+        var hide = dismissed.indexOf(c.getAttribute('data-key')) !== -1 || muted.indexOf(c.getAttribute('data-event')) !== -1;
+        c.hidden = hide;
+        if (!hide) { anyVisible = true; }
+      });
+      if (emptyFiltered) { emptyFiltered.hidden = anyVisible; }
+      if (filterbar) {
+        Array.prototype.slice.call(filterbar.querySelectorAll('.whub-map-pill[data-event]')).forEach(function (p) {
+          p.classList.toggle('whub-active', muted.indexOf(p.getAttribute('data-event')) !== -1);
+        });
+      }
+    }
+
+    cards.forEach(function (c) {
+      var btn = c.querySelector('.whub-card-dismiss');
+      if (!btn) { return; }
+      btn.addEventListener('click', function () {
+        var key = c.getAttribute('data-key');
+        if (dismissed.indexOf(key) === -1) { dismissed.push(key); }
+        try { localStorage.setItem(dismissKey, JSON.stringify(dismissed)); } catch (e) {}
+        applyVisibility();
+      });
+    });
+
+    if (filterbar) {
+      Array.prototype.slice.call(filterbar.querySelectorAll('.whub-map-pill[data-event]')).forEach(function (p) {
+        p.addEventListener('click', function () {
+          var ev = p.getAttribute('data-event');
+          var idx = muted.indexOf(ev);
+          if (idx === -1) { muted.push(ev); } else { muted.splice(idx, 1); }
+          try { localStorage.setItem(muteKey, JSON.stringify(muted)); } catch (e) {}
+          applyVisibility();
+        });
+      });
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        dismissed = [];
+        muted = [];
+        try { localStorage.removeItem(dismissKey); localStorage.removeItem(muteKey); } catch (e) {}
+        applyVisibility();
+      });
+    }
+
+    applyVisibility();
+  })();
+  </script>
 </div>
 HTML;
     }

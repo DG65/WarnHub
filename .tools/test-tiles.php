@@ -247,6 +247,37 @@ check('öffnet extern (target="_blank", rel="noopener" -- kein iframe, DWD/Meteo
 check('Kachel (kompakt) enthält die Kartenlinks', str_contains($statusOne, 'whub-maplinks') && str_contains($statusOne, 'zamg.at'));
 check('Kachel (Übersicht) enthält die Kartenlinks', str_contains($uebersichtEmpty, 'whub-maplinks') && str_contains($uebersichtEmpty, 'dwd.de'));
 
+echo "\n== renderKachelAlleWarnungen(): scrollbare Liste OHNE 8er-Deckel + Ausblenden/Filter (Dietmars Einwand 07.09.2026: 'die 100. Meldung noch ansehen können') ==\n";
+$alleLeer = callPrivate($hub, 'renderKachelAlleWarnungen', [[], 1700000000, false]);
+check('ohne aktive Warnung: Hinweistext statt Liste', str_contains($alleLeer, 'Keine aktive Warnung'));
+check('ohne aktive Warnung: keine Filterleiste/kein Ausblenden-Skript geladen', !str_contains($alleLeer, 'whub-allwarn-dismissed'));
+
+$vieleFuerAlle = [];
+for ($i = 0; $i < 12; $i++) {
+    $vieleFuerAlle[] = ['identifier' => 'a' . $i, 'standort' => 'Standort ' . $i, 'event' => 'Sturm', 'headline' => '', 'severity' => 'Moderate', 'category' => 'sturm', 'source' => 'test', 'expires' => null];
+}
+// Wichtigste Warnung absichtlich ganz hinten UND mit einem eigenen,
+// abweichenden Ereignistyp (für den Filter-Chip-Test) sowie
+// Anführungszeichen im Standortnamen (Escaping-Test).
+$vieleFuerAlle[] = ['identifier' => 'extreme', 'standort' => 'Zuhause "Test"', 'event' => 'Waldbrandgefahr', 'headline' => '', 'severity' => 'Extreme', 'category' => 'sonstige', 'source' => 'test', 'expires' => null];
+$htmlAlle = callPrivate($hub, 'renderKachelAlleWarnungen', [$vieleFuerAlle, 1700000000, false]);
+check('ALLE 13 Warnungen werden gerendert, KEIN 8er-Deckel (anders als "Kachel (Übersicht)")', substr_count($htmlAlle, 'class="whub-card-title"') === 13);
+check('kein "+N weitere"-Hinweis (den gibt es nur bei der gedeckelten Kachel)', !str_contains($htmlAlle, 'weitere'));
+check('nach Schweregrad sortiert -- die Extreme-Warnung steht trotz letzter Position in $active ganz oben', strpos($htmlAlle, 'Waldbrandgefahr') < strpos($htmlAlle, 'Sturm'));
+check('jede Karte trägt einen stabilen data-key (identifier|standort), sicher escaped (Anführungszeichen im Namen)', str_contains($htmlAlle, 'data-key="extreme|Zuhause &quot;Test&quot;"'));
+check('jede Karte trägt den Ereignistyp als data-event fürs Filtern', str_contains($htmlAlle, 'data-event="Sturm"') && str_contains($htmlAlle, 'data-event="Waldbrandgefahr"'));
+check('jede Karte hat einen eigenen Ausblenden-Button', substr_count($htmlAlle, 'class="whub-card-dismiss"') === 13);
+check('Filterleiste zeigt genau EINEN Chip je DISTINKTEM Ereignistyp (12x Sturm + 1x Waldbrandgefahr -> 2 Chips, nicht 13)', substr_count($htmlAlle, 'whub-map-pill" data-event=') === 2);
+check('Filter-Chip-Beschriftung ("🚫 Sturm", "🚫 Waldbrandgefahr")', str_contains($htmlAlle, '🚫 Sturm') && str_contains($htmlAlle, '🚫 Waldbrandgefahr'));
+check('Ausblenden/Filtern rein clientseitig in localStorage -- kein Rückkanal zu Symcon (Dietmars Entscheidung: pro Browser/Gerät, wie beim Zoom-Merken der Karte)', str_contains($htmlAlle, 'whub-allwarn-dismissed-') && str_contains($htmlAlle, 'whub-allwarn-muted-') && str_contains($htmlAlle, 'function applyVisibility'));
+check('gespeicherte Ausblend-Schlüssel werden beim Rendern auf noch existierende Karten bereinigt (kein unbegrenztes Anwachsen)', str_contains($htmlAlle, 'currentKeys.indexOf(k) !== -1'));
+check('"Alle wieder einblenden"-Reset vorhanden und clientseitig verdrahtet', str_contains($htmlAlle, 'Alle wieder einblenden') && str_contains($htmlAlle, 'resetBtn.addEventListener'));
+// Live im Browser gefunden, bevor es ausgeliefert wurde: .whub-card und
+// .whub-empty setzen selbst display:flex -- ohne eine [hidden]-Regel mit
+// höherer Spezifität gewinnt das gegen das ausblendende hidden-Attribut
+// (c.hidden = true), das Ausblenden hätte optisch GAR NICHTS bewirkt.
+check('.whub-card[hidden]/.whub-empty[hidden] überschreiben deren eigenes display:flex -- sonst bewirkt c.hidden=true optisch nichts', str_contains($htmlAlle, '.whub-card[hidden],.whub-empty[hidden]{display:none;}'));
+
 echo "\n== renderKachelKarte(): Übersichts-Kachel mit ALLEN aktiven Standorten + Legende (Dietmars Fund 07.09.2026: eine Instanz-Variable geht an jeden Betrachter gleich) ==\n";
 $hub->SetProp('Standorte', json_encode([]));
 $karteLeer = callPrivate($hub, 'renderKachelKarte', [[], false]);

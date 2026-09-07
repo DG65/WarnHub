@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.8.0 (2026-09-07)
+
+- NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne den
+  8er-Deckel: scrollbare Liste ALLER aktiven Warnungen, nach Schweregrad
+  sortiert. Dietmars Einwand 07.09.2026 zur Vorversion ("aus der '+1
+  weitere' Nummer kannst Du Dich nicht so einfach heraus reden ... baue
+  das so, dass man auch die 100. Meldung noch ansehen könnte"). Jede Karte
+  hat einen eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste mit
+  einem Chip je aktuell vorkommendem Ereignistyp ("🚫 Waldbrandgefahr" etc.)
+  zum gezielten Ausblenden ganzer Typen, plus "Alle wieder einblenden" zum
+  Zurücksetzen. Auf Dietmars ausdrücklichen Wunsch rein clientseitig in
+  localStorage gemerkt -- "pro Browser/Gerät", analog zum bestehenden
+  Zoom-/Fokus-Merken bei "Kachel (Karte)", kein Rückkanal zu Symcon nötig.
+  Ausgeblendete Warnungs-Schlüssel, die beim nächsten Rendern gar nicht
+  mehr vorkommen (Warnung inzwischen abgelaufen), werden automatisch
+  bereinigt statt sich unbegrenzt anzusammeln. Betrifft nur diese eine
+  Anzeige -- Push, Warnungs-Historie und Schutzaktionen laufen
+  serverseitig unverändert auf der vollen Liste.
+- Fix "Kachel (Übersicht)": dieselbe Schweregrad-Sortierung wie oben, jetzt
+  auch hier VOR dem 8er-Deckel angewendet -- vorher hätte die wichtigste
+  von z. B. 10 aktiven Warnungen rein zufällig hinter "+2 weitere"
+  verschwinden können. (War Teil von 1.7.2, hier nochmals im
+  Gesamtzusammenhang genannt.)
+- Live im Browser gefunden und sofort behoben, bevor es ausgeliefert
+  wurde: `.whub-card`/`.whub-empty` setzen selbst `display:flex` --  ohne
+  eine `[hidden]`-Regel mit höherer Spezifität hätte das gegen das
+  ausblendende `hidden`-Attribut gewonnen (Autoren-CSS schlägt die
+  Browser-Vorgabe bei gleicher Spezifität), das Ausblenden per Klick hätte
+  optisch GAR NICHTS bewirkt. Neue Regel
+  `.whub-card[hidden],.whub-empty[hidden]{display:none;}` behebt das
+  generell für beide Kartentypen.
+
 ## 1.7.2 (2026-09-07)
 
 - Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die

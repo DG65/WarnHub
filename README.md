@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.7.2-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.8.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -240,7 +240,15 @@ einfach im Objektbaum in den Bereich des WebFronts verlinken:
   Schweregrad, grün = keine aktive Warnung), Anzahl und "zuletzt geprüft"-Zeitangabe. Für ein
   kleines Kachel-Raster.
 - **Kachel (Übersicht)** -- Liste der aktuell aktiven Warnungen als eigene Karten (Icon,
-  Ereignis, Standort, Gültigkeitsende), bis zu 8 gleichzeitig, darüber ein "+N weitere"-Hinweis.
+  Ereignis, Standort, Gültigkeitsende), bis zu 8 gleichzeitig (nach Schweregrad sortiert, die
+  wichtigsten zuerst), darüber ein "+N weitere"-Hinweis.
+- **Kachel (Alle Warnungen)** -- wie "Kachel (Übersicht)", aber OHNE 8er-Deckel: scrollbare
+  Liste ALLER aktiven Warnungen, ebenfalls nach Schweregrad sortiert. Jede Karte hat einen
+  eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste mit einem Chip je aktuell
+  vorkommendem Ereignistyp ("🚫 Waldbrandgefahr" etc.) zum gezielten Ausblenden ganzer Typen --
+  beides rein im jeweiligen Browser gemerkt (localStorage, wie das Zoom-/Fokus-Merken bei
+  "Kachel (Karte)"), kein Rückkanal zu Symcon. Betrifft nur diese eine Anzeige -- Push,
+  Warnungs-Historie und Schutzaktionen laufen serverseitig unverändert auf der vollen Liste.
 - **Kachel (Karte)** -- Kartenausschnitt (Esri-Straßenkarte) mit JEDEM aktiven Standort
   gleichzeitig als eigenem, farbigen Pin (auch mobile Standorte, folgt deren Live-Position;
   Farbe je Standort nach dessen eigenem höchsten aktiven Schweregrad) plus einer klickbaren
@@ -258,10 +266,11 @@ einfach im Objektbaum in den Bereich des WebFronts verlinken:
   Zentrierung auf einen einzelnen Standort (bräuchte eine verifizierte Umrechnung in Österreichs
   Kartenprojektion -- bewusst noch nicht umgesetzt).
 
-"Kachel (kompakt)" und "Kachel (Übersicht)" im modernen, durchscheinenden "Liquid Glass"-Stil
-(macOS Tahoe), hell/dunkel-adaptiv über `prefers-color-scheme` -- komplett eigenständiges
-HTML/CSS, keine externen Abhängigkeiten. Beide enthalten zusätzlich drei kleine Links zu den
-amtlichen Warnkarten (DWD, ZAMG, MeteoSchweiz).
+"Kachel (kompakt)", "Kachel (Übersicht)" und "Kachel (Alle Warnungen)" im modernen,
+durchscheinenden "Liquid Glass"-Stil (macOS Tahoe), hell/dunkel-adaptiv über
+`prefers-color-scheme` -- komplett eigenständiges HTML/CSS, keine externen Abhängigkeiten. Alle
+drei enthalten zusätzlich drei kleine Links zu den amtlichen Warnkarten (DWD, ZAMG,
+MeteoSchweiz).
 
 "Kachel (Karte)" und "Kachel (ZAMG-Warnkarte)" laden dagegen bewusst externe Ressourcen
 (Leaflet.js von unpkg.com + Kartenkacheln von Esri bzw. die eingebettete ZAMG-Seite) -- eine
