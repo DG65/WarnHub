@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.6.0';
-    private const NEWS_VERSION = '1.6.0';
+    private const DOC_VERSION = '1.6.1';
+    private const NEWS_VERSION = '1.6.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1318,6 +1318,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": lud bei manchen Nutzern (Firefox) keine Kartenkacheln (HTTP 403) -- OpenStreetMaps eigene Tile-Server verlangen für eingebettete Widgets einen Referer-Header, der je nach Browser fehlen kann. Zeigt jetzt Kartenkacheln von Esri (referer-frei). Außerdem füllt die Kachel jetzt auch in der Höhe den verfügbaren Platz, nicht nur in der Breite'],
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)": automatische Höhenanpassung funktioniert nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration zuverlässig -- neues Feld im Panel "Prüfung & Status" erlaubt jetzt ersatzweise eine feste Höhe in Pixel'],
                 ['type' => 'Label', 'caption' => '• NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle -- amtlicher Luftqualitätsindex, ausdrücklich nur Ozon/Sommersmog, kein allgemeines Luftgüte-Monitoring'],
+                ['type' => 'Label', 'caption' => '• "Kachel (Karte)": eine manuell gewählte Zoomstufe geht jetzt nicht mehr bei jeder Prüfung verloren -- wird je Browser/Gerät gemerkt, die Kartenmitte folgt weiterhin immer dem aktuellen Standort'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4684,7 +4685,15 @@ HTML;
      *
      * Höhe: füllt jetzt height:100% statt einer festen Pixelzahl -- Praxis-
      * Fund ruan/Andreas: die Breite passte sich der Kachel schon an, die
-     * Höhe war fest auf 220px genagelt.
+     * Höhe war fest auf 220px genagelt. Für Konfigurationen, in denen das
+     * nicht zuverlässig funktioniert, zusätzlich KartenkachelHoehePx als
+     * feste Alternative (Praxis-Fund kronos/Bricoleur).
+     *
+     * Zoomstufe wird je Kachel/Browser in localStorage gemerkt (NICHT die
+     * Kartenmitte -- die soll immer dem aktuellen Standort folgen) -- ohne
+     * das ginge ein manuelles Heran-/Herauszoomen bei jeder Prüfung wieder
+     * verloren, da SetValue() das komplette HTML ersetzt. Praxis-Fund
+     * ruan/Andreas, Symcon-Forum, 07.09.2026.
      */
     private function renderKachelKarte(array $standort, array $active, bool $snoozed = false): string
     {
@@ -4722,7 +4731,20 @@ HTML;
   (function(){
     var el = document.getElementById('{$mapId}');
     if (!el || typeof L === 'undefined') { return; }
-    var map = L.map(el, {zoomControl:false}).setView([{$latStr}, {$lonStr}], 11);
+    // Zoomstufe je Browser/Gerät merken (localStorage, pro Kachel/Instanz
+    // eigener Schlüssel) -- die ganze Kachel wird bei jeder Prüfung neu
+    // gerendert (SetValue ersetzt das HTML komplett), ohne das würde ein
+    // manuelles Heran-/Herauszoomen beim nächsten Update wieder verloren
+    // gehen. Praxis-Fund ruan/Andreas, Symcon-Forum, 07.09.2026. Bewusst
+    // NUR die Zoomstufe, nicht die Kartenmitte -- die soll immer dem
+    // aktuellen Standort folgen (wichtig bei mobilen Standorten).
+    var zoomKey = 'whub-map-zoom-{$mapId}';
+    var savedZoom = parseInt(localStorage.getItem(zoomKey), 10);
+    var startZoom = (savedZoom >= 1 && savedZoom <= 19) ? savedZoom : 11;
+    var map = L.map(el, {zoomControl:false}).setView([{$latStr}, {$lonStr}], startZoom);
+    map.on('zoomend', function(){
+      try { localStorage.setItem(zoomKey, map.getZoom()); } catch (e) {}
+    });
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Tiles &copy; Esri'}).addTo(map);
     L.circleMarker([{$latStr}, {$lonStr}], {radius:10, color:'{$color}', fillColor:'{$color}', fillOpacity:0.85, weight:2}).addTo(map).bindTooltip({$nameJs});
   })();

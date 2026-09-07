@@ -248,6 +248,8 @@ check('zeigt eine Esri-Attribution (Nutzungsbedingung, deshalb attributionContro
 check('zentriert auf die Standort-Koordinaten (48.478500, 7.944800)', str_contains($karte, '48.478500, 7.944800'));
 check('Marker-Farbe folgt dem höchsten aktiven Schweregrad (TILE_SEVERITY_COLOR[Severe])', str_contains($karte, "color:'#FF9F0A'"));
 check('Standort-Name als sicherer JSON-String im Tooltip (Anführungszeichen im Namen escaped, kein rohes ")', str_contains($karte, 'bindTooltip(') && !str_contains($karte, 'bindTooltip("Zuhause "Test""'));
+check('merkt sich die Zoomstufe je Kachel in localStorage (Praxis-Fund ruan/Andreas: Zoom ging bei jedem Refresh verloren)', str_contains($karte, 'whub-map-zoom-') && str_contains($karte, "localStorage.getItem(zoomKey)") && str_contains($karte, "map.on('zoomend'"));
+check('Startzoom ohne gespeicherten Wert bleibt 11 (unverändertes Standardverhalten)', str_contains($karte, 'startZoom = (savedZoom >= 1 && savedZoom <= 19) ? savedZoom : 11'));
 
 $karteRuhig = callPrivate($hub, 'renderKachelKarte', [$standort, [], false]);
 check('keine aktive Warnung -> grüne Markerfarbe (TILE_COLOR_OK)', str_contains($karteRuhig, "color:'#30D158'"));

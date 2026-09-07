@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.6.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.6.1-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -246,7 +246,10 @@ einfach im Objektbaum in den Bereich des WebFronts verlinken:
   Status") -- auch mobile Standorte, folgt deren Live-Position. Markerfarbe nach höchstem
   aktivem Schweregrad. Höhe standardmäßig automatisch (an die umgebende WebFront-/
   Kachel-Visualisierung-Kachel angepasst) -- funktioniert nicht in jeder Konfiguration
-  zuverlässig, ersatzweise im selben Panel eine feste Pixelzahl eintragbar.
+  zuverlässig, ersatzweise im selben Panel eine feste Pixelzahl eintragbar. Merkt sich
+  eine manuell gewählte Zoomstufe je Browser/Gerät (nicht die Kartenmitte -- die folgt
+  weiterhin immer dem aktuellen Standort), damit sie bei der nächsten Prüfung nicht
+  verloren geht.
 - **Kachel (ZAMG-Warnkarte, Österreich)** -- bettet die offizielle ZAMG-Warnkarte
   (warnungen.zamg.at) direkt ein. Zeigt aktuell ganz Österreich, noch ohne automatische
   Zentrierung auf einen einzelnen Standort (bräuchte eine verifizierte Umrechnung in Österreichs

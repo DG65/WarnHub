@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.1 (2026-09-07)
+
+- Fix "Kachel (Karte)": eine manuell gewählte Zoomstufe ging bei jeder
+  Prüfung wieder verloren, weil `SetValue()` das komplette Kachel-HTML
+  ersetzt (neue Leaflet-Instanz startet sonst immer bei Zoomstufe 11).
+  Wird jetzt je Kachel/Browser in `localStorage` gemerkt (Schlüssel
+  `whub-map-zoom-<Kachel-ID>`) und beim nächsten Rendern wieder
+  angewendet -- bewusst NUR die Zoomstufe, nicht die Kartenmitte, damit
+  ein mobiler Standort weiterhin sichtbar mitwandert. Live im Browser
+  gegengeprüft (Zoom setzen, Kachel simuliert neu rendern, Zoomstufe
+  bleibt erhalten). Praxis-Fund von ruan/Andreas im Symcon-Forum.
+
 ## 1.6.0 (2026-09-07)
 
 - NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle --
