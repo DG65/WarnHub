@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.8.1 (2026-09-07)
+
+- Fix (Symcon-Store-Review, 07.09.2026): `LogError()` nutzt jetzt
+  `$this->LogMessage($message, KL_ERROR)` statt `IPS_LogMessage()` --
+  liefert automatisch den korrekten Instanz-Kontext im Meldungsprotokoll,
+  wie vom Reviewer angemerkt ("das ist nur eine Kleinigkeit, behebe es
+  aber bitte zur nächsten Einreichung").
+- "🔎 Objektbaum nach Schutzaktionen durchsuchen" erkennt Raffstore-/
+  Jalousie-Steuerungen jetzt zusätzlich über Symcons eingebaute Rollladen-
+  Variablendarstellung (`VARIABLE_PRESENTATION_SHUTTER`), nicht mehr nur
+  über den Namen -- Anregung desselben Reviews: "du suchst ja nach
+  verschiedenen Objekten basierend auf dem Namen ... es gibt ja eine
+  spezialisierte Darstellung für Rollläden, vielleicht kann man die
+  Information ja sinnvoll für deine Heuristik nutzen". Findet damit auch
+  anders benannte oder fremdsprachige Raffstore-Instanzen, deren Name
+  selbst keinen Hinweis mehr gibt. GUID live gegen ein echtes Symcon-
+  System verifiziert, nicht nur aus der Dokumentation übernommen.
+
 ## 1.8.0 (2026-09-07)
 
 - NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne den

@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.8.0';
-    private const NEWS_VERSION = '1.8.0';
+    private const DOC_VERSION = '1.8.1';
+    private const NEWS_VERSION = '1.8.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1326,6 +1326,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile Standorte am selben Ort) konnten bei Waldbrandgefahr und österreichischen GeoSphere-Warnungen dieselbe Meldung mehrfach zeigen/verschicken statt einmal je Standort -- Praxis-Fund ruan/Andreas, Symcon-Forum ("1 Warnung + 3 Standorte -> 9 statt 3 Einträge")'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die angezeigten 8 Karten jetzt nach Schweregrad sortiert, statt einfach die ersten 8 in Ankunftsreihenfolge zu nehmen -- vorher hätte ausgerechnet die wichtigste Warnung hinter "+N weitere" verschwinden können, nur weil sie zufällig weiter hinten stand'],
                 ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne 8er-Deckel: scrollbare Liste ALLER aktiven Warnungen, nach Schweregrad sortiert. Jede Karte hat einen eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt, betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen'],
+                ['type' => 'Label', 'caption' => '• "🔎 Objektbaum nach Schutzaktionen durchsuchen" findet jetzt auch Raffstore-/Jalousie-Steuerungen, deren Name selbst keinen Hinweis darauf gibt -- über Symcons eingebaute Rollladen-Variablendarstellung, unabhängig von Sprache/Eigennamen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1536,6 +1537,32 @@ class WarnHub extends IPSModule
      * durchsucht. null = keins von beidem gefunden (kein erkennbarer
      * Fenster-/Tür-Kontakt).
      */
+    /**
+     * Ob eine Variable Symcons eingebaute Rollladen-Darstellung trägt
+     * (VARIABLE_PRESENTATION_SHUTTER) -- ein strukturelles, namens- und
+     * sprachunabhängiges Erkennungsmerkmal für Raffstore-/Jalousie-
+     * Steuerungen, zusätzlich zum Namensabgleich in
+     * DiscoverSchutzaktionen(). Symcon-Store-Review-Anregung, 07.09.2026
+     * ("es gibt ja eine spezialisierte Darstellung für Rollläden ... kann
+     * man die Information ja sinnvoll für deine Heuristik nutzen"), GUID
+     * live gegen Dietmars System verifiziert:
+     * {6075FC22-69AF-B110-3749-C24138883082}. defined()-Absicherung: die
+     * Konstante gibt es erst seit den Variablendarstellungen (Symcon 8) --
+     * auf älteren Installationen bleibt diese Prüfung einfach false, der
+     * Namensabgleich greift dort unverändert weiter.
+     */
+    private function hasShutterPresentation(int $variableID): bool
+    {
+        if (!defined('VARIABLE_PRESENTATION_SHUTTER')) {
+            return false;
+        }
+        $var = @IPS_GetVariable($variableID);
+        if (!is_array($var)) {
+            return false;
+        }
+        return ($var['VariablePresentation']['PRESENTATION'] ?? null) === VARIABLE_PRESENTATION_SHUTTER;
+    }
+
     private function contactOpenRawValue(int $variableID): ?bool
     {
         $var = @IPS_GetVariable($variableID);
@@ -1750,6 +1777,15 @@ class WarnHub extends IPSModule
                         $matched = true;
                         break;
                     }
+                }
+                // Zusätzliches, NAMENSUNABHÄNGIGES Signal für 'raffstore':
+                // Symcons eigene Rollladen-Variablendarstellung erkennt eine
+                // Steuerung auch dann, wenn weder ihr Name noch der ihrer
+                // Instanz "Raffstore"/"Jalousie" enthält (andere Sprache,
+                // Eigenname, Fremdmodul-Konvention). Siehe
+                // hasShutterPresentation().
+                if (!$matched && $actionType === 'raffstore' && $type === 2 && $this->hasShutterPresentation($id)) {
+                    $matched = true;
                 }
                 if (!$matched) {
                     continue;
@@ -2318,7 +2354,11 @@ class WarnHub extends IPSModule
     private function LogError(string $context, string $message): void
     {
         $this->SendDebug($context, $message, 0);
-        IPS_LogMessage('WarnHub #' . $this->InstanceID, $context . ': ' . $message);
+        // $this->LogMessage() statt IPS_LogMessage() -- liefert automatisch
+        // den korrekten Instanz-Kontext (Symcon-Store-Review-Hinweis,
+        // 07.09.2026), IPS_LogMessage() bräuchte den Bezug manuell als
+        // Sender-String nachgebaut.
+        $this->LogMessage($context . ': ' . $message, KL_ERROR);
     }
 
     // ----------------------------------------------------------------

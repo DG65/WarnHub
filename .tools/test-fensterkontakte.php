@@ -162,6 +162,9 @@ class IPSModule
     public function SendDebug($s, $m, $f)
     {
     }
+    public function LogMessage($Message, $Type)
+    {
+    }
     public array $formFieldUpdates = [];
     public function UpdateFormField($n, $k, $v)
     {
@@ -183,6 +186,13 @@ class IPSModule
     }
 }
 
+const KL_MESSAGE = 10201;
+const KL_SUCCESS = 10202;
+const KL_NOTIFY = 10203;
+const KL_WARNING = 10204;
+const KL_ERROR = 10205;
+const KL_DEBUG = 10206;
+const KL_CUSTOM = 10207;
 function IPS_VariableProfileExists(string $name): bool
 {
     return true;

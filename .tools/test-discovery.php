@@ -25,6 +25,9 @@ const PUSHOVER_GUID_ACTUAL = '{22222222-2222-2222-2222-222222222222}';
 // Ebenfalls bewusst über eine Fake-GUID + Namenssuche aufgelöst -- prüft den
 // Rückfallpfad auch für den dritten, neu hinzugekommenen Push-Kanal (E-Mail).
 const SMTP_GUID_ACTUAL = '{33333333-3333-3333-3333-333333333333}';
+// Echte, live gegen Dietmars System verifizierte Symcon-Konstante (07.09.2026) --
+// nicht selbst erfunden.
+const VARIABLE_PRESENTATION_SHUTTER = '{6075FC22-69AF-B110-3749-C24138883082}';
 
 // Kleiner Fake-Objektbaum:
 //   0 (Root)
@@ -39,6 +42,12 @@ const SMTP_GUID_ACTUAL = '{33333333-3333-3333-3333-333333333333}';
 //    |   +- 18 Instanz "Trabbi" (Auto) -> 180 Kategorie "Steuerung" -> 181 Var "Hupe"
 //    |         (aktionsfähig, ZWEI Ebenen tief -- prüft das Hochlaufen bis
 //    |         zur echten Instanz, nicht nur bis zum direkten Elternknoten)
+//    |   +- 19 Instanz "Beschattung Büro" -> 191 Var "Höhe" (aktionsfähig,
+//    |         trägt Symcons Rollladen-Variablendarstellung) -- WEDER der
+//    |         Instanz- noch der Variablenname enthält "raffstore"/
+//    |         "jalousie"/"markise"/"sonnenschutz", trotzdem ein Treffer
+//    |         (Typ raffstore) rein über hasShutterPresentation(). Symcon-
+//    |         Store-Review-Anregung, 07.09.2026.
 //    +- 20 Instanz "WebFront Familie" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 21 Instanz "WebFront Gast" (Modul WebFront, exakte GUID liefert Treffer)
 //    +- 22 Instanz "Dietmar" (Kachel-Visualisierung, NUR über Namenssuche auffindbar)
@@ -60,7 +69,7 @@ const SMTP_GUID_ACTUAL = '{33333333-3333-3333-3333-333333333333}';
 //              inaktiv, Sicherheitssperre statt Raten)
 $GLOBALS['whub_test_tree'] = [
     0 => [10, 20, 21, 22, 26, 27, 28, 23, 25],
-    10 => [11, 12, 13, 14, 15, 16, 17, 18],
+    10 => [11, 12, 13, 14, 15, 16, 17, 18, 19],
     11 => [111],
     12 => [121],
     13 => [131, 132],
@@ -70,6 +79,7 @@ $GLOBALS['whub_test_tree'] = [
     17 => [171],
     18 => [180],
     180 => [181],
+    19 => [191],
     20 => [],
     21 => [],
     22 => [],
@@ -90,6 +100,7 @@ $GLOBALS['whub_test_objects'] = [
     17 => ['ObjectType' => 1, 'ObjectName' => 'Kohlekasten'],
     18 => ['ObjectType' => 1, 'ObjectName' => 'Trabbi'],
     180 => ['ObjectType' => 0, 'ObjectName' => 'Steuerung'], // Zwischenkategorie, KEINE Instanz
+    19 => ['ObjectType' => 1, 'ObjectName' => 'Beschattung Büro'], // bewusst KEIN Raffstore/Jalousie-Stichwort im Namen
     20 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Familie'],
     21 => ['ObjectType' => 1, 'ObjectName' => 'WebFront Gast'],
     22 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar'],
@@ -106,6 +117,7 @@ $GLOBALS['whub_test_objects'] = [
     161 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
     171 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
     181 => ['ObjectType' => 2, 'ObjectName' => 'Hupe'],
+    191 => ['ObjectType' => 2, 'ObjectName' => 'Höhe'], // bewusst KEIN Raffstore/Jalousie-Stichwort
     231 => ['ObjectType' => 2, 'ObjectName' => 'Fenster schließen'],
     232 => ['ObjectType' => 2, 'ObjectName' => 'Fenster'],
     233 => ['ObjectType' => 2, 'ObjectName' => 'Heckklappe öffnen/schließen'],
@@ -121,6 +133,10 @@ $GLOBALS['whub_test_variables'] = [
     161 => ['VariableAction' => 1],
     171 => ['VariableAction' => 1],
     181 => ['VariableAction' => 1],
+    // Rollladen-Darstellung, aber KEIN Namenstreffer (weder "Höhe" noch die
+    // Instanz "Beschattung Büro" enthält raffstore/jalousie/markise/
+    // sonnenschutz) -- muss trotzdem als Typ raffstore gefunden werden.
+    191 => ['VariableAction' => 1, 'VariablePresentation' => ['PRESENTATION' => VARIABLE_PRESENTATION_SHUTTER]],
     231 => ['VariableAction' => 1],
     232 => ['VariableAction' => 1],
     233 => ['VariableAction' => 1],
@@ -271,6 +287,9 @@ class IPSModule
     public function SendDebug($s, $m, $f)
     {
     }
+    public function LogMessage($Message, $Type)
+    {
+    }
     public array $formFieldUpdates = [];
     public function UpdateFormField($n, $k, $v)
     {
@@ -300,6 +319,13 @@ class IPSModule
 
 const VARIABLETYPE_STRING = 3;
 const VARIABLETYPE_INTEGER = 1;
+const KL_MESSAGE = 10201;
+const KL_SUCCESS = 10202;
+const KL_NOTIFY = 10203;
+const KL_WARNING = 10204;
+const KL_ERROR = 10205;
+const KL_DEBUG = 10206;
+const KL_CUSTOM = 10207;
 function IPS_VariableProfileExists(string $name): bool
 {
     return true;
@@ -367,11 +393,11 @@ echo "== Schutzaktionen-Discovery ==\n";
 $hub2 = new WarnHub();
 $hub2->Create();
 $msg3 = $hub2->DiscoverSchutzaktionen();
-check('meldet 10 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe + Fenster schließen + 2× Heckklappe)', str_contains($msg3, '10 neue'));
+check('meldet 11 neue Schutzaktionen (Raffstore + Markise + Sirene-Instanz + Garage + 3× Auto-Hupe + Fenster schließen + 2× Heckklappe + Rollladen-Darstellung ohne Namenstreffer)', str_contains($msg3, '11 neue'));
 [$field3, , $valuesJson3] = $hub2->lastValuesUpdate('Schutzaktionen');
 check('schreibt in das Feld "Schutzaktionen"', $field3 === 'Schutzaktionen');
 $actions = json_decode($valuesJson3, true);
-check('genau 10 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig, "Fenster" ohne "schließen" kein Treffer)', count($actions) === 10);
+check('genau 11 Zeilen (Wetterstation kein Treffer, Status-Var nicht aktionsfähig, "Fenster" ohne "schließen" kein Treffer)', count($actions) === 11);
 check('Auto-Hupen sind über den Fahrzeugnamen unterscheidbar statt alle nur "Hupe" zu heißen (Dietmars Live-Fund)', in_array('Schneeflocke – Hupe', array_column($actions, 'Name'), true) && in_array('Kohlekasten – Hupe', array_column($actions, 'Name'), true) && !in_array('Hupe', array_column($actions, 'Name'), true));
 check('Zwei Ebenen tief (Trabbi > Steuerung > Hupe) findet trotzdem die ECHTE Instanz "Trabbi", nicht die Zwischenkategorie "Steuerung" (Dietmars Nachfrage 04.09.2026)', in_array('Trabbi – Hupe', array_column($actions, 'Name'), true) && !in_array('Steuerung – Hupe', array_column($actions, 'Name'), true));
 
@@ -389,7 +415,12 @@ check('Blitz – Fenster schließen -> Typ fenster, Sturm+Hagel+Starkregen angek
 check('"Fenster" ohne "schließen" wird NICHT vorgeschlagen (Stichwort-Spezifität -- sonst auch Fenster-offen-Sensoren betroffen)', !in_array('Blitz – Fenster', array_column($actions, 'Name'), true) && !in_array(232, array_column($actions, 'ZielVariableID'), true));
 check('Blitz – Heckklappe öffnen/schließen -> Typ kofferraum, Zustands-Variable automatisch verlinkt (234, "Tür-/Klappenstatus"), AKTIV', ($byName['Blitz – Heckklappe öffnen/schließen']['Typ'] ?? null) === 'kofferraum' && ($byName['Blitz – Heckklappe öffnen/schließen']['ZielVariableID'] ?? null) === 233 && ($byName['Blitz – Heckklappe öffnen/schließen']['ZustandsVariableID'] ?? null) === 234 && ($byName['Blitz – Heckklappe öffnen/schließen']['Aktiv'] ?? null) === true);
 check('Schneemobil – Heckklappe öffnen/schließen -> OHNE auffindbare Zustands-Variable bleibt die Zeile INAKTIV (Sicherheitssperre statt Raten)', ($byName['Schneemobil – Heckklappe öffnen/schließen']['Typ'] ?? null) === 'kofferraum' && ($byName['Schneemobil – Heckklappe öffnen/schließen']['ZustandsVariableID'] ?? null) === 0 && ($byName['Schneemobil – Heckklappe öffnen/schließen']['Aktiv'] ?? null) === false);
-check('neun der zehn Treffer standardmäßig aktiv (nur Schneemobil-Heckklappe bewusst nicht, mangels Zustands-Variable)', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 9);
+// Treffer läuft über die VARIABLE selbst (191 "Höhe"), nicht über die
+// Instanz "Beschattung Büro" -- deshalb wie beim Hupen-Muster mit
+// vorangestelltem Instanznamen ("Beschattung Büro – Höhe"), nicht bloß
+// "Beschattung Büro".
+check('Beschattung Büro – Höhe (Typ raffstore, aber KEIN Namenstreffer -- nur über die Rollladen-Variablendarstellung gefunden, Symcon-Store-Review-Anregung 07.09.2026) -> EINE Zeile, Sturm UND Hagel angekreuzt, Ziel-Variable 191', ($byName['Beschattung Büro – Höhe']['Typ'] ?? null) === 'raffstore' && ($byName['Beschattung Büro – Höhe']['KatSturm'] ?? false) === true && ($byName['Beschattung Büro – Höhe']['KatHagel'] ?? false) === true && ($byName['Beschattung Büro – Höhe']['ZielVariableID'] ?? null) === 191);
+check('zehn der elf Treffer standardmäßig aktiv (nur Schneemobil-Heckklappe bewusst nicht, mangels Zustands-Variable)', count(array_filter($actions, fn ($a) => $a['Aktiv'] === true)) === 10);
 
 // Ende-zu-Ende: decodeSchutzaktionen() muss die angekreuzten Kästchen korrekt
 // in die normalisierte 'Kategorien'-Liste übersetzen (für die Zuordnungslogik

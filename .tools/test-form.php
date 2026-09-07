@@ -103,6 +103,10 @@ class IPSModule
     public function SendDebug($s, $m, $f)
     {
     }
+    public function LogMessage($Message, $Type)
+    {
+        $GLOBALS['whub_test_logMessageCalls'][] = [$Message, $Type];
+    }
     public function UpdateFormField($n, $k, $v)
     {
     }
@@ -119,6 +123,13 @@ class IPSModule
 
 const VARIABLETYPE_STRING = 3;
 const VARIABLETYPE_INTEGER = 1;
+const KL_MESSAGE = 10201;
+const KL_SUCCESS = 10202;
+const KL_NOTIFY = 10203;
+const KL_WARNING = 10204;
+const KL_ERROR = 10205;
+const KL_DEBUG = 10206;
+const KL_CUSTOM = 10207;
 function IPS_VariableProfileExists(string $name): bool
 {
     return true;
@@ -350,6 +361,14 @@ check('Panel "Fenster-/Tür-Überwachung" vorhanden', $fensterPanel !== null);
 $fensterListe = findByName($decoded['elements'], 'Fensterkontakte');
 check('Liste "Fensterkontakte" vorhanden', $fensterListe !== null);
 check('Liste hat eine Spalte "Kontakt-Variable" (SelectVariable)', (findByName($fensterListe['columns'] ?? [], 'VariableID')['edit']['type'] ?? null) === 'SelectVariable');
+
+echo "\n== LogError(): nutzt \$this->LogMessage() statt IPS_LogMessage() (Symcon-Store-Review-Hinweis 07.09.2026: liefert automatisch den korrekten Instanz-Kontext) ==\n";
+$GLOBALS['whub_test_logMessageCalls'] = [];
+$logErrorRef = new ReflectionMethod($hub, 'LogError');
+$logErrorRef->invokeArgs($hub, ['TestContext', 'Test-Fehlermeldung']);
+check('genau ein LogMessage()-Aufruf', count($GLOBALS['whub_test_logMessageCalls']) === 1);
+check('Nachricht enthält Kontext und Meldung', ($GLOBALS['whub_test_logMessageCalls'][0][0] ?? '') === 'TestContext: Test-Fehlermeldung');
+check('Typ ist KL_ERROR', ($GLOBALS['whub_test_logMessageCalls'][0][1] ?? null) === KL_ERROR);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

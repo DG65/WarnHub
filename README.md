@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.8.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.8.1-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -181,7 +181,9 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
    Kachel-Visualisierung-Instanzen sowie -- falls installiert -- Telegram-Bot- und
    Pushover-Instanzen).
 4. Optional: Knopf "Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster
-   schließen/Heckklappe/Sirene durchsuchen" klicken.
+   schließen/Heckklappe/Sirene durchsuchen" klicken. Raffstore-/Jalousie-Steuerungen
+   werden zusätzlich über Symcons eingebaute Rollladen-Variablendarstellung erkannt, auch
+   wenn ihr Name selbst keinen Hinweis darauf gibt.
 
 ### Auto-Erkennung: gefunden = aktiviert, Abwahl möglich
 
