@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.2 (2026-09-07)
+
+- Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die
+  angezeigten 8 Karten jetzt VOR dem Deckeln nach Schweregrad sortiert
+  (stabil, gleicher Schweregrad behält die ursprüngliche Reihenfolge),
+  statt einfach die ersten 8 in Ankunftsreihenfolge zu zeigen. Dietmars
+  Einwand 07.09.2026: die wichtigste von z. B. 10 aktiven Warnungen hätte
+  rein zufällig an Position 9 oder 10 landen und komplett hinter "+N
+  weitere" verschwinden können, ohne dass sie überhaupt sichtbar wird.
+  Betrifft nur die Kartenreihenfolge/Anzeige -- Push-Benachrichtigungen,
+  Warnungs-Historie und alle Schutzaktionen liefen bereits vorher
+  unabhängig von dieser Anzeigereihenfolge korrekt für JEDE aktive
+  Warnung, unabhängig vom Deckel.
+
 ## 1.7.1 (2026-09-07)
 
 - Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile

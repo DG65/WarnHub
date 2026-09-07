@@ -201,6 +201,19 @@ $htmlViele = callPrivate($hub, 'renderKachelUebersicht', [$viele, 1700000000]);
 check('maximal 8 Karten werden tatsächlich gerendert', substr_count($htmlViele, 'class="whub-card-title"') === 8);
 check('Hinweis auf die restlichen 4 wird angezeigt ("+4 weitere")', str_contains($htmlViele, '+4 weitere'));
 
+echo "\n== renderKachelUebersicht(): Deckelung sortiert nach Schweregrad, statt nach Zufall der Warnungs-Reihenfolge (Dietmars Einwand 07.09.2026: 'die 10. Meldung ist die wichtigste ... kann dann ausgerechnet die nicht erreichen') ==\n";
+$vieleGemischt = [];
+for ($i = 0; $i < 9; $i++) {
+    $vieleGemischt[] = ['identifier' => 'w' . $i, 'standort' => 'Standort ' . $i, 'event' => 'Wind', 'headline' => '', 'severity' => 'Moderate', 'category' => 'sturm', 'source' => 'test', 'expires' => null];
+}
+// Die WICHTIGSTE Warnung steht absichtlich ganz hinten (Position 10 von 10)
+// -- ohne Sortierung würde sie hinter "+N weitere" verschwinden.
+$vieleGemischt[] = ['identifier' => 'extreme', 'standort' => 'Wichtigster Standort', 'event' => 'Orkan', 'headline' => '', 'severity' => 'Extreme', 'category' => 'sturm', 'source' => 'test', 'expires' => null];
+$htmlSortiert = callPrivate($hub, 'renderKachelUebersicht', [$vieleGemischt, 1700000000]);
+check('die wichtigste Warnung (Extreme) ist trotz letzter Position in $active TROTZDEM unter den angezeigten 8 Karten', str_contains($htmlSortiert, 'Orkan') && str_contains($htmlSortiert, 'Wichtigster Standort'));
+check('sie steht an ERSTER Stelle (vor allen Moderate-Warnungen)', strpos($htmlSortiert, 'Orkan') < strpos($htmlSortiert, 'Wind'));
+check('Gesamtzahl der ausgeblendeten bleibt korrekt ("+2 weitere" -- 10 gesamt, 8 gezeigt)', str_contains($htmlSortiert, '+2 weitere'));
+
 echo "\n== renderKachelStatus(): Schweregrad-Icon/Text je nach höchster aktiver Warnung ==\n";
 $statusSevere = callPrivate($hub, 'renderKachelStatus', [[
     ['identifier' => 'w1', 'severity' => 'Moderate'],

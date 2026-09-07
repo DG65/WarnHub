@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.7.1';
-    private const NEWS_VERSION = '1.7.1';
+    private const DOC_VERSION = '1.7.2';
+    private const NEWS_VERSION = '1.7.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1321,6 +1321,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei "Kachel (Karte)" -- eine fest genagelte Pixelzahl skalierte nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration. Füllt jetzt ebenfalls automatisch die verfügbare Höhe, mit neuem eigenen Feld "ZamgKachelHoehePx" als feste Alternative'],
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)" komplett neu: zeigt jetzt ALLE aktiven Standorte gleichzeitig als eigene, farbige Pins plus eine klickbare Legende, statt nur einen fest in der Konsole ausgewählten. Grund: dieselbe Kachel-Variable geht an jeden WebFront-Betrachter gleich -- stelltest du unterwegs auf deinen eigenen Standort um, sah der Rest der Familie zuhause zwangsläufig denselben, nicht mehr den eigenen (Dietmars Fund 07.09.2026). Welcher Standort fokussiert ist, merkt sich jetzt jeder Browser für sich, die Startansicht zeigt immer alle gemeinsam. Das Feld "Standort für Kachel (Karte)" entfällt damit'],
                 ['type' => 'Label', 'caption' => '• Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile Standorte am selben Ort) konnten bei Waldbrandgefahr und österreichischen GeoSphere-Warnungen dieselbe Meldung mehrfach zeigen/verschicken statt einmal je Standort -- Praxis-Fund ruan/Andreas, Symcon-Forum ("1 Warnung + 3 Standorte -> 9 statt 3 Einträge")'],
+                ['type' => 'Label', 'caption' => '• Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die angezeigten 8 Karten jetzt nach Schweregrad sortiert, statt einfach die ersten 8 in Ankunftsreihenfolge zu nehmen -- vorher hätte ausgerechnet die wichtigste Warnung hinter "+N weitere" verschwinden können, nur weil sie zufällig weiter hinten stand'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4644,7 +4645,17 @@ HTML;
         if (count($active) === 0) {
             $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">Keine aktive Warnung</div></div>';
         } else {
-            $shown = array_slice($active, 0, 8);
+            // Nach Schweregrad sortiert VOR dem Deckeln auf 8 -- sonst könnte
+            // bei mehr als 8 aktiven Warnungen ausgerechnet die wichtigste
+            // hinter "+N weitere" verschwinden, nur weil sie zufällig weiter
+            // hinten in $active stand. Dietmars Einwand 07.09.2026: "die 10.
+            // Meldung ist die wichtigste ... kann dann ausgerechnet die nicht
+            // erreichen". Stabile Sortierung (usort ist seit PHP 8 stabil) --
+            // bei gleichem Schweregrad bleibt die ursprüngliche Reihenfolge
+            // erhalten.
+            $sortedActive = $active;
+            usort($sortedActive, fn ($a, $b) => (self::SEVERITY_RANK[$b['severity'] ?? 'Unknown'] ?? 0) <=> (self::SEVERITY_RANK[$a['severity'] ?? 'Unknown'] ?? 0));
+            $shown = array_slice($sortedActive, 0, 8);
             foreach ($shown as $w) {
                 $severity = $w['severity'] ?? 'Unknown';
                 $color = self::TILE_SEVERITY_COLOR[$severity] ?? self::TILE_SEVERITY_COLOR['Unknown'];
