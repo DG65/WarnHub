@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.8.2';
-    private const NEWS_VERSION = '1.8.2';
+    private const DOC_VERSION = '1.8.3';
+    private const NEWS_VERSION = '1.8.3';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1328,6 +1328,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne 8er-Deckel: scrollbare Liste ALLER aktiven Warnungen, nach Schweregrad sortiert. Jede Karte hat einen eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt, betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen'],
                 ['type' => 'Label', 'caption' => '• "🔎 Objektbaum nach Schutzaktionen durchsuchen" findet jetzt auch Raffstore-/Jalousie-Steuerungen, deren Name selbst keinen Hinweis darauf gibt -- über Symcons eingebaute Rollladen-Variablendarstellung, unabhängig von Sprache/Eigennamen'],
                 ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2141,8 +2142,20 @@ class WarnHub extends IPSModule
             // Nutzer umbenannten Objekt; die Idents "windgustmph"/"rainratein"
             // (verifiziert gegen den echten Quellcode github.com/IPSAttain/
             // Froggit) bleiben davon unberührt, analog zu Wolbolar/Meteobridge.
+            // "rrain_piezo" zusätzlich zu "rainratein" (Praxis-Fund ralf,
+            // Symcon-Forum, 07.09.2026): neuere Ecowitt-Gateways mit
+            // Piezo-Regensensor (z. B. WS90) senden GAR KEIN "rainratein"
+            // mehr, nur noch die "*_piezo"-Feldfamilie -- der Froggit-
+            // Quellcode legt für JEDES Feld, dessen Name "rain" enthält, per
+            // generischem Catch-all eine eigene Variable an (Ident = roher
+            // Gateway-Feldname, unübersetzt), "rrain_piezo" ist darunter laut
+            // Ecowitt-eigener Protokolldokumentation die aktuelle Regenrate
+            // (die anderen -- erain/hrain/drain/wrain/mrain/yrain_piezo --
+            // sind kumulierte Zeiträume, kein Rate-Wert, deshalb NICHT
+            // mitgeprüft).
             $windboe = $this->findChildVariableByIdent($instanceID, 'windgustmph');
-            $regenrate = $this->findChildVariableByIdent($instanceID, 'rainratein');
+            $regenrate = $this->findChildVariableByIdent($instanceID, 'rainratein')
+                ?? $this->findChildVariableByIdent($instanceID, 'rrain_piezo');
             if ($windboe === null || $regenrate === null) {
                 $foundButIncomplete[] = (@IPS_GetName($instanceID) ?: ('#' . $instanceID)) . ' (Froggit)';
                 continue; // Ident passt, aber die entscheidenden Felder fehlen -- kein Treffer
@@ -2828,8 +2841,15 @@ class WarnHub extends IPSModule
      * konfigurierte Wetterstations-Instanz nach dem Froggit-Anzeigenamen
      * ODER einem der bekannten Fremdmodul-Idents durchsucht (siehe
      * DiscoverWetterstation() -- Wolbolar/WeatherStation, Meteobridge/
-     * Meteohub). $identSuffix bleibt bei der bisherigen, instanzbasierten
-     * Kennung ("<instanceID>"), damit sich beim Upgrade NICHTS an bereits
+     * Meteohub). Der $idents-Aufrufer übergibt jetzt AUCH Froggits eigene
+     * Idents ("windgustmph"/"rainratein"/"rrain_piezo") -- vorher fehlten
+     * die hier, dieser Pfad verließ sich für Froggit ausschließlich auf den
+     * (sprachabhängigen, umbenennbaren) Anzeigenamen "Windböe"/"Regenrate"
+     * -- derselbe Fragilitäts-Fund, der DiscoverWetterstation() schon am
+     * 05.09.2026 zum Ident-Abgleich gebracht hat, hier aber übersehen.
+     * Praxis-Fund ralf, Symcon-Forum, 07.09.2026 (neuere Ecowitt-Gateways
+     * mit Piezo-Regensensor legen gar keine "Regenrate"-Variable mehr an).
+     * $identSuffix bleibt bei der bisherigen, instanzbasierten
      * gesehenen Warnungs-Identifiern ändert -- nur der neue manuelle Pfad
      * bekommt einen eigenen, unterscheidbaren Suffix.
      *
@@ -2997,13 +3017,13 @@ class WarnHub extends IPSModule
             $this->ReadPropertyInteger('WetterstationWindVariableID'),
             $instanceID,
             'Windböe',
-            ['Windgust', 'Wind_Gust_KmH']
+            ['windgustmph', 'Windgust', 'Wind_Gust_KmH']
         );
         [$regenrateID] = $this->resolveWetterstationSource(
             $this->ReadPropertyInteger('WetterstationRegenVariableID'),
             $instanceID,
             'Regenrate',
-            ['rainin', 'Rain_Rate']
+            ['rainratein', 'rrain_piezo', 'rainin', 'Rain_Rate']
         );
         $windCalm = $windboeID === null || $this->windSeverityForSpeed($this->readWindSpeedKmh($windboeID)) === null;
         $regenCalm = $regenrateID === null || $this->regenSeverityForRate((float) @GetValue($regenrateID)) === null;
@@ -3072,13 +3092,13 @@ class WarnHub extends IPSModule
             $this->ReadPropertyInteger('WetterstationWindVariableID'),
             $instanceID,
             'Windböe',
-            ['Windgust', 'Wind_Gust_KmH']
+            ['windgustmph', 'Windgust', 'Wind_Gust_KmH']
         );
         [$regenrateID, $regenIdentSuffix] = $this->resolveWetterstationSource(
             $this->ReadPropertyInteger('WetterstationRegenVariableID'),
             $instanceID,
             'Regenrate',
-            ['rainin', 'Rain_Rate']
+            ['rainratein', 'rrain_piezo', 'rainin', 'Rain_Rate']
         );
         if ($windboeID === null && $regenrateID === null) {
             return [];

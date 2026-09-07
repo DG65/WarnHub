@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.8.2-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.8.3-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -78,7 +78,7 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes
   Ereignis nicht oder nicht rechtzeitig melden. Eine Objektbaum-Suche findet eine Froggit-
   (Ecowitt-Protokoll, deckt auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-
-  Hardware ab), Sainlogic/ELV- (Wolbolar/
+  Hardware ab -- auch neuere Gateways mit Piezo-Regensensor, z. B. WS90), Sainlogic/ELV- (Wolbolar/
   IPSymconWeatherStation, Wunderground-Protokoll) oder Meteobridge/Meteohub-Instanz
   (Datenlogger-Aggregator, deckt zusätzlich weitere Marken wie DAVIS ab) automatisch --
   Windgeschwindigkeiten werden dabei unabhängig vom Quellprofil (km/h oder m/s) korrekt

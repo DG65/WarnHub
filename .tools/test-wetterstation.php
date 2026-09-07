@@ -40,17 +40,29 @@ const LOCATION_INSTANCE_ID = 900;
 //   30 Instanz "Meteobridge" (elueckel/Symcon_Meteobridge_Meteohub, exakte
 //      GUID) -> 301 Ident "Wind_Gust_KmH" (~WindSpeed.kmh, schon km/h),
 //      302 Ident "Rain_Rate" (~Rainfall)
+//   40 Instanz "Wetterstation Piezo" (exakte Froggit-GUID) -- neuere
+//      Ecowitt-Gateway-Generation mit Piezo-Regensensor (z. B. WS90):
+//      401 Ident "windgustmph"/Anzeigename "Windböe" wie gehabt, aber KEIN
+//      "rainratein" mehr -- nur die "*_piezo"-Feldfamilie, vom Froggit-
+//      Quellcode per generischem Catch-all ("enthält 'rain'") angelegt,
+//      Ident UND Anzeigename beide der rohe, unübersetzte Gateway-
+//      Feldname. 402 Ident/Name "rrain_piezo" (aktuelle Regenrate laut
+//      Ecowitt-Protokolldokumentation -- der Treffer), 403 Ident/Name
+//      "drain_piezo" (Tagessumme, Dekoy -- darf NICHT als Regenrate
+//      durchgehen). Praxis-Fund ralf, Symcon-Forum, 07.09.2026.
 $GLOBALS['whub_test_tree'] = [
     10 => [101, 102, 103],
     11 => [111],
     20 => [201, 202],
     30 => [301, 302],
+    40 => [401, 402, 403],
 ];
 $GLOBALS['whub_test_objects'] = [
     10 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation', 'ObjectIdent' => ''],
     11 => ['ObjectType' => 1, 'ObjectName' => 'Andere Wetterstation', 'ObjectIdent' => ''],
     20 => ['ObjectType' => 1, 'ObjectName' => 'Sainlogic', 'ObjectIdent' => ''],
     30 => ['ObjectType' => 1, 'ObjectName' => 'Meteobridge', 'ObjectIdent' => ''],
+    40 => ['ObjectType' => 1, 'ObjectName' => 'Wetterstation Piezo', 'ObjectIdent' => ''],
     101 => ['ObjectType' => 2, 'ObjectName' => 'Windböe', 'ObjectIdent' => 'windgustmph'],
     102 => ['ObjectType' => 2, 'ObjectName' => 'Regenrate', 'ObjectIdent' => 'rainratein'],
     103 => ['ObjectType' => 2, 'ObjectName' => 'Windböe (Max.) Tag', 'ObjectIdent' => 'maxdailygust'],
@@ -59,6 +71,9 @@ $GLOBALS['whub_test_objects'] = [
     202 => ['ObjectType' => 2, 'ObjectName' => 'Rain', 'ObjectIdent' => 'rainin'],
     301 => ['ObjectType' => 2, 'ObjectName' => 'Wind Gust km/h', 'ObjectIdent' => 'Wind_Gust_KmH'],
     302 => ['ObjectType' => 2, 'ObjectName' => 'Rain Rate', 'ObjectIdent' => 'Rain_Rate'],
+    401 => ['ObjectType' => 2, 'ObjectName' => 'Windböe', 'ObjectIdent' => 'windgustmph'],
+    402 => ['ObjectType' => 2, 'ObjectName' => 'rrain_piezo', 'ObjectIdent' => 'rrain_piezo'],
+    403 => ['ObjectType' => 2, 'ObjectName' => 'drain_piezo', 'ObjectIdent' => 'drain_piezo'],
 ];
 $GLOBALS['whub_test_variableProfiles'] = [
     101 => '~WindSpeed.kmh',
@@ -67,9 +82,12 @@ $GLOBALS['whub_test_variableProfiles'] = [
     202 => '~Rainfall',
     301 => '~WindSpeed.kmh',
     302 => '~Rainfall',
+    401 => '~WindSpeed.kmh',
+    402 => '~Rainfall',
+    403 => '~Rainfall',
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
-    FROGGIT_GUID => [10],
+    FROGGIT_GUID => [10, 40],
     WEATHERSTATION_WU_GUID => [20],
     METEOBRIDGE_GUID => [30],
 ];
@@ -416,6 +434,17 @@ check('meldet Erfolg mit Instanznamen', str_contains($msg, 'Wetterstation') && s
 $setCalls = array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID');
 check('schreibt Instanz-ID 10 ins Formularfeld "WetterstationInstanceID"', count($setCalls) === 1 && array_values($setCalls)[0][2] === 10);
 
+echo "\n== DiscoverWetterstation(): neuere Ecowitt-Gateway-Generation mit Piezo-Regensensor (rrain_piezo statt rainratein) wird ebenfalls gefunden ==\n";
+$GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = [40]; // nur die Piezo-Instanz sichtbar
+$hub6b = new WarnHub();
+$hub6b->Create();
+$GLOBALS['whub_test_formFieldSets'] = [];
+$msgPiezo = $hub6b->DiscoverWetterstation();
+check('meldet Erfolg trotz "rrain_piezo" statt "rainratein"', str_contains($msgPiezo, 'gefunden') && str_contains($msgPiezo, 'Froggit'));
+$setCallsPiezo = array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID');
+check('schreibt Instanz-ID 40 ins Formularfeld', count($setCallsPiezo) === 1 && array_values($setCallsPiezo)[0][2] === 40);
+$GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = [10, 40]; // zurücksetzen für die folgenden Tests
+
 echo "\n== DiscoverWetterstation(): namensähnliche, aber UNGEEIGNETE Instanz wird abgelehnt ==\n";
 $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = []; // exakte GUID liefert diesmal nichts -> Namenssuche "froggit" greift, findet Modul "Froggit Legacy" -> Instanz 11
 $GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = []; // auch die zweite unterstützte Wetterstation darf hier nicht mehr gefunden werden
@@ -475,6 +504,16 @@ $GLOBALS['whub_test_values'] = [301 => 85.0, 302 => 30.0];
 $result3b = callPrivate($hub9b, 'fetchWetterstation');
 check('genau zwei Warnungen (Meteobridge, bereits km/h, keine Umrechnung nötig)', count($result3b) === 2);
 check('identifier ist instanzbasiert', $result3b[0]['identifier'] === 'wetterstation-windboe-30');
+
+echo "\n== fetchWetterstation(): liest Piezo-Froggit-Instanz korrekt (rrain_piezo statt rainratein, Praxis-Fund ralf 07.09.2026) ==\n";
+$hub9c = new WarnHub();
+$hub9c->Create();
+$hub9c->SetProp('WetterstationInstanceID', 40);
+$GLOBALS['whub_test_values'] = [401 => 85.0, 402 => 30.0, 403 => 999.0]; // 403 (drain_piezo, Tagessumme) hoch ansetzen -- muss ignoriert werden, sonst würde ein falscher Treffer nicht auffallen
+$result3c = callPrivate($hub9c, 'fetchWetterstation');
+check('genau zwei Warnungen (Wind über windgustmph, Regen über rrain_piezo -- NICHT über die Tagessumme drain_piezo)', count($result3c) === 2);
+check('Regen-Wert stammt von rrain_piezo (30.0), nicht von drain_piezo (999.0)', (array_column($result3c, null, 'event')['Starkregen (eigene Messung)']['description'] ?? '') !== '' && !str_contains(array_column($result3c, null, 'event')['Starkregen (eigene Messung)']['headline'] ?? '', '999'));
+check('identifier ist instanzbasiert wie beim klassischen Froggit-Pfad', $result3c[0]['identifier'] === 'wetterstation-windboe-40');
 
 echo "\n== fetchWetterstation(): manuelle Wind-/Regen-Variable hat Vorrang vor der Instanz (z. B. KNX) ==\n";
 $hub10 = new WarnHub();

@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.8.3 (2026-09-07)
+
+- Fix eigene Wetterstation (Froggit/Ecowitt): neuere Gateway-Generationen
+  mit Piezo-Regensensor (z. B. WS90) senden gar kein "rainratein"-Feld
+  mehr, nur noch die "*_piezo"-Feldfamilie -- der Froggit-Quellcode legt
+  für jedes Feld, dessen Name "rain" enthält, per generischem Catch-all
+  eine eigene Variable an (Ident UND Anzeigename = roher, unübersetzter
+  Gateway-Feldname). "rrain_piezo" ist darunter laut Ecowitts eigener
+  Protokolldokumentation die aktuelle Regenrate (die anderen --
+  erain/hrain/drain/wrain/mrain/yrain_piezo -- sind kumulierte Zeiträume,
+  kein Rate-Wert, deshalb bewusst nicht mitgeprüft). Praxis-Fund ralf,
+  Symcon-Forum, 07.09.2026: hatte trotz vollständiger Froggit-Instanz
+  (Windböe korrekt erkannt, aber keine "Regenrate"-Variable) weiterhin
+  eine "Instanz gefunden, aber ohne die benötigten Felder"-Meldung
+  gesehen.
+- Dabei einen zweiten, unabhängigen Fund behoben: `fetchWetterstation()`
+  und `checkWetterstationAutoRestore()` verließen sich für eine Froggit-
+  Instanz beim eigentlichen Auslesen (nicht nur bei der Suche) bisher
+  AUSSCHLIESSLICH auf den (sprachabhängigen, umbenennbaren) Anzeigenamen
+  "Windböe"/"Regenrate" -- die robusteren Idents "windgustmph"/
+  "rainratein" fehlten dort im Ident-Rückfall komplett, obwohl
+  `DiscoverWetterstation()` schon seit dem 05.09.2026 genau deshalb auf
+  Ident-Abgleich umgestellt worden war. Beide Stellen sind jetzt
+  konsistent.
+- Telegram-Push (`TB_SendMessage`) auf Nachfrage im Forum noch einmal
+  geprüft: keine Code-Änderung, der Aufruf ist korrekt (identisch mit dem
+  offiziellen TelegramBot-Modul selbst). Ein per Community-Modul
+  (Fremdmodul, nicht das offizielle symcon/TelegramBot) eingebundener
+  Telegram-Bot wird von WarnHub nicht unterstützt.
+
 ## 1.8.2 (2026-09-07)
 
 - Fix "🔎 Wetterstation suchen": meldete bisher pauschal "Keine
