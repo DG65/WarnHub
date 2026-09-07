@@ -339,6 +339,7 @@ $karteStandortField = findByName($decoded['elements'], 'KartenkachelStandort');
 check('Auswahlfeld "KartenkachelStandort" (für die Karten-Kachel) vorhanden', $karteStandortField !== null);
 check('Höhenfeld "KartenkachelHoehePx" (für die Karten-Kachel) vorhanden', findByName($decoded['elements'], 'KartenkachelHoehePx') !== null);
 check('Auswahlfeld hat immer die Option "(kein Standort ausgewählt)" (leerer Wert erlaubt)', in_array(['caption' => '(kein Standort ausgewählt)', 'value' => ''], $karteStandortField['options'] ?? [], true));
+check('Höhenfeld "ZamgKachelHoehePx" (für die ZAMG-Warnkarte, eigene Property, derselbe Fund wie bei der Karten-Kachel) vorhanden', findByName($decoded['elements'], 'ZamgKachelHoehePx') !== null);
 
 $fensterPanel = null;
 foreach ($decoded['elements'] as $el) {

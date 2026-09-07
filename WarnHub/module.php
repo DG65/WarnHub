@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.6.2';
-    private const NEWS_VERSION = '1.6.2';
+    private const DOC_VERSION = '1.6.3';
+    private const NEWS_VERSION = '1.6.3';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -439,6 +439,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyString('WebFronts', '[]');
         $this->RegisterPropertyString('KartenkachelStandort', '');
         $this->RegisterPropertyInteger('KartenkachelHoehePx', 0);
+        $this->RegisterPropertyInteger('ZamgKachelHoehePx', 0);
 
         $this->RegisterTimer('PollTimer', 0, 'WHUB_Poll($_IPS[\'TARGET\']);');
         $this->RegisterTimer('SirenOffTimer', 0, 'WHUB_CheckSirenOff($_IPS[\'TARGET\']);');
@@ -910,6 +911,8 @@ class WarnHub extends IPSModule
         $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => 'Höhe "Kachel (Karte)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur, Symcon-Forum, 07.09.2026: Karte skalierte nur in der Breite, nicht in der Höhe). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🇦🇹 "Kachel (ZAMG-Warnkarte, Österreich)": bettet die offizielle ZAMG-Warnkarte direkt ein (iframe) -- speziell für österreichische Nutzer. Zeigt aktuell ganz Österreich, noch ohne automatische Zentrierung auf einen einzelnen Standort.'];
+        $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'ZamgKachelHoehePx', 'caption' => 'Höhe "Kachel (ZAMG-Warnkarte, Österreich)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (derselbe Effekt wie bei "Kachel (Karte)", Praxis-Fund kronos/Bricoleur bzw. ruan/Andreas, Symcon-Forum). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'];
         $pruefungItems[] = [
@@ -1320,6 +1323,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle -- amtlicher Luftqualitätsindex, ausdrücklich nur Ozon/Sommersmog, kein allgemeines Luftgüte-Monitoring'],
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)": eine manuell gewählte Zoomstufe geht jetzt nicht mehr bei jeder Prüfung verloren -- wird je Browser/Gerät gemerkt, die Kartenmitte folgt weiterhin immer dem aktuellen Standort'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": das Zoom-Merken von eben konnte die Karte bei manchen Nutzern komplett leer lassen -- wenn der Browser den Zugriff auf localStorage verweigert (z. B. eingebettete WebFront-Ansicht), brach das Lesen der gemerkten Zoomstufe unabgesichert die ganze Kartenerstellung ab. Jetzt robust gegen einen solchen Fehler'],
+                ['type' => 'Label', 'caption' => '• Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei "Kachel (Karte)" -- eine fest genagelte Pixelzahl skalierte nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration. Füllt jetzt ebenfalls automatisch die verfügbare Höhe, mit neuem eigenen Feld "ZamgKachelHoehePx" als feste Alternative'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4769,13 +4773,23 @@ HTML;
      * (self::ZAMG_MAP_URL), noch OHNE automatische Zentrierung auf einen
      * einzelnen Standort (siehe Konstanten-Kommentar oben) -- bewusste V1-
      * Einschränkung statt einer ungeprüften Projektionsrechnung.
+     *
+     * Höhe: derselbe Fund wie bei "Kachel (Karte)" -- eine fest genagelte
+     * Pixelzahl skaliert nicht in jeder WebFront-/Kachel-Visualisierung-
+     * Konfiguration mit (Praxis-Fund ruan/Andreas, Symcon-Forum, 07.09.2026).
+     * Deshalb height:100% als Standard, ZamgKachelHoehePx als feste
+     * Alternative -- eigene Property statt KartenkachelHoehePx mitzuver-
+     * wenden, weil beide Kacheln unabhängig voneinander im WebFront platziert
+     * werden und unterschiedlich hoch sein können.
      */
     private function renderKachelZamg(): string
     {
         $url = htmlspecialchars(self::ZAMG_MAP_URL);
+        $hoehePx = $this->ReadPropertyInteger('ZamgKachelHoehePx');
+        $heightCss = $hoehePx > 0 ? $hoehePx . 'px' : '100%';
         return $this->tileStyleBlock() . <<<HTML
-<div class="whub-status" style="padding:0;overflow:hidden;">
-  <iframe src="{$url}" style="width:100%;height:320px;border:0;border-radius:22px;" loading="lazy" title="ZAMG-Warnkarte Österreich"></iframe>
+<div class="whub-status" style="padding:0;overflow:hidden;height:{$heightCss};min-height:200px;">
+  <iframe src="{$url}" style="width:100%;height:100%;min-height:200px;border:0;border-radius:22px;" loading="lazy" title="ZAMG-Warnkarte Österreich"></iframe>
 </div>
 HTML;
     }

@@ -265,6 +265,12 @@ check('innere Kartenfläche bleibt bei height:100% (relativ zum -- jetzt festen 
 echo "\n== renderKachelZamg(): eingebettete ZAMG-Warnkarte (nur Österreich, Dietmars Wunsch 06.09.2026) ==\n";
 $zamg = callPrivate($hub, 'renderKachelZamg', []);
 check('bettet die ZAMG-URL als iframe ein', str_contains($zamg, '<iframe') && str_contains($zamg, 'warnungen.zamg.at'));
+check('Standardwert (0) -> äußerer Rahmen bekommt automatische Höhe (100%), derselbe Fund wie bei "Kachel (Karte)" (Praxis-Fund ruan/Andreas)', str_contains($zamg, 'whub-status" style="padding:0;overflow:hidden;height:100%;'));
+$hub->SetProp('ZamgKachelHoehePx', 400);
+$zamgFest = callPrivate($hub, 'renderKachelZamg', []);
+check('gesetzte Pixelzahl -> äußerer Rahmen bekommt feste Höhe statt 100% (eigene Property, unabhängig von KartenkachelHoehePx)', str_contains($zamgFest, 'whub-status" style="padding:0;overflow:hidden;height:400px;'));
+check('iframe bleibt bei height:100% (relativ zum -- jetzt festen -- äußeren Rahmen)', str_contains($zamgFest, 'height:100%;min-height:200px;border:0'));
+$hub->SetProp('ZamgKachelHoehePx', 0);
 
 echo "\n== findStandortByName(): Standort-Auflösung für die Karten-Kachel-Auswahl ==\n";
 $hub->SetProp('Standorte', json_encode([

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.3 (2026-09-07)
+
+- Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei
+  "Kachel (Karte)" (1.6.0) -- das iframe war fest auf `height:320px`
+  genagelt und skalierte damit in vielen WebFront-/Kachel-Visualisierung-
+  Konfigurationen nicht in der Höhe mit. Jetzt standardmäßig `height:100%`
+  (übernimmt die Höhe der umgebenden Kachel), plus eine neue eigene
+  Property `ZamgKachelHoehePx` (0 = automatisch, sonst feste Pixelzahl) als
+  Alternative -- bewusst eine eigene Property statt `KartenkachelHoehePx`
+  mitzuverwenden, da beide Kacheln unabhängig voneinander im WebFront
+  platziert werden. Von Dietmar gemeldet.
+
 ## 1.6.2 (2026-09-07)
 
 - Fix "Kachel (Karte)": Regression aus 1.6.1 -- bei manchen Nutzern blieb
