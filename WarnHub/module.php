@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.6.1';
-    private const NEWS_VERSION = '1.6.1';
+    private const DOC_VERSION = '1.6.2';
+    private const NEWS_VERSION = '1.6.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1319,6 +1319,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)": automatische Höhenanpassung funktioniert nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration zuverlässig -- neues Feld im Panel "Prüfung & Status" erlaubt jetzt ersatzweise eine feste Höhe in Pixel'],
                 ['type' => 'Label', 'caption' => '• NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle -- amtlicher Luftqualitätsindex, ausdrücklich nur Ozon/Sommersmog, kein allgemeines Luftgüte-Monitoring'],
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)": eine manuell gewählte Zoomstufe geht jetzt nicht mehr bei jeder Prüfung verloren -- wird je Browser/Gerät gemerkt, die Kartenmitte folgt weiterhin immer dem aktuellen Standort'],
+                ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": das Zoom-Merken von eben konnte die Karte bei manchen Nutzern komplett leer lassen -- wenn der Browser den Zugriff auf localStorage verweigert (z. B. eingebettete WebFront-Ansicht), brach das Lesen der gemerkten Zoomstufe unabgesichert die ganze Kartenerstellung ab. Jetzt robust gegen einen solchen Fehler'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4738,9 +4739,18 @@ HTML;
     // gehen. Praxis-Fund ruan/Andreas, Symcon-Forum, 07.09.2026. Bewusst
     // NUR die Zoomstufe, nicht die Kartenmitte -- die soll immer dem
     // aktuellen Standort folgen (wichtig bei mobilen Standorten).
+    // localStorage kann in manchen WebFront-Einbettungen (z. B. sandboxed
+    // iframe ohne Storage-Zugriff) einen Fehler WERFEN statt einfach leer zu
+    // sein -- ohne try/catch bricht das die komplette Kachel ab, bevor die
+    // Karte überhaupt erzeugt wird (Praxis-Fund ruan/Andreas, Symcon-Forum,
+    // 07.09.2026: Karte komplett leer nach dem Zoom-Merken-Fix). Deshalb
+    // JEDER Zugriff -- lesend wie schreibend -- robust gegen einen Fehler.
     var zoomKey = 'whub-map-zoom-{$mapId}';
-    var savedZoom = parseInt(localStorage.getItem(zoomKey), 10);
-    var startZoom = (savedZoom >= 1 && savedZoom <= 19) ? savedZoom : 11;
+    var startZoom = 11;
+    try {
+      var savedZoom = parseInt(localStorage.getItem(zoomKey), 10);
+      if (savedZoom >= 1 && savedZoom <= 19) { startZoom = savedZoom; }
+    } catch (e) {}
     var map = L.map(el, {zoomControl:false}).setView([{$latStr}, {$lonStr}], startZoom);
     map.on('zoomend', function(){
       try { localStorage.setItem(zoomKey, map.getZoom()); } catch (e) {}

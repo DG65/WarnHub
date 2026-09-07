@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.2 (2026-09-07)
+
+- Fix "Kachel (Karte)": Regression aus 1.6.1 -- bei manchen Nutzern blieb
+  die Karte nach dem Zoom-Merken-Fix komplett leer. Ursache: das Lesen der
+  gemerkten Zoomstufe (`localStorage.getItem(zoomKey)`) war anders als das
+  Schreiben nicht gegen einen werfenden `localStorage`-Zugriff abgesichert
+  (z. B. wenn der Browser/die WebFront-Einbettung Storage-Zugriff verweigert)
+  -- eine Exception dort brach die gesamte Kartenerstellung ab, BEVOR
+  `L.map()` überhaupt aufgerufen wurde. Jetzt in try/catch mit Rückfall auf
+  Zoomstufe 11, exakt wie beim bereits abgesicherten Schreiben. Praxis-Fund
+  von ruan/Andreas im Symcon-Forum, unmittelbar nach Veröffentlichung von
+  1.6.1 gemeldet ("Die Karte ist jetzt ganz weg").
+
 ## 1.6.1 (2026-09-07)
 
 - Fix "Kachel (Karte)": eine manuell gewählte Zoomstufe ging bei jeder
