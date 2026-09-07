@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.7.0';
-    private const NEWS_VERSION = '1.7.0';
+    private const DOC_VERSION = '1.7.1';
+    private const NEWS_VERSION = '1.7.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1320,6 +1320,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": das Zoom-Merken von eben konnte die Karte bei manchen Nutzern komplett leer lassen -- wenn der Browser den Zugriff auf localStorage verweigert (z. B. eingebettete WebFront-Ansicht), brach das Lesen der gemerkten Zoomstufe unabgesichert die ganze Kartenerstellung ab. Jetzt robust gegen einen solchen Fehler'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei "Kachel (Karte)" -- eine fest genagelte Pixelzahl skalierte nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration. Füllt jetzt ebenfalls automatisch die verfügbare Höhe, mit neuem eigenen Feld "ZamgKachelHoehePx" als feste Alternative'],
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)" komplett neu: zeigt jetzt ALLE aktiven Standorte gleichzeitig als eigene, farbige Pins plus eine klickbare Legende, statt nur einen fest in der Konsole ausgewählten. Grund: dieselbe Kachel-Variable geht an jeden WebFront-Betrachter gleich -- stelltest du unterwegs auf deinen eigenen Standort um, sah der Rest der Familie zuhause zwangsläufig denselben, nicht mehr den eigenen (Dietmars Fund 07.09.2026). Welcher Standort fokussiert ist, merkt sich jetzt jeder Browser für sich, die Startansicht zeigt immer alle gemeinsam. Das Feld "Standort für Kachel (Karte)" entfällt damit'],
+                ['type' => 'Label', 'caption' => '• Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile Standorte am selben Ort) konnten bei Waldbrandgefahr und österreichischen GeoSphere-Warnungen dieselbe Meldung mehrfach zeigen/verschicken statt einmal je Standort -- Praxis-Fund ruan/Andreas, Symcon-Forum ("1 Warnung + 3 Standorte -> 9 statt 3 Einträge")'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -3301,7 +3302,19 @@ class WarnHub extends IPSModule
             if ($geo['countryCode'] !== 'at') {
                 continue;
             }
-            $out = array_merge($out, $this->fetchGeosphereAtCoords($coords['lat'], $coords['lon']));
+            // forStandort sperrt jeden Datensatz HART auf genau diesen
+            // Standort (siehe processWarnings()) -- sonst würde derselbe
+            // reale ZAMG-Alarm bei mehreren eng beieinanderliegenden
+            // Standorten (z. B. zwei mobile Standorte am selben Ort)
+            // zusätzlich über den normalen Umkreis-Abgleich AUCH bei den
+            // jeweils anderen matchen, obwohl schon ein eigener Datensatz je
+            // Standort existiert -- dasselbe Vervielfachungs-Muster wie bei
+            // fetchWaldbrandDe(), Praxis-Fund ruan/Andreas 07.09.2026.
+            $eigene = array_map(
+                fn ($w) => $w + ['forStandort' => $s['Name']],
+                $this->fetchGeosphereAtCoords($coords['lat'], $coords['lon'])
+            );
+            $out = array_merge($out, $eigene);
         }
         return $out;
     }
@@ -3624,7 +3637,18 @@ class WarnHub extends IPSModule
                 'rings' => [],
                 // Kleiner Kreis exakt am Standort (wie bei GeoSphere Austria) --
                 // die Stationsauswahl hat die Ortsfrage bereits beantwortet,
-                // kein zusätzliches geometrisches Matching nötig.
+                // kein zusätzliches geometrisches Matching nötig. forStandort
+                // sperrt diesen Datensatz zusätzlich HART auf genau diesen
+                // Standort (siehe processWarnings()) -- ohne das würde er bei
+                // eng beieinanderliegenden Standorten (z. B. mehrere mobile
+                // Standorte am selben Ort) zusätzlich über den normalen
+                // Umkreis-Abgleich AUCH bei den anderen matchen, obwohl er
+                // schon "nur für diesen Standort" gedacht war -- ein
+                // Datensatz je Standort UND ein Match je Standort macht dann
+                // ein Vielfaches an Meldungen. Praxis-Fund ruan/Andreas,
+                // Symcon-Forum, 07.09.2026 (1 Warnung + 3 eng beieinander
+                // liegende Standorte -> 9 statt 3 Einträge).
+                'forStandort' => $standort['Name'],
                 'circles' => [['lat' => $coords['lat'], 'lon' => $coords['lon'], 'radiusKm' => 5.0]],
             ];
         }
@@ -4135,6 +4159,18 @@ class WarnHub extends IPSModule
             $actionDue = $this->isActionDueByOnset($w);
 
             foreach ($standorte as $standort) {
+                // Manche Quellen (WBI/GeoSphere Austria) liefern schon einen
+                // EIGENEN Datensatz JE STANDORT (Stationsauswahl/API-Abfrage
+                // ist bereits standortspezifisch) und markieren ihn mit
+                // forStandort. So ein Datensatz darf NIE zusätzlich über den
+                // normalen Umkreis-/Namensabgleich unten bei einem ANDEREN
+                // Standort matchen, sonst vervielfacht sich die Meldung bei
+                // eng beieinanderliegenden Standorten (ein Datensatz je
+                // Standort UND ein Umkreis-Match je Standort). Praxis-Fund
+                // ruan/Andreas, Symcon-Forum, 07.09.2026.
+                if (isset($w['forStandort']) && $w['forStandort'] !== $standort['Name']) {
+                    continue;
+                }
                 $pairKey = $w['identifier'] . '|' . $standort['Name'];
                 $coords = $this->resolveStandortCoords($standort);
                 $pushZiele = $this->parsePushZielNames($standort['PushZielFilter']);

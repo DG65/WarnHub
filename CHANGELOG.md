@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.7.1 (2026-09-07)
+
+- Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile
+  Standorte, die gerade am selben Ort sind) konnten bei Waldbrandgefahr
+  (DWD) und österreichischen GeoSphere-Warnungen dieselbe Meldung MEHRFACH
+  zeigen und verschicken, statt einmal je Standort -- Praxis-Fund
+  ruan/Andreas, Symcon-Forum, 07.09.2026 ("1 fixer Standort + 2 mobile
+  Standorte, 1 Warnmeldung -> dreifache Anzeige, 9 statt 3 Meldungen").
+  Ursache: `fetchWaldbrandDe()`/`fetchGeosphereAt()` liefern schon einen
+  EIGENEN Datensatz je Standort (die Stationsauswahl bzw. die API-Abfrage
+  ist bereits standortspezifisch), markiert mit einem kleinen 5-km-Kreis um
+  GENAU diesen Standort. `processWarnings()` hat diesen Datensatz aber
+  zusätzlich ganz normal über den Umkreis-Abgleich gegen ALLE anderen
+  Standorte geprüft -- lagen mehrere Standorte nah beieinander (näher als
+  ihr eigener `RadiusKm`), matchte derselbe Datensatz auch bei den anderen,
+  UND jeder der anderen Standorte hatte selbst wieder einen eigenen
+  Datensatz, der ebenso bei allen matchte (kombinatorisch: 3 Datensätze ×
+  3 passende Standorte = 9 statt der korrekten 3). Fix: neues Feld
+  `forStandort` auf einem Datensatz sperrt ihn jetzt HART auf genau seinen
+  Standort -- alle anderen Quellen (DWD-CAP, NINA, Meteoalarm, BAFU,
+  PEGELONLINE, SED, UBA-Ozon, BfS-ODL, Hagelschutz-Signalbox, eigene
+  Wetterstation) sind von diesem Muster nicht betroffen, die verankern ihre
+  Geometrie bereits korrekt an einer echten, standortunabhängigen Position
+  (Messstation, Epizentrum, Systemstandort) und werden absichtlich weiter
+  ganz normal gegen ALLE passenden Standorte geprüft. Neuer
+  Regressionstest (`processWarnings()` end-to-end mit 3 eng
+  beieinanderliegenden Standorten) bestätigt sowohl den Fix als auch, dass
+  normales Mehrfach-Matching für echte, geometriebasierte Warnungen
+  unverändert funktioniert.
+
 ## 1.7.0 (2026-09-07)
 
 - "Kachel (Karte)" grundlegend neu: zeigt jetzt ALLE aktiven Standorte

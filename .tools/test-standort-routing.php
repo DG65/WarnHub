@@ -424,5 +424,50 @@ callPrivate($hub10, 'fireProtectiveAction', [$kofferraumBasis + ['ZustandsVariab
 check('Kofferraum laut Zustands-Variable offen ("Frunk, Kofferraum") -> löst genau einmal aus', count($GLOBALS['whub_test_requestActionCalls']) === 1);
 check('RequestAction schaltet die richtige Ziel-Variable (401) auf "Ein"', ($GLOBALS['whub_test_requestActionCalls'][0] ?? null) === [401, true]);
 
+echo "\n== forStandort: WBI/GeoSphere-Austria-Muster darf bei eng beieinanderliegenden Standorten NICHT vervielfachen (Praxis-Fund ruan/Andreas, Symcon-Forum, 07.09.2026: 1 Warnung + 3 Standorte -> 9 statt 3 Einträge) ==\n";
+// Nachgestellt genau wie fetchWaldbrandDe()/fetchGeosphereAt() es liefern:
+// EIN eigener Datensatz je Standort (dieselbe Quell-Station/derselbe reale
+// Alarm, deshalb identische 'identifier'), aber je Datensatz per
+// forStandort HART auf genau seinen Standort gesperrt.
+$standorteEngBeieinander = [
+    ['Name' => 'Zuhause', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 50.0, 'MinSeverity' => 1, 'PushZielFilter' => '', 'Aktiv' => true],
+    ['Name' => 'Mobil 1', 'Ort' => '', 'Lat' => 48.4790, 'Lon' => 7.9450, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 50.0, 'MinSeverity' => 1, 'PushZielFilter' => '', 'Aktiv' => true],
+    ['Name' => 'Mobil 2', 'Ort' => '', 'Lat' => 48.4795, 'Lon' => 7.9452, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 50.0, 'MinSeverity' => 1, 'PushZielFilter' => '', 'Aktiv' => true],
+];
+$wbiArtigeDatensaetze = array_map(fn ($s) => [
+    'identifier' => 'waldbrand-de-1234-20260907', 'source' => 'waldbrand_de', 'msgType' => 'Alert', 'event' => 'Waldbrandgefahr',
+    'headline' => 'Waldbrandgefahrenindex Stufe 3 von 5', 'description' => '', 'instruction' => '', 'severity' => 'Moderate',
+    'effective' => null, 'onset' => null, 'expires' => null, 'areaDesc' => $s['Name'],
+    'rings' => [], 'forStandort' => $s['Name'],
+    'circles' => [['lat' => $s['Lat'], 'lon' => $s['Lon'], 'radiusKm' => 5.0]],
+], $standorteEngBeieinander);
+
+$hub11 = new WarnHub();
+$hub11->Create();
+$hub11->SetProp('Standorte', json_encode($standorteEngBeieinander));
+$hub11->SetProp('PushAktiv', false);
+$result11 = callPrivate($hub11, 'processWarnings', [$wbiArtigeDatensaetze]);
+check('genau 3 aktive Einträge (einer je Standort), NICHT 9', $result11['activeCount'] === 3);
+$standortNamenSortiert = $result11['active'];
+usort($standortNamenSortiert, fn ($a, $b) => $a['standort'] <=> $b['standort']);
+check('jeder Standort erscheint GENAU EINMAL, mit dem richtigen eigenen Datensatz', array_column($standortNamenSortiert, 'standort') === ['Mobil 1', 'Mobil 2', 'Zuhause']);
+
+// Gegenprobe: eine ECHTE, geometriebasierte Warnung OHNE forStandort muss
+// weiterhin ganz normal bei ALLEN passenden (auch eng beieinanderliegenden)
+// Standorten matchen -- der neue Schutz darf das normale Umkreis-Matching
+// für alle anderen Quellen nicht einschränken.
+$echteWarnungOhneForStandort = [
+    'identifier' => 'test-echte-warnung', 'source' => 'test', 'msgType' => 'Alert', 'event' => 'Sturm',
+    'headline' => 'Sturmböen', 'description' => '', 'instruction' => '', 'severity' => 'Severe',
+    'effective' => null, 'onset' => null, 'expires' => null, 'areaDesc' => '',
+    'rings' => [], 'circles' => [['lat' => 48.4785, 'lon' => 7.9448, 'radiusKm' => 20.0]],
+];
+$hub12 = new WarnHub();
+$hub12->Create();
+$hub12->SetProp('Standorte', json_encode($standorteEngBeieinander));
+$hub12->SetProp('PushAktiv', false);
+$result12 = callPrivate($hub12, 'processWarnings', [[$echteWarnungOhneForStandort]]);
+check('Gegenprobe: eine echte Warnung ohne forStandort matcht weiterhin normal bei ALLEN 3 passenden Standorten', $result12['activeCount'] === 3);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
