@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.6.3';
-    private const NEWS_VERSION = '1.6.3';
+    private const DOC_VERSION = '1.7.0';
+    private const NEWS_VERSION = '1.7.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -437,7 +437,6 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyString('Fensterkontakte', '[]');
         $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
         $this->RegisterPropertyString('WebFronts', '[]');
-        $this->RegisterPropertyString('KartenkachelStandort', '');
         $this->RegisterPropertyInteger('KartenkachelHoehePx', 0);
         $this->RegisterPropertyInteger('ZamgKachelHoehePx', 0);
 
@@ -532,7 +531,7 @@ class WarnHub extends IPSModule
         @$this->SetValue('LetztePruefung', $lastTs);
         @$this->SetValue('KachelStatus', $this->renderKachelStatus($active, $lastTs, $snoozed));
         @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs, $snoozed));
-        @$this->SetValue('KachelKarte', $this->renderKachelKarte($this->findStandortByName($this->ReadPropertyString('KartenkachelStandort')), $active, $snoozed));
+        @$this->SetValue('KachelKarte', $this->renderKachelKarte($active, $snoozed));
         @$this->SetValue('KachelZamg', $this->renderKachelZamg());
     }
 
@@ -903,11 +902,7 @@ class WarnHub extends IPSModule
         }
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: vier weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)" und "Kachel (Übersicht)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Beide enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine Straßenkarte (Esri), zentriert auf den unten gewählten Standort (auch mobile Standorte -- folgt dessen Live-Position). Markerfarbe nach höchstem aktivem Schweregrad. Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js von unpkg.com, Kartenkacheln von server.arcgisonline.com -- bewusst nicht OpenStreetMaps eigene Tile-Server, die für eingebettete Drittanbieter-Widgets wie diese Kachel einen Referer-Header verlangen und je nach Browser/WebFront blockieren können).'];
-        $pruefungItems[] = ['type' => 'Select', 'name' => 'KartenkachelStandort', 'caption' => 'Standort für "Kachel (Karte)"', 'options' => array_merge(
-            [['caption' => '(kein Standort ausgewählt)', 'value' => '']],
-            array_map(fn ($s) => ['caption' => $s['Name'], 'value' => $s['Name']], array_filter($this->decodeStandorte(), fn ($s) => $s['Name'] !== ''))
-        )];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine Straßenkarte (Esri) mit JEDEM aktiven Standort als eigenem, farbigen Pin (auch mobile Standorte -- folgt deren Live-Position) plus einer kleinen Legende zum Anklicken. Startansicht zeigt alle Standorte gemeinsam; ein Klick auf einen Pin/Legenden-Eintrag zoomt auf diesen -- die Wahl merkt sich der jeweilige Browser für sich (z. B. dein Handy unterwegs auf "Kohlekasten", das Tablet zuhause weiterhin auf alle bzw. den eigenen Standort). Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js von unpkg.com, Kartenkacheln von server.arcgisonline.com -- bewusst nicht OpenStreetMaps eigene Tile-Server, die für eingebettete Drittanbieter-Widgets wie diese Kachel einen Referer-Header verlangen und je nach Browser/WebFront blockieren können).'];
         $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => 'Höhe "Kachel (Karte)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur, Symcon-Forum, 07.09.2026: Karte skalierte nur in der Breite, nicht in der Höhe). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🇦🇹 "Kachel (ZAMG-Warnkarte, Österreich)": bettet die offizielle ZAMG-Warnkarte direkt ein (iframe) -- speziell für österreichische Nutzer. Zeigt aktuell ganz Österreich, noch ohne automatische Zentrierung auf einen einzelnen Standort.'];
@@ -1324,6 +1319,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "Kachel (Karte)": eine manuell gewählte Zoomstufe geht jetzt nicht mehr bei jeder Prüfung verloren -- wird je Browser/Gerät gemerkt, die Kartenmitte folgt weiterhin immer dem aktuellen Standort'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": das Zoom-Merken von eben konnte die Karte bei manchen Nutzern komplett leer lassen -- wenn der Browser den Zugriff auf localStorage verweigert (z. B. eingebettete WebFront-Ansicht), brach das Lesen der gemerkten Zoomstufe unabgesichert die ganze Kartenerstellung ab. Jetzt robust gegen einen solchen Fehler'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei "Kachel (Karte)" -- eine fest genagelte Pixelzahl skalierte nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration. Füllt jetzt ebenfalls automatisch die verfügbare Höhe, mit neuem eigenen Feld "ZamgKachelHoehePx" als feste Alternative'],
+                ['type' => 'Label', 'caption' => '• "Kachel (Karte)" komplett neu: zeigt jetzt ALLE aktiven Standorte gleichzeitig als eigene, farbige Pins plus eine klickbare Legende, statt nur einen fest in der Konsole ausgewählten. Grund: dieselbe Kachel-Variable geht an jeden WebFront-Betrachter gleich -- stelltest du unterwegs auf deinen eigenen Standort um, sah der Rest der Familie zuhause zwangsläufig denselben, nicht mehr den eigenen (Dietmars Fund 07.09.2026). Welcher Standort fokussiert ist, merkt sich jetzt jeder Browser für sich, die Startansicht zeigt immer alle gemeinsam. Das Feld "Standort für Kachel (Karte)" entfällt damit'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -1401,20 +1397,6 @@ class WarnHub extends IPSModule
             ];
         }
         return $out;
-    }
-
-    /** Für die Karten-Kachel (KartenkachelStandort-Property, siehe renderKachelKarte()): Standort per Namen finden, [] wenn keiner/nicht mehr vorhanden. */
-    private function findStandortByName(string $name): array
-    {
-        if ($name === '') {
-            return [];
-        }
-        foreach ($this->decodeStandorte() as $s) {
-            if ($s['Name'] === $name) {
-                return $s;
-            }
-        }
-        return [];
     }
 
     /**
@@ -4531,6 +4513,11 @@ class WarnHub extends IPSModule
 .whub-maplinks{display:flex;gap:12px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.08);}
 .whub-maplinks a{font-size:11px;font-weight:600;text-decoration:none;color:inherit;opacity:0.65;}
 @media (prefers-color-scheme:dark){.whub-maplinks{border-top-color:rgba(255,255,255,0.12);}}
+.whub-map-legend{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:6px;padding:9px 10px;}
+.whub-map-pill{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;color:#1D1D1F;background:rgba(0,0,0,0.06);cursor:pointer;white-space:nowrap;}
+.whub-map-pill.whub-active{background:rgba(10,132,255,0.92);color:#fff;}
+.whub-map-pill-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+@media (prefers-color-scheme:dark){.whub-map-pill{color:#F5F5F7;background:rgba(255,255,255,0.12);}}
 </style>
 CSS;
     }
@@ -4663,17 +4650,35 @@ HTML;
     }
 
     /**
-     * Standort-zentrierte Karten-Kachel (Kachelbilder via Leaflet.js, CDN) --
-     * einziger Unterschied zu den übrigen Kacheln: lädt bewusst externe
-     * Ressourcen (Leaflet-JS/CSS + Kartenkachelbilder), keine rein
-     * eigenständige HTML/CSS-Lösung wie die kompakte/Übersichts-Kachel.
-     * Zeigt IMMER den aktuellen Standort zentriert (auch mobile, Live-
-     * Standort-gebundene -- resolveStandortCoords() liest bei jeder
-     * Prüfung neu), Markerfarbe nach höchstem aktivem Schweregrad. Zeigt
-     * bewusst noch KEINE einzelnen Warnflächen (Polygon/Kreis) -- die
-     * werden aktuell nicht dauerhaft gespeichert (nur Anzeige-Felder in
-     * LastActiveWarningsJson), das wäre eine eigene Erweiterung. Dietmars
-     * Wunsch 06.09.2026.
+     * Übersichts-Karten-Kachel (Kachelbilder via Leaflet.js, CDN) -- einziger
+     * Unterschied zu den übrigen Kacheln: lädt bewusst externe Ressourcen
+     * (Leaflet-JS/CSS + Kartenkachelbilder), keine rein eigenständige
+     * HTML/CSS-Lösung wie die kompakte/Übersichts-Kachel. Zeigt JEDEN aktiven
+     * Standort gleichzeitig als eigenen Pin (auch mobile, Live-Standort-
+     * gebundene -- resolveStandortCoords() liest bei jeder Prüfung neu),
+     * Pin-Farbe je Standort nach dessen EIGENEM höchsten aktiven Schweregrad
+     * (nicht dem instanzweiten Höchststand -- vorher zeigte selbst ein
+     * unbeteiligter Standort die Farbe der Warnung eines ganz anderen
+     * Standorts). Zeigt bewusst noch KEINE einzelnen Warnflächen
+     * (Polygon/Kreis) -- die werden aktuell nicht dauerhaft gespeichert (nur
+     * Anzeige-Felder in LastActiveWarningsJson), das wäre eine eigene
+     * Erweiterung. Dietmars Wunsch 06.09.2026.
+     *
+     * Ursprünglich zeigte die Kachel nur EINEN, in der Konsole fest
+     * ausgewählten Standort (KartenkachelStandort-Property) -- dieselbe
+     * HTML-Variable geht aber an ALLE WebFront-Betrachter gleichzeitig
+     * (SetValue() kennt keinen "pro Betrachter"-Unterschied). Stellte
+     * Dietmar unterwegs auf seinen eigenen mobilen Standort um, sah seine
+     * Frau zuhause zwangsläufig denselben, nicht mehr ihren eigenen (Dietmars
+     * Fund 07.09.2026). Jetzt zeigt die Karte IMMER alle aktiven Standorte
+     * gleichzeitig plus eine kleine klickbare Legende -- welcher Pin gerade
+     * fokussiert ist, merkt sich JEDER BROWSER FÜR SICH in localStorage
+     * (Schlüssel whub-map-focus-<Instanz>, analog zur bereits bestehenden
+     * Zoomstufen-Merkung), nicht die Instanz zentral. Startansicht (noch
+     * keine eigene Wahl gemerkt, oder der gemerkte Standort existiert nicht
+     * mehr) ist bewusst IMMER "alle Standorte" (fitBounds) -- Dietmars
+     * ausdrücklicher Wunsch 07.09.2026, statt eines weiterhin konfigurierten
+     * Standard-Standorts.
      *
      * Kartenkacheln von Esri (server.arcgisonline.com/.../World_Street_Map),
      * NICHT OpenStreetMaps eigenen Tile-Servern -- Praxis-Fund ruan/Andreas,
@@ -4695,30 +4700,52 @@ HTML;
      * feste Alternative (Praxis-Fund kronos/Bricoleur).
      *
      * Zoomstufe wird je Kachel/Browser in localStorage gemerkt (NICHT die
-     * Kartenmitte -- die soll immer dem aktuellen Standort folgen) -- ohne
+     * Kartenmitte -- die soll immer dem fokussierten Standort folgen) -- ohne
      * das ginge ein manuelles Heran-/Herauszoomen bei jeder Prüfung wieder
      * verloren, da SetValue() das komplette HTML ersetzt. Praxis-Fund
-     * ruan/Andreas, Symcon-Forum, 07.09.2026.
+     * ruan/Andreas, Symcon-Forum, 07.09.2026. JEDER localStorage-Zugriff
+     * (lesend wie schreibend) steht in try/catch -- ein werfender Zugriff
+     * (z. B. sandboxed WebFront-Einbettung ohne Storage-Erlaubnis) darf die
+     * Kartenerstellung nie mehr abbrechen (Regression daraus, sofort
+     * behoben, Praxis-Fund ruan/Andreas 07.09.2026).
+     *
+     * Die Legende liegt bewusst als EIGENE ZEILE UNTER der Karte
+     * (flex-direction:column), NICHT als schwebendes Overlay AUF der Karte:
+     * ein Overlay hätte zwei echte Probleme gehabt, live geprüft --
+     * erstens verdeckt es bei "Alle" (fitBounds über alle Standorte) leicht
+     * einen Marker im unteren Kartenbereich, weil fitBounds() die vom
+     * Overlay optisch belegte Fläche nicht kennt; zweitens malt Leaflet
+     * seine eigenen internen Panes (Kachel-/Marker-Ebenen, jeweils mit
+     * eigenem z-index 200-700) über ein schwebendes Geschwister-Div, OBWOHL
+     * das im HTML-Quelltext nach dem Karten-Div steht und nach der normalen
+     * DOM-Reihenfolge eigentlich oben liegen müsste (nur per z-index
+     * erzwingbar, aber löst das erste Problem nicht). Die eigene Zeile
+     * umgeht beide Probleme gleichzeitig, kostet nur etwas Kartenhöhe.
      */
-    private function renderKachelKarte(array $standort, array $active, bool $snoozed = false): string
+    private function renderKachelKarte(array $active, bool $snoozed = false): string
     {
-        if ($standort === []) {
+        $standorte = array_values(array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== ''));
+        if ($standorte === []) {
             return $this->tileStyleBlock() . <<<HTML
 <div class="whub-status">
   <div class="whub-empty">
     <div class="whub-empty-icon">🗺️</div>
-    <div class="whub-empty-text">Kein Standort für die Karten-Kachel ausgewählt (siehe Panel "Prüfung &amp; Status")</div>
+    <div class="whub-empty-text">Kein aktiver Standort konfiguriert (siehe Panel "Standorte")</div>
   </div>
 </div>
 HTML;
         }
-        $coords = $this->resolveStandortCoords($standort);
-        $latStr = number_format($coords['lat'], 6, '.', '');
-        $lonStr = number_format($coords['lon'], 6, '.', '');
-        $top = count($active) > 0 ? $this->highestActiveSeverity($active) : null;
-        $color = $top !== null ? (self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown']) : self::TILE_COLOR_OK;
-        $nameJs = json_encode((string) $standort['Name'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
-        $mapId = 'whubmap' . substr(md5((string) $this->InstanceID . $standort['Name']), 0, 10);
+
+        $markers = [];
+        foreach ($standorte as $standort) {
+            $coords = $this->resolveStandortCoords($standort);
+            $ownActive = array_values(array_filter($active, fn ($w) => ($w['standort'] ?? '') === $standort['Name']));
+            $top = count($ownActive) > 0 ? $this->highestActiveSeverity($ownActive) : null;
+            $color = $top !== null ? (self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown']) : self::TILE_COLOR_OK;
+            $markers[] = ['name' => $standort['Name'], 'lat' => $coords['lat'], 'lon' => $coords['lon'], 'color' => $color];
+        }
+        $markersJson = json_encode($markers, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+        $mapId = 'whubmap' . substr(md5((string) $this->InstanceID), 0, 10);
         // 0 = automatisch (height:100%, übernimmt die Höhe der umgebenden
         // WebFront-/Kachel-Visualisierung-Kachel) -- funktioniert nicht in
         // jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur,
@@ -4730,37 +4757,89 @@ HTML;
         return $this->tileStyleBlock() . <<<HTML
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<div class="whub-status" style="padding:0;overflow:hidden;height:{$heightCss};min-height:200px;">
-  <div id="{$mapId}" style="width:100%;height:100%;min-height:200px;border-radius:22px;"></div>
+<div class="whub-status" style="padding:0;overflow:hidden;display:flex;flex-direction:column;height:{$heightCss};min-height:220px;">
+  <div id="{$mapId}" style="width:100%;flex:1 1 auto;min-height:160px;"></div>
+  <div id="{$mapId}legend" class="whub-map-legend"></div>
   <script>
   (function(){
     var el = document.getElementById('{$mapId}');
-    if (!el || typeof L === 'undefined') { return; }
-    // Zoomstufe je Browser/Gerät merken (localStorage, pro Kachel/Instanz
-    // eigener Schlüssel) -- die ganze Kachel wird bei jeder Prüfung neu
-    // gerendert (SetValue ersetzt das HTML komplett), ohne das würde ein
-    // manuelles Heran-/Herauszoomen beim nächsten Update wieder verloren
-    // gehen. Praxis-Fund ruan/Andreas, Symcon-Forum, 07.09.2026. Bewusst
-    // NUR die Zoomstufe, nicht die Kartenmitte -- die soll immer dem
-    // aktuellen Standort folgen (wichtig bei mobilen Standorten).
-    // localStorage kann in manchen WebFront-Einbettungen (z. B. sandboxed
-    // iframe ohne Storage-Zugriff) einen Fehler WERFEN statt einfach leer zu
-    // sein -- ohne try/catch bricht das die komplette Kachel ab, bevor die
-    // Karte überhaupt erzeugt wird (Praxis-Fund ruan/Andreas, Symcon-Forum,
-    // 07.09.2026: Karte komplett leer nach dem Zoom-Merken-Fix). Deshalb
-    // JEDER Zugriff -- lesend wie schreibend -- robust gegen einen Fehler.
+    var legendEl = document.getElementById('{$mapId}legend');
+    if (!el || !legendEl || typeof L === 'undefined') { return; }
+    var markers = {$markersJson};
+    if (!markers.length) { return; }
+
     var zoomKey = 'whub-map-zoom-{$mapId}';
+    var focusKey = 'whub-map-focus-{$mapId}';
     var startZoom = 11;
+    var savedFocus = '';
     try {
       var savedZoom = parseInt(localStorage.getItem(zoomKey), 10);
       if (savedZoom >= 1 && savedZoom <= 19) { startZoom = savedZoom; }
+      savedFocus = localStorage.getItem(focusKey) || '';
     } catch (e) {}
-    var map = L.map(el, {zoomControl:false}).setView([{$latStr}, {$lonStr}], startZoom);
+
+    var map = L.map(el, {zoomControl:false}).setView([markers[0].lat, markers[0].lon], startZoom);
     map.on('zoomend', function(){
       try { localStorage.setItem(zoomKey, map.getZoom()); } catch (e) {}
     });
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Tiles &copy; Esri'}).addTo(map);
-    L.circleMarker([{$latStr}, {$lonStr}], {radius:10, color:'{$color}', fillColor:'{$color}', fillOpacity:0.85, weight:2}).addTo(map).bindTooltip({$nameJs});
+
+    var pins = {};
+    var pillEls = {};
+    markers.forEach(function(m){
+      var marker = L.circleMarker([m.lat, m.lon], {radius:10, color:m.color, fillColor:m.color, fillOpacity:0.85, weight:2}).addTo(map).bindTooltip(m.name);
+      marker.on('click', function(){ focusOn(m.name); });
+      pins[m.name] = marker;
+    });
+
+    function highlightPill(name){
+      var key = (name && pins[name]) ? name : '__all__';
+      Object.keys(pillEls).forEach(function(k){
+        pillEls[k].classList.toggle('whub-active', k === key);
+      });
+    }
+    function applyView(name, animate){
+      if (name && pins[name]) {
+        var target = pins[name].getLatLng();
+        if (animate) { map.flyTo(target, startZoom); } else { map.setView(target, startZoom); }
+      } else if (markers.length === 1) {
+        map.setView([markers[0].lat, markers[0].lon], startZoom);
+      } else {
+        var bounds = L.latLngBounds(markers.map(function(m){ return [m.lat, m.lon]; }));
+        if (animate) { map.flyToBounds(bounds, {padding:[30,30]}); } else { map.fitBounds(bounds, {padding:[30,30]}); }
+      }
+      highlightPill(name);
+    }
+    function focusOn(name){
+      try { localStorage.setItem(focusKey, name); } catch (e) {}
+      applyView(name, true);
+    }
+    function focusAll(){
+      try { localStorage.removeItem(focusKey); } catch (e) {}
+      applyView('', true);
+    }
+
+    var allPill = document.createElement('div');
+    allPill.className = 'whub-map-pill';
+    allPill.textContent = '🌍 Alle';
+    allPill.addEventListener('click', focusAll);
+    legendEl.appendChild(allPill);
+    pillEls['__all__'] = allPill;
+
+    markers.forEach(function(m){
+      var pill = document.createElement('div');
+      pill.className = 'whub-map-pill';
+      var dot = document.createElement('span');
+      dot.className = 'whub-map-pill-dot';
+      dot.style.background = m.color;
+      pill.appendChild(dot);
+      pill.appendChild(document.createTextNode(m.name));
+      pill.addEventListener('click', function(){ focusOn(m.name); });
+      legendEl.appendChild(pill);
+      pillEls[m.name] = pill;
+    });
+
+    applyView(savedFocus, false);
   })();
   </script>
 </div>

@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.7.0 (2026-09-07)
+
+- "Kachel (Karte)" grundlegend neu: zeigt jetzt ALLE aktiven Standorte
+  gleichzeitig als eigenen, farbigen Pin (Farbe je Standort nach dessen
+  EIGENEM höchsten aktiven Schweregrad, nicht mehr dem instanzweiten
+  Höchststand) plus eine klickbare Legende unter der Karte. Grund: dieselbe
+  Kachel-Variable geht per `SetValue()` an JEDEN WebFront-Betrachter
+  gleichzeitig -- stellte Dietmar unterwegs auf seinen eigenen mobilen
+  Standort um, sah der Rest der Familie zuhause zwangsläufig denselben,
+  nicht mehr den eigenen (Dietmars Fund 07.09.2026). Welcher Standort
+  fokussiert ist, merkt sich jetzt JEDER BROWSER FÜR SICH in `localStorage`
+  (Schlüssel `whub-map-focus-<Instanz>`, analog zur bestehenden
+  Zoomstufen-Merkung) -- Startansicht ohne eigene Wahl ist immer "alle
+  Standorte" (`fitBounds`), Dietmars ausdrücklicher Wunsch. Die Property
+  `KartenkachelStandort` und das zugehörige Konsolenfeld entfallen damit
+  ersatzlos.
+- Die Legende sitzt bewusst als EIGENE ZEILE unter der Karte, nicht als
+  schwebendes Overlay darauf -- ein Overlay hätte live geprüft zwei echte
+  Probleme gehabt: `fitBounds()` kennt die vom Overlay optisch belegte
+  Fläche nicht (ein südlicher Standort landete sichtbar HINTER der
+  Legende), und Leaflets eigene interne Panes (Kachel-/Marker-Ebenen,
+  jeweils mit eigenem `z-index` 200-700) malten trotz korrekter
+  DOM-Reihenfolge über ein schwebendes Geschwister-Element -- beides live
+  im Browser nachgestellt und verifiziert, bevor die aktuelle Lösung
+  (eigene Zeile statt Overlay) stand.
+- Live im Browser gegengeprüft: 3 Standorte gleichzeitig als Pins mit
+  korrekter, je Standort eigener Farbe, Klick auf einen Legenden-Eintrag
+  fliegt zu diesem Standort, die Wahl übersteht einen kompletten
+  Neu-Rendern der Kachel (simuliert per Seiten-Reload), "🌍 Alle" kehrt
+  zur Gesamtübersicht zurück.
+
 ## 1.6.3 (2026-09-07)
 
 - Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei

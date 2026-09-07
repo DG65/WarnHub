@@ -234,33 +234,59 @@ check('öffnet extern (target="_blank", rel="noopener" -- kein iframe, DWD/Meteo
 check('Kachel (kompakt) enthält die Kartenlinks', str_contains($statusOne, 'whub-maplinks') && str_contains($statusOne, 'zamg.at'));
 check('Kachel (Übersicht) enthält die Kartenlinks', str_contains($uebersichtEmpty, 'whub-maplinks') && str_contains($uebersichtEmpty, 'dwd.de'));
 
-echo "\n== renderKachelKarte(): Standort-zentrierte OpenStreetMap-Kachel ==\n";
-$karteLeer = callPrivate($hub, 'renderKachelKarte', [[], [], false]);
-check('ohne ausgewählten Standort: Hinweistext statt Karte', str_contains($karteLeer, 'Kein Standort'));
-check('ohne ausgewählten Standort: kein Leaflet-Skript geladen', !str_contains($karteLeer, 'leaflet'));
+echo "\n== renderKachelKarte(): Übersichts-Kachel mit ALLEN aktiven Standorten + Legende (Dietmars Fund 07.09.2026: eine Instanz-Variable geht an jeden Betrachter gleich) ==\n";
+$hub->SetProp('Standorte', json_encode([]));
+$karteLeer = callPrivate($hub, 'renderKachelKarte', [[], false]);
+check('kein aktiver Standort konfiguriert: Hinweistext statt Karte', str_contains($karteLeer, 'Kein aktiver Standort konfiguriert'));
+check('kein aktiver Standort konfiguriert: kein Leaflet-Skript geladen', !str_contains($karteLeer, 'leaflet'));
 
-$standort = ['Name' => 'Zuhause "Test"', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true];
-$karte = callPrivate($hub, 'renderKachelKarte', [$standort, [['identifier' => 'w1', 'severity' => 'Severe']], false]);
+$standorteMulti = [
+    ['Name' => 'Zuhause', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true],
+    ['Name' => 'Kohlekasten "Auto"', 'Ort' => '', 'Lat' => 52.5200, 'Lon' => 13.4050, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true],
+    ['Name' => 'Deaktiviert', 'Ort' => '', 'Lat' => 50.0, 'Lon' => 8.0, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => false],
+];
+$hub->SetProp('Standorte', json_encode($standorteMulti));
+$activeMulti = [
+    ['identifier' => 'w1', 'standort' => 'Zuhause', 'severity' => 'Severe'],
+    ['identifier' => 'w2', 'standort' => 'Kohlekasten "Auto"', 'severity' => 'Minor'],
+];
+$karte = callPrivate($hub, 'renderKachelKarte', [$activeMulti, false]);
 check('lädt Leaflet.js von unpkg.com', str_contains($karte, 'unpkg.com/leaflet'));
 check('lädt Kartenkacheln von Esri, NICHT von OSMs eigenen Tile-Servern (Praxis-Fund ruan/Andreas: Referer-Pflicht blockierte Firefox mit HTTP 403)', str_contains($karte, 'server.arcgisonline.com') && !str_contains($karte, 'tile.openstreetmap.org'));
 check('Esri-Kachel-URL in der korrekten Reihenfolge z/y/x (nicht Leaflets übliches z/x/y)', str_contains($karte, '/tile/{z}/{y}/{x}'));
 check('zeigt eine Esri-Attribution (Nutzungsbedingung, deshalb attributionControl NICHT abgeschaltet)', str_contains($karte, 'Esri'));
-check('zentriert auf die Standort-Koordinaten (48.478500, 7.944800)', str_contains($karte, '48.478500, 7.944800'));
-check('Marker-Farbe folgt dem höchsten aktiven Schweregrad (TILE_SEVERITY_COLOR[Severe])', str_contains($karte, "color:'#FF9F0A'"));
-check('Standort-Name als sicherer JSON-String im Tooltip (Anführungszeichen im Namen escaped, kein rohes ")', str_contains($karte, 'bindTooltip(') && !str_contains($karte, 'bindTooltip("Zuhause "Test""'));
+
+preg_match('/var markers = (\[.*?\]);/s', $karte, $markersMatch);
+$markersDecoded = json_decode($markersMatch[1] ?? '', true);
+check('Marker-JSON gefunden und gültig', is_array($markersDecoded));
+check('genau die 2 AKTIVEN Standorte als Marker (der deaktivierte Standort fehlt)', count($markersDecoded) === 2);
+check('Marker-Namen korrekt, auch mit Anführungszeichen im Namen (sicher JSON-escaped statt String-Interpolation)', $markersDecoded[0]['name'] === 'Zuhause' && $markersDecoded[1]['name'] === 'Kohlekasten "Auto"');
+check('Marker-Koordinaten stimmen je Standort (48.4785/7.9448 bzw. 52.52/13.405)', abs($markersDecoded[0]['lat'] - 48.4785) < 0.0001 && abs($markersDecoded[1]['lon'] - 13.405) < 0.0001);
+check('jeder Standort bekommt SEINE EIGENE höchste Schweregrad-Farbe, nicht die instanzweit höchste (Zuhause=Severe/orange, Kohlekasten=Minor/blau, nicht beide orange)', $markersDecoded[0]['color'] === '#FF9F0A' && $markersDecoded[1]['color'] === '#0A84FF');
+check('kein Marker-Eintrag für den deaktivierten Standort "Deaktiviert"', !in_array('Deaktiviert', array_column($markersDecoded, 'name'), true));
+
+check('Legende-Container vorhanden', str_contains($karte, 'whub-map-legend'));
+check('Legende: "Alle"-Eintrag zum Zurücksetzen auf die Gesamtübersicht', str_contains($karte, "'🌍 Alle'") && str_contains($karte, 'focusAll'));
+check('Legende: Klick auf einen Pin/Legenden-Eintrag fokussiert diesen Standort (fitBounds nur ohne Fokus)', str_contains($karte, 'function focusOn(name)') && str_contains($karte, 'function applyView(name, animate)') && str_contains($karte, 'fitBounds'));
+check('welcher Standort fokussiert ist, wird PRO BROWSER in localStorage gemerkt (whub-map-focus-), nicht instanzweit', str_contains($karte, 'whub-map-focus-') && str_contains($karte, 'focusKey'));
+check('Startansicht ohne gemerkte Wahl ist "alle Standorte" (Dietmars Wunsch 07.09.2026), kein fest konfigurierter Standard-Standort', str_contains($karte, "applyView(savedFocus, false);") && !str_contains($karte, 'KartenkachelStandort'));
+
+check('jeder localStorage-Zugriff (Zoom UND Fokus, lesend wie schreibend) steht in try/catch (Regression aus 1.6.1/1.6.2 darf sich nicht wiederholen)', substr_count($karte, 'try {') >= 4 && substr_count($karte, 'catch (e) {}') >= 4);
 check('merkt sich die Zoomstufe je Kachel in localStorage (Praxis-Fund ruan/Andreas: Zoom ging bei jedem Refresh verloren)', str_contains($karte, 'whub-map-zoom-') && str_contains($karte, "localStorage.getItem(zoomKey)") && str_contains($karte, "map.on('zoomend'"));
 check('Startzoom ohne gespeicherten Wert bleibt 11 (unverändertes Standardverhalten)', str_contains($karte, 'var startZoom = 11;') && str_contains($karte, 'if (savedZoom >= 1 && savedZoom <= 19) { startZoom = savedZoom; }'));
-check('Zoom-Wiederherstellung ist gegen einen werfenden localStorage-Zugriff abgesichert (Praxis-Fund ruan/Andreas 07.09.2026: Karte komplett leer nach dem Zoom-Merken-Fix, da das Lesen ungeschützt war)', (bool) preg_match('/try\s*\{\s*var savedZoom = parseInt\(localStorage\.getItem\(zoomKey\), 10\);.*?\}\s*catch\s*\(e\)\s*\{\s*\}/s', $karte));
 
-$karteRuhig = callPrivate($hub, 'renderKachelKarte', [$standort, [], false]);
-check('keine aktive Warnung -> grüne Markerfarbe (TILE_COLOR_OK)', str_contains($karteRuhig, "color:'#30D158'"));
+$karteRuhig = callPrivate($hub, 'renderKachelKarte', [[], false]);
+preg_match('/var markers = (\[.*?\]);/s', $karteRuhig, $markersRuhigMatch);
+$markersRuhigDecoded = json_decode($markersRuhigMatch[1] ?? '', true);
+check('keine aktive Warnung an einem Standort -> grüne Markerfarbe (TILE_COLOR_OK) für diesen', $markersRuhigDecoded[0]['color'] === '#30D158' && $markersRuhigDecoded[1]['color'] === '#30D158');
 
 echo "\n== renderKachelKarte(): Höhe automatisch vs. feste Pixelzahl (Praxis-Fund kronos/Bricoleur, 07.09.2026) ==\n";
-check('Standardwert (0) -> äußerer Rahmen bekommt automatische Höhe (100%)', str_contains($karte, 'whub-status" style="padding:0;overflow:hidden;height:100%;'));
+check('Standardwert (0) -> äußerer Rahmen bekommt automatische Höhe (100%)', str_contains($karte, 'whub-status" style="padding:0;overflow:hidden;display:flex;flex-direction:column;height:100%;'));
 $hub->SetProp('KartenkachelHoehePx', 350);
-$karteFest = callPrivate($hub, 'renderKachelKarte', [$standort, [], false]);
-check('gesetzte Pixelzahl -> äußerer Rahmen bekommt feste Höhe statt 100%', str_contains($karteFest, 'whub-status" style="padding:0;overflow:hidden;height:350px;'));
-check('innere Kartenfläche bleibt bei height:100% (relativ zum -- jetzt festen -- äußeren Rahmen)', str_contains($karteFest, 'height:100%;min-height:200px;border-radius'));
+$karteFest = callPrivate($hub, 'renderKachelKarte', [[], false]);
+check('gesetzte Pixelzahl -> äußerer Rahmen bekommt feste Höhe statt 100%', str_contains($karteFest, 'whub-status" style="padding:0;overflow:hidden;display:flex;flex-direction:column;height:350px;'));
+check('Legende sitzt als EIGENE ZEILE unter der Karte (flex-Kind, kein schwebendes Overlay -- verdeckt keinen Marker, kein Leaflet-Pane-Stacking-Konflikt)', str_contains($karteFest, "flex:1 1 auto;min-height:160px;") && str_contains($karteFest, 'whub-map-legend'));
+$hub->SetProp('KartenkachelHoehePx', 0);
 
 echo "\n== renderKachelZamg(): eingebettete ZAMG-Warnkarte (nur Österreich, Dietmars Wunsch 06.09.2026) ==\n";
 $zamg = callPrivate($hub, 'renderKachelZamg', []);
@@ -271,14 +297,6 @@ $zamgFest = callPrivate($hub, 'renderKachelZamg', []);
 check('gesetzte Pixelzahl -> äußerer Rahmen bekommt feste Höhe statt 100% (eigene Property, unabhängig von KartenkachelHoehePx)', str_contains($zamgFest, 'whub-status" style="padding:0;overflow:hidden;height:400px;'));
 check('iframe bleibt bei height:100% (relativ zum -- jetzt festen -- äußeren Rahmen)', str_contains($zamgFest, 'height:100%;min-height:200px;border:0'));
 $hub->SetProp('ZamgKachelHoehePx', 0);
-
-echo "\n== findStandortByName(): Standort-Auflösung für die Karten-Kachel-Auswahl ==\n";
-$hub->SetProp('Standorte', json_encode([
-    ['Name' => 'Zuhause', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true],
-]));
-check('findet einen konfigurierten Standort per Namen', callPrivate($hub, 'findStandortByName', ['Zuhause'])['Name'] === 'Zuhause');
-check('leerer Name -> [] (keine Auswahl getroffen)', callPrivate($hub, 'findStandortByName', ['']) === []);
-check('unbekannter Name -> [] (z. B. gelöschter Standort)', callPrivate($hub, 'findStandortByName', ['Nicht vorhanden']) === []);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

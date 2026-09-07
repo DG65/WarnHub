@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.6.3-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.7.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -241,15 +241,18 @@ einfach im Objektbaum in den Bereich des WebFronts verlinken:
   kleines Kachel-Raster.
 - **Kachel (Übersicht)** -- Liste der aktuell aktiven Warnungen als eigene Karten (Icon,
   Ereignis, Standort, Gültigkeitsende), bis zu 8 gleichzeitig, darüber ein "+N weitere"-Hinweis.
-- **Kachel (Karte)** -- Kartenausschnitt (Esri-Straßenkarte), zentriert auf einen frei
-  wählbaren Standort (Formularfeld "Standort für 'Kachel (Karte)'" im Panel "Prüfung &
-  Status") -- auch mobile Standorte, folgt deren Live-Position. Markerfarbe nach höchstem
-  aktivem Schweregrad. Höhe standardmäßig automatisch (an die umgebende WebFront-/
-  Kachel-Visualisierung-Kachel angepasst) -- funktioniert nicht in jeder Konfiguration
-  zuverlässig, ersatzweise im selben Panel eine feste Pixelzahl eintragbar. Merkt sich
-  eine manuell gewählte Zoomstufe je Browser/Gerät (nicht die Kartenmitte -- die folgt
-  weiterhin immer dem aktuellen Standort), damit sie bei der nächsten Prüfung nicht
-  verloren geht.
+- **Kachel (Karte)** -- Kartenausschnitt (Esri-Straßenkarte) mit JEDEM aktiven Standort
+  gleichzeitig als eigenem, farbigen Pin (auch mobile Standorte, folgt deren Live-Position;
+  Farbe je Standort nach dessen eigenem höchsten aktiven Schweregrad) plus einer klickbaren
+  Legende darunter. Startansicht zeigt alle Standorte gemeinsam; ein Klick auf einen Pin/
+  Legenden-Eintrag zoomt auf diesen -- welcher Standort fokussiert ist, merkt sich JEDER
+  BROWSER FÜR SICH (nicht die Instanz zentral), damit z. B. unterwegs der eigene mobile
+  Standort und zuhause der eigene feste Standort unabhängig voneinander eingestellt bleiben
+  (dieselbe Kachel-Variable geht sonst an jeden WebFront-Betrachter gleich). Höhe
+  standardmäßig automatisch (an die umgebende WebFront-/Kachel-Visualisierung-Kachel
+  angepasst) -- funktioniert nicht in jeder Konfiguration zuverlässig, ersatzweise im Panel
+  "Prüfung & Status" eine feste Pixelzahl eintragbar. Merkt sich eine manuell gewählte
+  Zoomstufe je Browser/Gerät, damit sie bei der nächsten Prüfung nicht verloren geht.
 - **Kachel (ZAMG-Warnkarte, Österreich)** -- bettet die offizielle ZAMG-Warnkarte
   (warnungen.zamg.at) direkt ein. Zeigt aktuell ganz Österreich, noch ohne automatische
   Zentrierung auf einen einzelnen Standort (bräuchte eine verifizierte Umrechnung in Österreichs

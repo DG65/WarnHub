@@ -335,10 +335,8 @@ foreach ($pruefungPanel['items'] ?? [] as $item) {
 }
 check('Hinweis auf die fertigen WebFront-Kacheln steht im Prüfung & Status-Panel', $kachelHinweis !== null);
 
-$karteStandortField = findByName($decoded['elements'], 'KartenkachelStandort');
-check('Auswahlfeld "KartenkachelStandort" (für die Karten-Kachel) vorhanden', $karteStandortField !== null);
+check('Auswahlfeld "KartenkachelStandort" NICHT mehr vorhanden (Kachel zeigt jetzt alle Standorte gleichzeitig statt einer festen Konsolen-Auswahl, Dietmars Fund 07.09.2026)', findByName($decoded['elements'], 'KartenkachelStandort') === null);
 check('Höhenfeld "KartenkachelHoehePx" (für die Karten-Kachel) vorhanden', findByName($decoded['elements'], 'KartenkachelHoehePx') !== null);
-check('Auswahlfeld hat immer die Option "(kein Standort ausgewählt)" (leerer Wert erlaubt)', in_array(['caption' => '(kein Standort ausgewählt)', 'value' => ''], $karteStandortField['options'] ?? [], true));
 check('Höhenfeld "ZamgKachelHoehePx" (für die ZAMG-Warnkarte, eigene Property, derselbe Fund wie bei der Karten-Kachel) vorhanden', findByName($decoded['elements'], 'ZamgKachelHoehePx') !== null);
 
 $fensterPanel = null;
