@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.3.0';
-    private const NEWS_VERSION = '1.3.0';
+    private const DOC_VERSION = '1.4.0';
+    private const NEWS_VERSION = '1.4.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -292,6 +292,25 @@ class WarnHub extends IPSModule
     ];
     private const BAFU_HYDRO_LEVEL_SEVERITY = [2 => 'Moderate', 3 => 'Severe', 4 => 'Severe', 5 => 'Extreme'];
 
+    // Schweizerischer Erdbebendienst (SED, ETH Zürich) -- amtliche Erdbeben-
+    // Überwachung, live geprüft 07.09.2026 gegen eida.ethz.ch/fdsnws/event/1
+    // (echte Ereignisse abgerufen, u. a. zwei Beben bei Bourg-Saint-Pierre VS
+    // vom 06.09.2026). Standard-FDSNWS-Event-Webservice (SeisComP-Backend),
+    // Antwortformat "text" statt "geojson" (Letzteres von DIESER Instanz
+    // nicht unterstützt -- live per Fehlermeldung geprüft), pipe-getrennt.
+    // Anders als bei Wetterwarnungen liefert die Quelle selbst weder eine
+    // Warnfläche noch einen "Gültig bis"-Zeitpunkt (ein Erdbeben ist ein
+    // Momentereignis, keine andauernde Wetterlage) -- WarnHub bildet daraus
+    // deshalb einen synthetischen Kreis um den Epizentrum (Radius nach
+    // Magnitude gestuft, siehe sedMagnitudeSeverity() -- eigene, grobe
+    // Näherung, KEINE amtliche Gefährdungsfläche) sowie ein 2-Stunden-
+    // "Gültig bis"-Fenster (Nachbeben-Zeitfenster), danach zählt es nicht
+    // mehr als aktiv. Ab Magnitude 2.5 gemeldet -- laut SED die Schwelle,
+    // ab der ein Beben in der Schweiz überhaupt spürbar ist.
+    private const SED_EVENT_URL = 'http://eida.ethz.ch/fdsnws/event/1/query';
+    private const SED_MIN_MAGNITUDE = 2.5;
+    private const SED_ACTIVE_SECONDS = 7200;
+
     // BETA -- Hagelschutz-Signalbox der VKF (hagelschutz-einfach-automatisch.ch,
     // meteo.netitservices.com). Protokoll aus der offiziellen VKF-PDF-Doku UND
     // dem Quellcode des aktiven ioBroker-Adapters ice987987/ioBroker.hagelschutz
@@ -352,6 +371,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleGeosphereAt', false);
         $this->RegisterPropertyBoolean('QuelleBafuHydroCh', false);
         $this->RegisterPropertyInteger('BafuHydroSchwelle', 3);
+        $this->RegisterPropertyBoolean('QuelleSedErdbebenCh', false);
         $this->RegisterPropertyString('HagelschutzPollUrl', '');
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyInteger('WetterstationWindVariableID', 0);
@@ -587,6 +607,8 @@ class WarnHub extends IPSModule
                 ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
                 ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
                 ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar. Deckt Schweizer Standorte ab -- für Deutschland liefert PEGELONLINE oben bereits Pegelstände.'],
+                ['type' => 'CheckBox', 'name' => 'QuelleSedErdbebenCh', 'caption' => 'Zusätzlich Schweizer Erdbeben (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle)'],
+                ['type' => 'Label', 'caption' => 'Amtliche seismologische Überwachung, keine Wetterquelle. Anders als bei Wetterwarnungen liefert die Quelle selbst weder eine Warnfläche noch ein "Gültig bis" -- ein Erdbeben ist ein Momentereignis. WarnHub bildet deshalb einen eigenen Kreis um das Epizentrum (Radius nach Magnitude gestuft -- eine grobe eigene Näherung, KEINE amtliche Gefährdungsfläche) und ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt es nicht mehr als aktiv. Deckt nur die Schweiz ab.'],
                 ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                 [
                     'type' => 'SelectInstance',
@@ -1235,6 +1257,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: zwei weitere fertige WebFront-Kacheln. "Kachel (Karte)" zeigt eine OpenStreetMap-Karte, zentriert auf einen frei wählbaren Standort (auch mobile -- folgt der Live-Position), Markerfarbe nach höchstem aktivem Schweregrad. "Kachel (ZAMG-Warnkarte, Österreich)" bettet die offizielle ZAMG-Warnkarte direkt ein -- speziell für österreichische Nutzer. Beide laden anders als die bisherigen zwei Kacheln bewusst externe Ressourcen (Leaflet.js/OpenStreetMap bzw. die ZAMG-Seite selbst); eine Einbettung der DWD-/MeteoSchweiz-Warnkarten war technisch nicht möglich, beide verbieten das per X-Frame-Options'],
                 ['type' => 'Label', 'caption' => '• NEU: E-Mail als fünfter Push-Kanal (über eine bereits eingerichtete SMTP-Instanz, offizielles Symcon-Modul) -- einfach "🔎 Push-Ziele suchen" erneut klicken, eine gefundene SMTP-Instanz wird zunächst inaktiv angelegt (kennt nur den Versandweg, nicht den Empfänger), erst Zieladresse eintragen und dann aktivieren'],
                 ['type' => 'Label', 'caption' => '• NEU: Fenster-/Tür-Überwachung (eigenes Panel) -- WarnHub kann ein Fenster nicht selbst schließen, erkennt aber über einen Öffnungskontakt, dass eines offen ist, und warnt gezielt bei einer passenden aktiven Warnung. Findet Kontakte über ein klassisches Symcon-Profil (~Window/~Door) UND die seit Symcon 9.0 neue Variablendarstellung (herstellerunabhängig, auch Matter-Kontakte) -- einfach "🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen" klicken'],
+                ['type' => 'Label', 'caption' => '• NEU: Schweizer Erdbeben als weitere Datenquelle (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle). Keine Wetterquelle, eigener Kreis um das Epizentrum statt amtlicher Warnfläche (siehe Datenquellen-Panel für Details)'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -3392,6 +3415,100 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  Schweizerischer Erdbebendienst (SED) -- siehe Konstanten-Kommentar
+    //  oben. EIN globaler Abruf für ganz Schweiz (analog BAFU/PEGELONLINE),
+    //  die geometrische Umkreis-Prüfung in processWarnings() erledigt den
+    //  Rest -- kein Standort-Filter beim Abruf selbst nötig.
+    // ----------------------------------------------------------------
+
+    private function fetchSedErdbebenCh(): array
+    {
+        $url = self::SED_EVENT_URL . '?' . http_build_query([
+            'format' => 'text',
+            'minmagnitude' => self::SED_MIN_MAGNITUDE,
+            // Grobe Bounding-Box Schweiz + Grenzsaum -- deckt auch
+            // grenznahe Epizentren ab, deren Umkreis noch Schweizer
+            // Standorte erreichen kann.
+            'minlatitude' => 45.6, 'maxlatitude' => 47.9,
+            'minlongitude' => 5.7, 'maxlongitude' => 10.6,
+            'starttime' => date('Y-m-d\TH:i:s', time() - 86400),
+        ]);
+        $body = $this->httpGet($url, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        if ($body === null) {
+            $this->LogError('fetchSedErdbebenCh', 'SED-Abfrage (eida.ethz.ch) nicht erreichbar.');
+            return [];
+        }
+        return $this->parseSedResponse($body);
+    }
+
+    /** Vom HTTP-Abruf getrennt, damit sich die Auswertung ohne Netzzugriff testen lässt. */
+    private function parseSedResponse(string $body): array
+    {
+        $out = [];
+        foreach (preg_split('/\r?\n/', trim($body)) as $line) {
+            if ($line === '' || $line[0] === '#') {
+                continue; // Kopfzeile/Leerzeile
+            }
+            $cols = explode('|', $line);
+            if (count($cols) < 14) {
+                continue; // unerwartetes Format -- lieber überspringen als raten
+            }
+            [$eventId, $time, $lat, $lon, $depth, , , , , , $magnitude, , $placeName, $eventType] = $cols;
+            if (trim($eventType) !== 'earthquake') {
+                continue;
+            }
+            $ts = strtotime(trim($time));
+            if ($ts === false) {
+                continue;
+            }
+            $magnitude = (float) $magnitude;
+            $tier = $this->sedMagnitudeSeverity($magnitude);
+            $place = trim($placeName) !== '' ? trim($placeName) : 'Schweiz';
+            $out[] = [
+                'identifier' => 'sed-' . trim($eventId),
+                'source' => 'sed_ch',
+                'msgType' => 'Alert',
+                'event' => 'Erdbeben',
+                'headline' => sprintf('Erdbeben Magnitude %.1f bei %s', $magnitude, $place),
+                'description' => sprintf('Tiefe %.1f km, Epizentrum %s, gemessen %s Uhr (Schweizerischer Erdbebendienst).', (float) $depth, $place, date('d.m. H:i', $ts)),
+                'instruction' => '',
+                'severity' => $tier['severity'],
+                'effective' => date('c', $ts),
+                'onset' => date('c', $ts),
+                'expires' => date('c', $ts + self::SED_ACTIVE_SECONDS),
+                'areaDesc' => $place,
+                'rings' => [],
+                'circles' => [['lat' => (float) $lat, 'lon' => (float) $lon, 'radiusKm' => $tier['radiusKm']]],
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Eigene, grobe Stufung nach Magnitude -- SED selbst liefert keine
+     * Gefährdungs-/Warnstufe zum Ereignis, nur den reinen Messwert. Referenz-
+     * Schwellen laut SED-Öffentlichkeitsarbeit: spürbar ab ca. 2.5, leichte
+     * bis moderate Gebäudeschäden ab ca. 5. KEINE amtliche Klassifikation
+     * (anders als z. B. BAFU_HYDRO_LEVEL_SEVERITY) -- ausdrücklich als
+     * Näherung zu verstehen, auch beim Radius (grobe Faustregel für die
+     * "spürbar"-Reichweite, keine seismologische Schadensflächen-Berechnung).
+     * @return array{severity:string,radiusKm:float}
+     */
+    private function sedMagnitudeSeverity(float $magnitude): array
+    {
+        if ($magnitude >= 6.0) {
+            return ['severity' => 'Extreme', 'radiusKm' => 120.0];
+        }
+        if ($magnitude >= 4.5) {
+            return ['severity' => 'Severe', 'radiusKm' => 60.0];
+        }
+        if ($magnitude >= 3.5) {
+            return ['severity' => 'Moderate', 'radiusKm' => 30.0];
+        }
+        return ['severity' => 'Minor', 'radiusKm' => 15.0];
+    }
+
+    // ----------------------------------------------------------------
     //  BETA -- Hagelschutz-Signalbox (VKF, hagelschutz-einfach-automatisch.ch)
     //  siehe Konstanten-Kommentar oben. Bindet ein physisch bei einem
     //  konkreten Schweizer Gebäude registriertes Hagelwarn-Gerät ein -- die
@@ -3481,6 +3598,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleBafuHydroCh')) {
             $warnings = array_merge($warnings, $this->fetchBafuHydroCh());
+        }
+        if ($this->ReadPropertyBoolean('QuelleSedErdbebenCh')) {
+            $warnings = array_merge($warnings, $this->fetchSedErdbebenCh());
         }
         if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
             $warnings = array_merge($warnings, $this->fetchHagelschutzCh());

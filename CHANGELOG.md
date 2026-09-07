@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.0 (2026-09-07)
+
+- NEU: Schweizer Erdbeben als weitere Datenquelle -- Schweizerischer
+  Erdbebendienst (SED, ETH Zürich), amtliche seismologische Überwachung
+  über den echten FDSNWS-Event-Webservice (`eida.ethz.ch`), live geprüft
+  07.09.2026 (u. a. zwei echte Beben bei Bourg-Saint-Pierre VS vom
+  06.09.2026 abgerufen). Neue Property `QuelleSedErdbebenCh`, neue
+  Funktionen `fetchSedErdbebenCh()`/`parseSedResponse()`. Ab Magnitude
+  2.5 (laut SED die Spürbarkeitsschwelle in der Schweiz).
+- Anders als bei den übrigen Quellen liefert SED weder eine Warnfläche
+  noch ein "Gültig bis" -- ein Erdbeben ist ein Momentereignis, keine
+  andauernde Wetterlage. WarnHub bildet deshalb einen eigenen Kreis um
+  das Epizentrum (`sedMagnitudeSeverity()`: Radius nach Magnitude
+  gestuft 15/30/60/120 km, Severity Minor/Moderate/Severe/Extreme --
+  ausdrücklich eine grobe eigene Näherung, KEINE amtliche
+  Gefährdungsfläche) sowie ein 2-Stunden-"Gültig bis"-Fenster
+  (Nachbeben-relevant), danach zählt ein Ereignis nicht mehr als aktiv.
+- Dietmars Wunsch 07.09.2026 ("dann machen wir das alles mit rein"),
+  nach gemeinsamer Recherche zu drei möglichen neuen Quellen (Erdbeben
+  Schweiz, Waldbrandgefahrenindex Deutschland, Ozon-Luftqualität) --
+  Erdbeben zuerst umgesetzt, da die sauberste/am wenigsten aufwändige
+  der drei. Waldbrand und Ozon folgen.
+
 ## 1.3.0 (2026-09-07)
 
 - NEU: Fenster-/Tür-Überwachung (eigenes Panel "🪟 Fenster-/Tür-

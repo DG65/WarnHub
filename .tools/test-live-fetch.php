@@ -338,5 +338,20 @@ if (count($bafuResult) > 0) {
     echo "  Info: [{$w['severity']}] {$w['headline']}\n";
 }
 
+echo "== Live-Abruf Schweizerischer Erdbebendienst (eida.ethz.ch, Schweiz) ==\n";
+$sedResult = callPrivate($hub, 'fetchSedErdbebenCh');
+check('fetchSedErdbebenCh() liefert ein Array (auch bei 0 Ereignissen der letzten 24h kein Fehler)', is_array($sedResult));
+echo '  Info: ' . count($sedResult) . " Erdbeben-Ereignis(se) in der Schweiz (letzte 24 Std., ab Magnitude 2.5).\n";
+if (count($sedResult) > 0) {
+    $w = $sedResult[0];
+    foreach (['identifier', 'source', 'event', 'severity', 'headline', 'circles', 'expires'] as $field) {
+        check("erstes SED-Ereignis hat Feld '$field'", array_key_exists($field, $w));
+    }
+    check('source ist "sed_ch"', $w['source'] === 'sed_ch');
+    check('event ist "Erdbeben"', $w['event'] === 'Erdbeben');
+    check('Kreis-Koordinate liegt im plausiblen Schweizer/Grenz-Bereich (Lat 45-48, Lon 5-11)', $w['circles'][0]['lat'] > 45 && $w['circles'][0]['lat'] < 48 && $w['circles'][0]['lon'] > 5 && $w['circles'][0]['lon'] < 11);
+    echo "  Info: [{$w['severity']}] {$w['headline']}\n";
+}
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

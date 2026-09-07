@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.3.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.4.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -43,6 +43,14 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Gefahrenstufen-Skala des Bundesamts für Umwelt für Fliessgewässer und Seen. Anders als
   PEGELONLINE/BfS/eigene Wetterstation eine echte behördliche Klassifikation, keine
   Eigenkonstruktion -- nur die Schwelle, ab der WarnHub meldet, ist einstellbar.
+- **Schweizer Erdbeben** (Schweizerischer Erdbebendienst SED, ETH Zürich,
+  `eida.ethz.ch`) -- optional, amtliche seismologische Überwachung, ab Magnitude 2.5
+  (laut SED die Spürbarkeitsschwelle). Keine Wetterquelle -- anders als bei den übrigen
+  Quellen liefert SED weder eine Warnfläche noch ein "Gültig bis", ein Erdbeben ist ein
+  Momentereignis. WarnHub bildet deshalb einen eigenen Kreis um das Epizentrum (Radius
+  nach Magnitude gestuft: 15/30/60/120 km -- eine grobe eigene Näherung, KEINE amtliche
+  Gefährdungsfläche) sowie ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt
+  ein Ereignis nicht mehr als aktiv. Deckt nur die Schweiz ab.
 - **Eigene Wetterstation** -- optional, unabhängig von allen übrigen Quellen: löst aus,
   sobald die lokal gemessene Windböe oder Regenrate den eigenen Schwellwert überschreitet.
   Beide gestuft in je drei Schwellwerten (Moderate/Severe/Extreme -- Wind Standard 40/65/90
@@ -298,6 +306,12 @@ echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   Wert. Die Schweiz kennt aktuell keine vergleichbare amtliche, öffentlich zugängliche API für
   allgemeine Unwetterwarnungen (Sturm/Hagel/Starkregen) -- dafür bleibt Meteoalarm vorerst die
   einzig verfügbare Quelle.
+- Der Umkreis um ein Erdbeben-Epizentrum (15/30/60/120 km je nach Magnitude) sowie das
+  2-Stunden-Aktivitätsfenster sind eine eigene, grobe Näherung von WarnHub -- der SED
+  selbst liefert weder eine Gefährdungsfläche noch eine "Gültig bis"-Angabe zum
+  Ereignis, anders als bei den amtlich klassifizierten Quellen (BAFU, GeoSphere
+  Austria). Wie stark ein Beben tatsächlich wo spürbar ist, hängt von Bodenbeschaffenheit
+  und weiteren Faktoren ab, die hier nicht berücksichtigt werden.
 - Die VKF-Hagelschutz-Anbindung ist **BETA und ungetestet**: das Protokoll ist aus der
   offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut,
   aber mangels eigener Signalbox nicht live gegengeprüft -- anders als jede andere Quelle in
