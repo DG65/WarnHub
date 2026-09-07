@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.5.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.5.1-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -234,9 +234,10 @@ einfach im Objektbaum in den Bereich des WebFronts verlinken:
   kleines Kachel-Raster.
 - **Kachel (Übersicht)** -- Liste der aktuell aktiven Warnungen als eigene Karten (Icon,
   Ereignis, Standort, Gültigkeitsende), bis zu 8 gleichzeitig, darüber ein "+N weitere"-Hinweis.
-- **Kachel (Karte)** -- OpenStreetMap-Kartenausschnitt, zentriert auf einen frei wählbaren
-  Standort (Formularfeld "Standort für 'Kachel (Karte)'" im Panel "Prüfung & Status") -- auch
-  mobile Standorte, folgt deren Live-Position. Markerfarbe nach höchstem aktivem Schweregrad.
+- **Kachel (Karte)** -- Kartenausschnitt (Esri-Straßenkarte), zentriert auf einen frei
+  wählbaren Standort (Formularfeld "Standort für 'Kachel (Karte)'" im Panel "Prüfung &
+  Status") -- auch mobile Standorte, folgt deren Live-Position. Markerfarbe nach höchstem
+  aktivem Schweregrad.
 - **Kachel (ZAMG-Warnkarte, Österreich)** -- bettet die offizielle ZAMG-Warnkarte
   (warnungen.zamg.at) direkt ein. Zeigt aktuell ganz Österreich, noch ohne automatische
   Zentrierung auf einen einzelnen Standort (bräuchte eine verifizierte Umrechnung in Österreichs
@@ -248,10 +249,15 @@ HTML/CSS, keine externen Abhängigkeiten. Beide enthalten zusätzlich drei klein
 amtlichen Warnkarten (DWD, ZAMG, MeteoSchweiz).
 
 "Kachel (Karte)" und "Kachel (ZAMG-Warnkarte)" laden dagegen bewusst externe Ressourcen
-(Leaflet.js/OpenStreetMap-Kacheln bzw. die eingebettete ZAMG-Seite) -- eine Einbettung der
-DWD- und MeteoSchweiz-Warnkarten war technisch nicht möglich, beide senden `X-Frame-Options:
-SAMEORIGIN` und verbieten damit ausdrücklich, ihre Seite in einem fremden iframe darzustellen;
-nur die ZAMG-Seite erlaubt das.
+(Leaflet.js von unpkg.com + Kartenkacheln von Esri bzw. die eingebettete ZAMG-Seite) -- eine
+Einbettung der DWD- und MeteoSchweiz-Warnkarten war technisch nicht möglich, beide senden
+`X-Frame-Options: SAMEORIGIN` und verbieten damit ausdrücklich, ihre Seite in einem fremden
+iframe darzustellen; nur die ZAMG-Seite erlaubt das. Die Kartenkacheln kommen bewusst NICHT
+von OpenStreetMaps eigenen Tile-Servern -- deren Nutzungsrichtlinie verlangt für eingebettete
+Drittanbieter-Widgets wie diese Kachel einen Referer-Header, der je nach Browser/WebFront
+fehlen kann (Praxis-Fund: HTTP 403 in Firefox, während Chrome/Mobile funktionierten) --
+sondern von Esris kostenlosem, referer-freiem Kartendienst (Attribution "Tiles © Esri" wird
+deshalb mit angezeigt).
 
 Alle vier werden automatisch nach jeder Prüfung aktualisiert, ohne eigene Einrichtung. Ohne
 echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.

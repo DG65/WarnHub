@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.5.0';
-    private const NEWS_VERSION = '1.5.0';
+    private const DOC_VERSION = '1.5.1';
+    private const NEWS_VERSION = '1.5.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -872,7 +872,7 @@ class WarnHub extends IPSModule
         }
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: vier weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)" und "Kachel (Übersicht)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Beide enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine OpenStreetMap-Karte, zentriert auf den unten gewählten Standort (auch mobile Standorte -- folgt dessen Live-Position). Markerfarbe nach höchstem aktivem Schweregrad. Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js + OpenStreetMap-Kachelbilder von unpkg.com/openstreetmap.org).'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine Straßenkarte (Esri), zentriert auf den unten gewählten Standort (auch mobile Standorte -- folgt dessen Live-Position). Markerfarbe nach höchstem aktivem Schweregrad. Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js von unpkg.com, Kartenkacheln von server.arcgisonline.com -- bewusst nicht OpenStreetMaps eigene Tile-Server, die für eingebettete Drittanbieter-Widgets wie diese Kachel einen Referer-Header verlangen und je nach Browser/WebFront blockieren können).'];
         $pruefungItems[] = ['type' => 'Select', 'name' => 'KartenkachelStandort', 'caption' => 'Standort für "Kachel (Karte)"', 'options' => array_merge(
             [['caption' => '(kein Standort ausgewählt)', 'value' => '']],
             array_map(fn ($s) => ['caption' => $s['Name'], 'value' => $s['Name']], array_filter($this->decodeStandorte(), fn ($s) => $s['Name'] !== ''))
@@ -1283,6 +1283,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: Fenster-/Tür-Überwachung (eigenes Panel) -- WarnHub kann ein Fenster nicht selbst schließen, erkennt aber über einen Öffnungskontakt, dass eines offen ist, und warnt gezielt bei einer passenden aktiven Warnung. Findet Kontakte über ein klassisches Symcon-Profil (~Window/~Door) UND die seit Symcon 9.0 neue Variablendarstellung (herstellerunabhängig, auch Matter-Kontakte) -- einfach "🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen" klicken'],
                 ['type' => 'Label', 'caption' => '• NEU: Schweizer Erdbeben als weitere Datenquelle (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle). Keine Wetterquelle, eigener Kreis um das Epizentrum statt amtlicher Warnfläche (siehe Datenquellen-Panel für Details)'],
                 ['type' => 'Label', 'caption' => '• NEU: Deutscher Waldbrandgefahrenindex (DWD) als weitere Datenquelle -- amtliche 5-stufige Skala, je Standort automatisch die nächstgelegene der 484 DWD-Messstationen'],
+                ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": lud bei manchen Nutzern (Firefox) keine Kartenkacheln (HTTP 403) -- OpenStreetMaps eigene Tile-Server verlangen für eingebettete Widgets einen Referer-Header, der je nach Browser fehlen kann. Zeigt jetzt Kartenkacheln von Esri (referer-frei). Außerdem füllt die Kachel jetzt auch in der Höhe den verfügbaren Platz, nicht nur in der Breite'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4468,9 +4469,9 @@ HTML;
     }
 
     /**
-     * Standort-zentrierte Karten-Kachel (OpenStreetMap via Leaflet.js, CDN) --
+     * Standort-zentrierte Karten-Kachel (Kachelbilder via Leaflet.js, CDN) --
      * einziger Unterschied zu den übrigen Kacheln: lädt bewusst externe
-     * Ressourcen (Leaflet-JS/CSS + OSM-Kachelbilder), keine rein
+     * Ressourcen (Leaflet-JS/CSS + Kartenkachelbilder), keine rein
      * eigenständige HTML/CSS-Lösung wie die kompakte/Übersichts-Kachel.
      * Zeigt IMMER den aktuellen Standort zentriert (auch mobile, Live-
      * Standort-gebundene -- resolveStandortCoords() liest bei jeder
@@ -4478,8 +4479,24 @@ HTML;
      * bewusst noch KEINE einzelnen Warnflächen (Polygon/Kreis) -- die
      * werden aktuell nicht dauerhaft gespeichert (nur Anzeige-Felder in
      * LastActiveWarningsJson), das wäre eine eigene Erweiterung. Dietmars
-     * Wunsch 06.09.2026. Ohne echtes WebFront nicht selbst gegenprüfbar --
-     * Rückmeldungen willkommen.
+     * Wunsch 06.09.2026.
+     *
+     * Kartenkacheln von Esri (server.arcgisonline.com/.../World_Street_Map),
+     * NICHT OpenStreetMaps eigenen Tile-Servern -- Praxis-Fund ruan/Andreas,
+     * Symcon-Forum, 07.09.2026: OSMs Server verlangen laut eigener
+     * Nutzungsrichtlinie zwingend einen Referer-Header (osm.wiki/Blocked,
+     * explizit gegen genau diesen Fall gerichtet -- ein Widget, das in
+     * vielen unabhängigen Installationen eingebettet wird), Firefox schickte
+     * in seinem WebFront keinen mit (HTTP 403), Chrome/Mobile zufällig schon.
+     * Esris Dienst verlangt live geprüft KEINEN Referer und keinen API-Key
+     * für diese Nutzung -- dafür React-Pflicht auf eine kleine Attribution
+     * (Leaflets Standard-attributionControl, deshalb hier NICHT abgeschaltet
+     * wie ursprünglich). Achtung Kachel-URL-Reihenfolge: Esris REST-Tiles
+     * sind {z}/{y}/{x}, nicht das bei Leaflet/OSM übliche {z}/{x}/{y}.
+     *
+     * Höhe: füllt jetzt height:100% statt einer festen Pixelzahl -- Praxis-
+     * Fund ruan/Andreas: die Breite passte sich der Kachel schon an, die
+     * Höhe war fest auf 220px genagelt.
      */
     private function renderKachelKarte(array $standort, array $active, bool $snoozed = false): string
     {
@@ -4504,14 +4521,14 @@ HTML;
         return $this->tileStyleBlock() . <<<HTML
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<div class="whub-status" style="padding:0;overflow:hidden;">
-  <div id="{$mapId}" style="width:100%;height:220px;border-radius:22px;"></div>
+<div class="whub-status" style="padding:0;overflow:hidden;height:100%;min-height:200px;">
+  <div id="{$mapId}" style="width:100%;height:100%;min-height:200px;border-radius:22px;"></div>
   <script>
   (function(){
     var el = document.getElementById('{$mapId}');
     if (!el || typeof L === 'undefined') { return; }
-    var map = L.map(el, {zoomControl:false, attributionControl:false}).setView([{$latStr}, {$lonStr}], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18}).addTo(map);
+    var map = L.map(el, {zoomControl:false}).setView([{$latStr}, {$lonStr}], 11);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Tiles &copy; Esri'}).addTo(map);
     L.circleMarker([{$latStr}, {$lonStr}], {radius:10, color:'{$color}', fillColor:'{$color}', fillOpacity:0.85, weight:2}).addTo(map).bindTooltip({$nameJs});
   })();
   </script>

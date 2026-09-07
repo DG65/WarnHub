@@ -242,6 +242,9 @@ check('ohne ausgewählten Standort: kein Leaflet-Skript geladen', !str_contains(
 $standort = ['Name' => 'Zuhause "Test"', 'Ort' => '', 'Lat' => 48.4785, 'Lon' => 7.9448, 'QuellVarLat' => 0, 'QuellVarLon' => 0, 'RadiusKm' => 10, 'MinSeverity' => 2, 'PushZielFilter' => '', 'Aktiv' => true];
 $karte = callPrivate($hub, 'renderKachelKarte', [$standort, [['identifier' => 'w1', 'severity' => 'Severe']], false]);
 check('lädt Leaflet.js von unpkg.com', str_contains($karte, 'unpkg.com/leaflet'));
+check('lädt Kartenkacheln von Esri, NICHT von OSMs eigenen Tile-Servern (Praxis-Fund ruan/Andreas: Referer-Pflicht blockierte Firefox mit HTTP 403)', str_contains($karte, 'server.arcgisonline.com') && !str_contains($karte, 'tile.openstreetmap.org'));
+check('Esri-Kachel-URL in der korrekten Reihenfolge z/y/x (nicht Leaflets übliches z/x/y)', str_contains($karte, '/tile/{z}/{y}/{x}'));
+check('zeigt eine Esri-Attribution (Nutzungsbedingung, deshalb attributionControl NICHT abgeschaltet)', str_contains($karte, 'Esri'));
 check('zentriert auf die Standort-Koordinaten (48.478500, 7.944800)', str_contains($karte, '48.478500, 7.944800'));
 check('Marker-Farbe folgt dem höchsten aktiven Schweregrad (TILE_SEVERITY_COLOR[Severe])', str_contains($karte, "color:'#FF9F0A'"));
 check('Standort-Name als sicherer JSON-String im Tooltip (Anführungszeichen im Namen escaped, kein rohes ")', str_contains($karte, 'bindTooltip(') && !str_contains($karte, 'bindTooltip("Zuhause "Test""'));

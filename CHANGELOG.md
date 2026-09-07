@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.1 (2026-09-07)
+
+- Fix "Kachel (Karte)": lud bei manchen Nutzern keine Kartenkacheln (HTTP
+  403). Ursache: OpenStreetMaps eigene Tile-Server verlangen laut eigener
+  Nutzungsrichtlinie (osm.wiki/Blocked) für eingebettete Drittanbieter-
+  Widgets wie diese Kachel einen Referer-Header -- Firefox schickte im
+  WebFront keinen mit, Chrome/Mobile zufällig schon. Zeigt jetzt
+  Kartenkacheln von Esri (server.arcgisonline.com/World_Street_Map,
+  live geprüft: kein Referer, kein API-Key nötig) statt tile.openstreetmap.org.
+  Achtung Kachel-URL-Reihenfolge dabei: Esris REST-Tiles sind {z}/{y}/{x},
+  nicht das bei Leaflet/OSM übliche {z}/{x}/{y}. Leaflets
+  attributionControl bleibt jetzt aktiv (Esris Nutzungsbedingung).
+- Fix "Kachel (Karte)": Höhe füllt jetzt `height:100%` statt einer festen
+  Pixelzahl -- die Breite passte sich der Kachel schon an, die Höhe war
+  auf 220px fest genagelt.
+- Praxis-Fund von ruan/Andreas im Symcon-Forum, 07.09.2026.
+
 ## 1.5.0 (2026-09-07)
 
 - NEU: Deutscher Waldbrandgefahrenindex (DWD) als weitere Datenquelle --
