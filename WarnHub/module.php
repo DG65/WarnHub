@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.8.1';
-    private const NEWS_VERSION = '1.8.1';
+    private const DOC_VERSION = '1.8.2';
+    private const NEWS_VERSION = '1.8.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1327,6 +1327,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die angezeigten 8 Karten jetzt nach Schweregrad sortiert, statt einfach die ersten 8 in Ankunftsreihenfolge zu nehmen -- vorher hätte ausgerechnet die wichtigste Warnung hinter "+N weitere" verschwinden können, nur weil sie zufällig weiter hinten stand'],
                 ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne 8er-Deckel: scrollbare Liste ALLER aktiven Warnungen, nach Schweregrad sortiert. Jede Karte hat einen eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt, betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen'],
                 ['type' => 'Label', 'caption' => '• "🔎 Objektbaum nach Schutzaktionen durchsuchen" findet jetzt auch Raffstore-/Jalousie-Steuerungen, deren Name selbst keinen Hinweis darauf gibt -- über Symcons eingebaute Rollladen-Variablendarstellung, unabhängig von Sprache/Eigennamen'],
+                ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2119,6 +2120,18 @@ class WarnHub extends IPSModule
      */
     public function DiscoverWetterstation(): string
     {
+        // Sammelt Treffer, deren MODUL erkannt wurde, denen aber die
+        // benötigten Windböe-/Regenrate-Felder fehlen -- für eine ehrliche
+        // Rückmeldung statt des generischen "nichts gefunden" am Ende.
+        // Praxis-Fund ralf, Symcon-Forum, 07.09.2026: hatte eine echte
+        // Froggit-Instanz im Baum (nur Außentemperatur-Sensor, offenbar ohne
+        // Anemometer/Regenmesser), bekam trotzdem "keine Instanz gefunden"
+        // zu sehen und war entsprechend verwirrt ("obwohl es eine Instanz
+        // gibt"). Dietmars eigene Froggit+Ecowitt-Kombination (mit
+        // Wind-/Regensensor) findet sich weiterhin normal über den
+        // Erfolgsfall oben.
+        $foundButIncomplete = [];
+
         $candidates = $this->findInstancesByModuleNameSubstring(self::FROGGIT_GUID, 'froggit');
         foreach (array_keys($candidates) as $instanceID) {
             // Ident-basiert statt Namensvergleich (Praxis-Fund ralf, Symcon-
@@ -2131,6 +2144,7 @@ class WarnHub extends IPSModule
             $windboe = $this->findChildVariableByIdent($instanceID, 'windgustmph');
             $regenrate = $this->findChildVariableByIdent($instanceID, 'rainratein');
             if ($windboe === null || $regenrate === null) {
+                $foundButIncomplete[] = (@IPS_GetName($instanceID) ?: ('#' . $instanceID)) . ' (Froggit)';
                 continue; // Ident passt, aber die entscheidenden Felder fehlen -- kein Treffer
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
@@ -2142,6 +2156,7 @@ class WarnHub extends IPSModule
             $windgust = $this->findChildVariableByIdent($instanceID, 'Windgust');
             $rainin = $this->findChildVariableByIdent($instanceID, 'rainin');
             if ($windgust === null || $rainin === null) {
+                $foundButIncomplete[] = (@IPS_GetName($instanceID) ?: ('#' . $instanceID)) . ' (Sainlogic/ELV)';
                 continue;
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
@@ -2153,6 +2168,7 @@ class WarnHub extends IPSModule
             $windGust = $this->findChildVariableByIdent($instanceID, 'Wind_Gust_KmH');
             $rainRate = $this->findChildVariableByIdent($instanceID, 'Rain_Rate');
             if ($windGust === null || $rainRate === null) {
+                $foundButIncomplete[] = (@IPS_GetName($instanceID) ?: ('#' . $instanceID)) . ' (Meteobridge/Meteohub)';
                 continue;
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
@@ -2180,6 +2196,13 @@ class WarnHub extends IPSModule
             return sprintf(
                 '✅ Kein bekanntes Wetterstations-Modul, aber %s über das Standard-Profil im System gefunden und in die manuelle Auswahl übernommen -- bitte prüfen und unten „Übernehmen" klicken.',
                 $foundWind && $foundRegen ? 'Wind- UND Regen-Variable' : ($foundWind ? 'eine Wind-Variable' : 'eine Regen-Variable')
+            );
+        }
+
+        if ($foundButIncomplete !== []) {
+            return sprintf(
+                'ℹ️ Wetterstations-Instanz gefunden, aber OHNE die benötigten Windböe-/Regenrate-Felder: %s -- vermutlich misst dieses Gerät nur Temperatur/Luftfeuchte, ohne Wind-/Regensensor. Sind Wind-/Regenwerte trotzdem vorhanden (z. B. an anderer Stelle im Objektbaum), unten die Wind-/Regen-Variable manuell auswählen.',
+                implode(', ', $foundButIncomplete)
             );
         }
 

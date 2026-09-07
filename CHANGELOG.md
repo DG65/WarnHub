@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.8.2 (2026-09-07)
+
+- Fix "🔎 Wetterstation suchen": meldete bisher pauschal "Keine
+  unterstützte Wetterstations-Instanz gefunden", selbst wenn tatsächlich
+  eine passende Instanz (Froggit/Sainlogic/ELV/Meteobridge) im Objektbaum
+  stand, ihr aber die benötigten Windböe-/Regenrate-Felder fehlten -- z. B.
+  ein reiner Temperatur-/Luftfeuchte-Außensensor ohne Anemometer/
+  Regenmesser. Praxis-Fund ralf, Symcon-Forum, 07.09.2026: hatte eine echte
+  Froggit-Instanz im Baum, bekam trotzdem die generische "nichts
+  gefunden"-Meldung und war entsprechend verwirrt. Nennt jetzt ehrlich die
+  gefundene, aber ungeeignete Instanz samt Grund, statt sich hinter der
+  generischen Meldung zu verstecken. Dietmars eigene Froggit+Ecowitt-
+  Kombination (mit Wind-/Regensensor) ist von diesem Fix nicht betroffen
+  -- die findet weiterhin normal über den bestehenden Erfolgspfad.
+- Telegram-Push (`TB_SendMessage($InstanceID, $Text)`) live gegen ein
+  echtes Symcon-System gegengeprüft, nachdem ralf im Forum nach einer
+  fehlenden Chat-ID fragte: der Aufruf ist exakt identisch mit dem, den
+  das offizielle TelegramBot-Modul selbst für seinen eigenen "Senden"-Knopf
+  in der Konsole verwendet -- keine Chat-ID nötig oder vorgesehen, keine
+  Code-Änderung. Ein ausbleibender Telegram-Versand liegt an der
+  jeweiligen Bot-Instanz selbst (z. B. Status "Issue with Bot API Key"
+  oder "Symcon Connect is not active" in der Konsole prüfen).
+
 ## 1.8.1 (2026-09-07)
 
 - Fix (Symcon-Store-Review, 07.09.2026): `LogError()` nutzt jetzt

@@ -424,11 +424,16 @@ $hub7 = new WarnHub();
 $hub7->Create();
 $GLOBALS['whub_test_formFieldSets'] = [];
 $msg2 = $hub7->DiscoverWetterstation();
-check('meldet KEINEN Treffer, obwohl der Modulname "froggit" passt (Instanz 11 hat weder Windböe noch Regenrate)', str_contains($msg2, 'Keine unterstützte Wetterstations-Instanz'));
+// Praxis-Fund ralf, Symcon-Forum, 07.09.2026: bekam trotz einer echten
+// Froggit-Instanz im Baum die generische "nichts gefunden"-Meldung zu
+// sehen und war verwirrt ("obwohl es eine Instanz gibt") -- jetzt eine
+// EHRLICHE, unterscheidbare Meldung statt des generischen Fallbacks.
+check('meldet KEINEN Treffer, ABER nennt ehrlich die gefundene (ungeeignete) Instanz statt der generischen "nichts gefunden"-Meldung (Instanz 11 hat weder Windböe noch Regenrate)', str_contains($msg2, 'gefunden, aber OHNE die benötigten') && str_contains($msg2, 'Andere Wetterstation') && str_contains($msg2, '(Froggit)') && !str_contains($msg2, 'Keine unterstützte Wetterstations-Instanz'));
 check('schreibt NICHTS ins Formularfeld (kein Fehltreffer übernommen)', count(array_filter($GLOBALS['whub_test_formFieldSets'], fn ($c) => $c[0] === 'WetterstationInstanceID')) === 0);
 
 echo "\n== DiscoverWetterstation(): zweites unterstütztes Modul (Wolbolar/IPSymconWeatherStation, Sainlogic/ELV via Wunderground-Protokoll) über Ident statt Anzeigename ==\n";
 $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = []; // kein Froggit im System -- die zweite Quelle muss trotzdem gefunden werden
+$GLOBALS['whub_test_instancesByModule'][OTHER_FROGGIT_MODULE_GUID] = []; // auch der Namenssuche-Rückfall (Instanz 11, siehe vorheriger Block) darf hier nicht mehr nachwirken
 $GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = [20];
 $hub8 = new WarnHub();
 $hub8->Create();
@@ -507,6 +512,7 @@ check('leeres Ergebnis statt Fehler', callPrivate($hub13, 'fetchWetterstation') 
 
 echo "\n== DiscoverWetterstation(): drittes unterstütztes Modul (Meteobridge/Meteohub) über Ident ==\n";
 $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = [];
+$GLOBALS['whub_test_instancesByModule'][OTHER_FROGGIT_MODULE_GUID] = [];
 $GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = [];
 $GLOBALS['whub_test_instancesByModule'][METEOBRIDGE_GUID] = [30];
 $hub14 = new WarnHub();
@@ -519,6 +525,7 @@ check('schreibt Instanz-ID 30 ins Formularfeld', count($setCalls4) === 1 && arra
 
 echo "\n== DiscoverWetterstation(): letzter Rückfall -- eindeutiger systemweiter Profil-Treffer (z. B. profilierte KNX-Variable) wird in die manuelle Auswahl übernommen ==\n";
 $GLOBALS['whub_test_instancesByModule'][FROGGIT_GUID] = [];
+$GLOBALS['whub_test_instancesByModule'][OTHER_FROGGIT_MODULE_GUID] = [];
 $GLOBALS['whub_test_instancesByModule'][WEATHERSTATION_WU_GUID] = [];
 $GLOBALS['whub_test_instancesByModule'][METEOBRIDGE_GUID] = [];
 // Isolierter Fake-Baum: nur diese EINE zusätzliche profilierte Wind-Variable
