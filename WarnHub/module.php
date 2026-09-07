@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.5.1';
-    private const NEWS_VERSION = '1.5.1';
+    private const DOC_VERSION = '1.6.0';
+    private const NEWS_VERSION = '1.6.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -330,6 +330,30 @@ class WarnHub extends IPSModule
     ];
     private const WBI_LEVEL_SEVERITY = [1 => 'Minor', 2 => 'Minor', 3 => 'Moderate', 4 => 'Severe', 5 => 'Extreme'];
 
+    // Umweltbundesamt (UBA) Luftqualitätsdaten -- amtliche bundesweite API,
+    // live geprüft 07.09.2026 (offiziell dokumentiert unter
+    // github.com/bundesAPI/luftqualitaet-api, Server-URL dort v2 unter
+    // www.umweltbundesamt.de leitet per 301 auf luftdaten.umweltbundesamt.de
+    // um -- dieselbe Antwortstruktur). Anders als beim Waldbrandgefahrenindex
+    // liefert /airquality/json ALLE Stationen bundesweit in EINEM Abruf
+    // (live geprüft: 416 Stationen, ~41 KB) -- deshalb wie bei BAFU ein
+    // globaler Abruf statt Standort-für-Standort. Bewusst nur Ozon (Komponente
+    // 3) statt des kombinierten Luftqualitätsindex (der den schlechtesten
+    // von 5 Schadstoffen abbildet) -- Dietmars Wunsch war ausdrücklich eine
+    // "Ozon-/Sommersmog-Warnung", kein allgemeines Luftgüte-Monitoring (siehe
+    // Diskussion 07.09.2026, klare Abgrenzung zu privaten Innenraum-Sensoren).
+    // Amtliche Stufen laut /thresholds/json (Komponente 3, 1-Stunden-Mittel,
+    // µg/m³): 0-60=Stufe 0, 61-120=Stufe 1, 121-180=Stufe 2, 181-240=Stufe 3,
+    // >240=Stufe 4. Deaktivierte Stationen (Feld "aktiv bis" gesetzt) werden
+    // übersprungen.
+    private const UBA_STATIONS_URL = 'https://luftdaten.umweltbundesamt.de/api/air-data/v2/stations/json';
+    private const UBA_AIRQUALITY_URL = 'https://luftdaten.umweltbundesamt.de/api/air-data/v2/airquality/json';
+    private const UBA_OZONE_COMPONENT_ID = 3;
+    private const UBA_LQI_LABEL = [
+        0 => 'sehr gut', 1 => 'gut', 2 => 'mäßig', 3 => 'schlecht', 4 => 'sehr schlecht',
+    ];
+    private const UBA_LQI_SEVERITY = [0 => 'Minor', 1 => 'Minor', 2 => 'Moderate', 3 => 'Severe', 4 => 'Extreme'];
+
     // BETA -- Hagelschutz-Signalbox der VKF (hagelschutz-einfach-automatisch.ch,
     // meteo.netitservices.com). Protokoll aus der offiziellen VKF-PDF-Doku UND
     // dem Quellcode des aktiven ioBroker-Adapters ice987987/ioBroker.hagelschutz
@@ -393,6 +417,8 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleSedErdbebenCh', false);
         $this->RegisterPropertyBoolean('QuelleWaldbrandDe', false);
         $this->RegisterPropertyInteger('WaldbrandDeSchwelle', 3);
+        $this->RegisterPropertyBoolean('QuelleOzonDe', false);
+        $this->RegisterPropertyInteger('UbaOzonSchwelle', 3);
         $this->RegisterPropertyString('HagelschutzPollUrl', '');
         $this->RegisterPropertyInteger('WetterstationInstanceID', 0);
         $this->RegisterPropertyInteger('WetterstationWindVariableID', 0);
@@ -412,6 +438,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
         $this->RegisterPropertyString('WebFronts', '[]');
         $this->RegisterPropertyString('KartenkachelStandort', '');
+        $this->RegisterPropertyInteger('KartenkachelHoehePx', 0);
 
         $this->RegisterTimer('PollTimer', 0, 'WHUB_Poll($_IPS[\'TARGET\']);');
         $this->RegisterTimer('SirenOffTimer', 0, 'WHUB_CheckSirenOff($_IPS[\'TARGET\']);');
@@ -633,6 +660,9 @@ class WarnHub extends IPSModule
                 ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => 'Zusätzlich deutscher Waldbrandgefahrenindex (DWD) -- amtliche 5-stufige Skala, je Standort die nächstgelegene Messstation'],
                 ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => 'Ab Gefahrenstufe (1-5)', 'minValue' => 1, 'maxValue' => 5],
                 ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter.'],
+                ['type' => 'CheckBox', 'name' => 'QuelleOzonDe', 'caption' => 'Zusätzlich deutsche Ozonbelastung (Umweltbundesamt) -- amtlicher Luftqualitätsindex, nur Ozon/Sommersmog'],
+                ['type' => 'NumberSpinner', 'name' => 'UbaOzonSchwelle', 'caption' => 'Ab Luftqualitätsindex-Stufe (0-4)', 'minValue' => 0, 'maxValue' => 4],
+                ['type' => 'Label', 'caption' => 'Nutzt das Umweltbundesamt (UBA) als amtliche Quelle für Ozonmesswerte, ausdrücklich NUR Ozon/Sommersmog -- kein allgemeines Luftgüte-Monitoring und keine private Innenraum-Sensorik (dafür ist WarnHub nicht gedacht, siehe Forum-Diskussion). Amtliche 5-stufige Skala (0 = sehr gut bis 4 = sehr schlecht), berechnet aus der stündlichen Ozonkonzentration je Messstation (0-60 µg/m³ = Stufe 0, ... über 240 µg/m³ = Stufe 4).'],
                 ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                 [
                     'type' => 'SelectInstance',
@@ -877,6 +907,8 @@ class WarnHub extends IPSModule
             [['caption' => '(kein Standort ausgewählt)', 'value' => '']],
             array_map(fn ($s) => ['caption' => $s['Name'], 'value' => $s['Name']], array_filter($this->decodeStandorte(), fn ($s) => $s['Name'] !== ''))
         )];
+        $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => 'Höhe "Kachel (Karte)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur, Symcon-Forum, 07.09.2026: Karte skalierte nur in der Breite, nicht in der Höhe). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🇦🇹 "Kachel (ZAMG-Warnkarte, Österreich)": bettet die offizielle ZAMG-Warnkarte direkt ein (iframe) -- speziell für österreichische Nutzer. Zeigt aktuell ganz Österreich, noch ohne automatische Zentrierung auf einen einzelnen Standort.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'];
@@ -1284,6 +1316,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: Schweizer Erdbeben als weitere Datenquelle (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle). Keine Wetterquelle, eigener Kreis um das Epizentrum statt amtlicher Warnfläche (siehe Datenquellen-Panel für Details)'],
                 ['type' => 'Label', 'caption' => '• NEU: Deutscher Waldbrandgefahrenindex (DWD) als weitere Datenquelle -- amtliche 5-stufige Skala, je Standort automatisch die nächstgelegene der 484 DWD-Messstationen'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": lud bei manchen Nutzern (Firefox) keine Kartenkacheln (HTTP 403) -- OpenStreetMaps eigene Tile-Server verlangen für eingebettete Widgets einen Referer-Header, der je nach Browser fehlen kann. Zeigt jetzt Kartenkacheln von Esri (referer-frei). Außerdem füllt die Kachel jetzt auch in der Höhe den verfügbaren Platz, nicht nur in der Breite'],
+                ['type' => 'Label', 'caption' => '• "Kachel (Karte)": automatische Höhenanpassung funktioniert nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration zuverlässig -- neues Feld im Panel "Prüfung & Status" erlaubt jetzt ersatzweise eine feste Höhe in Pixel'],
+                ['type' => 'Label', 'caption' => '• NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle -- amtlicher Luftqualitätsindex, ausdrücklich nur Ozon/Sommersmog, kein allgemeines Luftgüte-Monitoring'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -3691,6 +3725,157 @@ class WarnHub extends IPSModule
     }
 
     // ----------------------------------------------------------------
+    //  Umweltbundesamt (UBA) Ozon-/Luftqualitätsdaten -- siehe Konstanten-
+    //  Kommentar oben. EIN globaler Abruf für ganz Deutschland (analog
+    //  BAFU/PEGELONLINE), die geometrische Umkreis-Prüfung in
+    //  processWarnings() erledigt den Rest.
+    // ----------------------------------------------------------------
+
+    private function fetchOzonDe(): array
+    {
+        $stations = $this->fetchUbaStations();
+        if ($stations === null) {
+            $this->LogError('fetchOzonDe', 'UBA-Stationsliste (luftdaten.umweltbundesamt.de) nicht erreichbar.');
+            return [];
+        }
+        $readings = $this->fetchUbaOzoneReadings();
+        if ($readings === null) {
+            $this->LogError('fetchOzonDe', 'UBA-Luftqualitätsdaten (luftdaten.umweltbundesamt.de) nicht erreichbar.');
+            return [];
+        }
+        $schwelle = $this->ReadPropertyInteger('UbaOzonSchwelle');
+        $out = [];
+        foreach ($readings as $stationId => $reading) {
+            if ($reading['index'] < $schwelle) {
+                continue;
+            }
+            $station = $stations[$stationId] ?? null;
+            if ($station === null) {
+                continue; // nicht mehr aktive/unbekannte Station -- keine Koordinate vorhanden
+            }
+            $level = $reading['index'];
+            $out[] = [
+                'identifier' => 'ozon-de-' . $stationId . '-' . $reading['time'],
+                'source' => 'ozon_de',
+                'msgType' => 'Alert',
+                'event' => 'Ozonbelastung',
+                'headline' => sprintf('Ozon-Luftqualitätsindex Stufe %d von 4 (%s)', $level, self::UBA_LQI_LABEL[$level] ?? ''),
+                'description' => sprintf(
+                    'Ozonkonzentration %.0f µg/m³ (1-Stunden-Mittel) an der Messstation %s, Stand %s Uhr. Amtlicher Luftqualitätsindex des Umweltbundesamts.',
+                    $reading['value'],
+                    $station['name'],
+                    substr($reading['time'], 11, 5)
+                ),
+                'instruction' => '',
+                'severity' => self::UBA_LQI_SEVERITY[$level] ?? 'Moderate',
+                'effective' => null,
+                'onset' => null,
+                'expires' => null,
+                'areaDesc' => $station['name'],
+                'rings' => [],
+                'circles' => [['lat' => $station['lat'], 'lon' => $station['lon'], 'radiusKm' => 10.0]],
+            ];
+        }
+        return $out;
+    }
+
+    private function fetchUbaStations(): ?array
+    {
+        $body = $this->httpGet(self::UBA_STATIONS_URL . '?lang=de', 20, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        return $body !== null ? $this->parseUbaStations($body) : null;
+    }
+
+    /**
+     * Vom HTTP-Abruf getrennt, damit sich die Auswertung ohne Netzzugriff
+     * testen lässt. Stationsarray-Reihenfolge laut offizieller Doku (siehe
+     * Konstanten-Kommentar): 0=Id, 1=Code, 2=Name, 3=Ort, 4=Kürzel, 5=aktiv
+     * ab, 6=aktiv bis (null=weiterhin aktiv), 7=Länge, 8=Breite. Stationen
+     * mit gesetztem "aktiv bis" (nicht mehr in Betrieb) werden übersprungen
+     * -- live gefunden: ein erheblicher Teil der gelisteten Stationen ist
+     * historisch und liefert keine aktuellen Werte mehr.
+     * @return array<string,array{name:string,lat:float,lon:float}>
+     */
+    private function parseUbaStations(string $body): array
+    {
+        $json = json_decode($body, true);
+        $data = is_array($json) ? ($json['data'] ?? []) : [];
+        $out = [];
+        foreach ($data as $id => $row) {
+            if (!is_array($row) || count($row) < 9) {
+                continue;
+            }
+            if ($row[6] !== null) {
+                continue; // Station nicht mehr aktiv
+            }
+            $out[(string) $id] = [
+                'name' => (string) $row[2],
+                'lat' => (float) $row[8],
+                'lon' => (float) $row[7],
+            ];
+        }
+        return $out;
+    }
+
+    private function fetchUbaOzoneReadings(): ?array
+    {
+        // NUR der heutige Tag (nicht zusätzlich gestern) -- ein Zwei-Tage-
+        // Zeitraum über alle ~600 deutschen Stationen führte im Praxistest
+        // 07.09.2026 wiederholt zu HTTP 504 (Server-Timeout, zu große
+        // Antwort); ein Tag liefert dieselben ~294 KB in < 1s zuverlässig.
+        // Kurz nach Mitternacht (vor der ersten Stunden-Veröffentlichung)
+        // kann das Ergebnis leer sein -- korrigiert sich beim nächsten Poll
+        // von selbst, sobald die erste Stunde des Tages vorliegt.
+        $url = self::UBA_AIRQUALITY_URL . '?' . http_build_query([
+            'date_from' => date('Y-m-d'),
+            'time_from' => 1,
+            'date_to' => date('Y-m-d'),
+            'time_to' => 24,
+            'lang' => 'de',
+        ]);
+        $body = $this->httpGet($url, 20, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        return $body !== null ? $this->parseUbaAirquality($body) : null;
+    }
+
+    /**
+     * Vom HTTP-Abruf getrennt, damit sich die Auswertung ohne Netzzugriff
+     * testen lässt. Je Station liefert die Quelle einen Zeitstempel je
+     * abgefragter Stunde -- Symcon-JSON/PHP-Arrays erhalten dabei die
+     * Einfügereihenfolge, die live geprüft chronologisch aufsteigend ist,
+     * daher liefert der LETZTE Schlüssel den neuesten Wert. Nicht jede
+     * Station misst Ozon -- fehlt die Komponente, wird die Station
+     * übersprungen (kein Eintrag im Ergebnis).
+     * @return array<string,array{value:float,index:int,time:string}>
+     */
+    private function parseUbaAirquality(string $body): array
+    {
+        $json = json_decode($body, true);
+        $data = is_array($json) ? ($json['data'] ?? []) : [];
+        $out = [];
+        foreach ($data as $stationId => $timestamps) {
+            if (!is_array($timestamps) || count($timestamps) === 0) {
+                continue;
+            }
+            $latestKey = array_key_last($timestamps);
+            $entry = $timestamps[$latestKey];
+            if (!is_array($entry) || count($entry) < 3) {
+                continue;
+            }
+            $ozone = null;
+            foreach (array_slice($entry, 3) as $component) {
+                if (is_array($component) && (int) ($component[0] ?? -1) === self::UBA_OZONE_COMPONENT_ID) {
+                    $ozone = ['value' => (float) ($component[1] ?? 0), 'index' => (int) ($component[2] ?? 0)];
+                    break;
+                }
+            }
+            if ($ozone === null) {
+                continue;
+            }
+            $out[(string) $stationId] = $ozone + ['time' => (string) $latestKey];
+        }
+        return $out;
+    }
+
+    // ----------------------------------------------------------------
     //  BETA -- Hagelschutz-Signalbox (VKF, hagelschutz-einfach-automatisch.ch)
     //  siehe Konstanten-Kommentar oben. Bindet ein physisch bei einem
     //  konkreten Schweizer Gebäude registriertes Hagelwarn-Gerät ein -- die
@@ -3786,6 +3971,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleWaldbrandDe')) {
             $warnings = array_merge($warnings, $this->fetchWaldbrandDe());
+        }
+        if ($this->ReadPropertyBoolean('QuelleOzonDe')) {
+            $warnings = array_merge($warnings, $this->fetchOzonDe());
         }
         if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
             $warnings = array_merge($warnings, $this->fetchHagelschutzCh());
@@ -4517,11 +4705,18 @@ HTML;
         $color = $top !== null ? (self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown']) : self::TILE_COLOR_OK;
         $nameJs = json_encode((string) $standort['Name'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
         $mapId = 'whubmap' . substr(md5((string) $this->InstanceID . $standort['Name']), 0, 10);
+        // 0 = automatisch (height:100%, übernimmt die Höhe der umgebenden
+        // WebFront-/Kachel-Visualisierung-Kachel) -- funktioniert nicht in
+        // jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur,
+        // Symcon-Forum, 07.09.2026: skalierte nur in der Breite). Deshalb
+        // zusätzlich eine feste Pixelzahl als Alternative.
+        $hoehePx = $this->ReadPropertyInteger('KartenkachelHoehePx');
+        $heightCss = $hoehePx > 0 ? $hoehePx . 'px' : '100%';
 
         return $this->tileStyleBlock() . <<<HTML
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<div class="whub-status" style="padding:0;overflow:hidden;height:100%;min-height:200px;">
+<div class="whub-status" style="padding:0;overflow:hidden;height:{$heightCss};min-height:200px;">
   <div id="{$mapId}" style="width:100%;height:100%;min-height:200px;border-radius:22px;"></div>
   <script>
   (function(){

@@ -370,5 +370,24 @@ if (is_array($wbiStations) && count($wbiStations) > 0) {
     }
 }
 
+echo "== Live-Abruf Umweltbundesamt Ozon-Luftqualitätsdaten (luftdaten.umweltbundesamt.de) ==\n";
+$ubaStations = callPrivate($hub, 'fetchUbaStations');
+check('fetchUbaStations() liefert echte, aktive Stationen (> 100 erwartet)', is_array($ubaStations) && count($ubaStations) > 100);
+$ubaReadings = callPrivate($hub, 'fetchUbaOzoneReadings');
+check('fetchUbaOzoneReadings() liefert echte Ozon-Messwerte (> 100 Stationen mit Ozon-Messung erwartet)', is_array($ubaReadings) && count($ubaReadings) > 100);
+if (is_array($ubaStations) && is_array($ubaReadings)) {
+    echo '  Info: ' . count($ubaStations) . ' aktive Stationen, ' . count($ubaReadings) . " davon mit Ozon-Messwert.\n";
+    $anyStationId = array_key_first($ubaReadings);
+    if ($anyStationId !== null) {
+        $reading = $ubaReadings[$anyStationId];
+        check('Ozon-Index liegt im gültigen Bereich (0-4)', $reading['index'] >= 0 && $reading['index'] <= 4);
+        $station = $ubaStations[$anyStationId] ?? null;
+        check('Messwert lässt sich einer aktiven Station mit Koordinaten zuordnen', $station !== null && $station['lat'] > 45 && $station['lat'] < 56);
+        if ($station !== null) {
+            echo "  Info: Station {$station['name']}, Ozon {$reading['value']} µg/m³, Index {$reading['index']} vom {$reading['time']}.\n";
+        }
+    }
+}
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

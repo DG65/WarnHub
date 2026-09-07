@@ -252,6 +252,13 @@ check('Standort-Name als sicherer JSON-String im Tooltip (Anführungszeichen im 
 $karteRuhig = callPrivate($hub, 'renderKachelKarte', [$standort, [], false]);
 check('keine aktive Warnung -> grüne Markerfarbe (TILE_COLOR_OK)', str_contains($karteRuhig, "color:'#30D158'"));
 
+echo "\n== renderKachelKarte(): Höhe automatisch vs. feste Pixelzahl (Praxis-Fund kronos/Bricoleur, 07.09.2026) ==\n";
+check('Standardwert (0) -> äußerer Rahmen bekommt automatische Höhe (100%)', str_contains($karte, 'whub-status" style="padding:0;overflow:hidden;height:100%;'));
+$hub->SetProp('KartenkachelHoehePx', 350);
+$karteFest = callPrivate($hub, 'renderKachelKarte', [$standort, [], false]);
+check('gesetzte Pixelzahl -> äußerer Rahmen bekommt feste Höhe statt 100%', str_contains($karteFest, 'whub-status" style="padding:0;overflow:hidden;height:350px;'));
+check('innere Kartenfläche bleibt bei height:100% (relativ zum -- jetzt festen -- äußeren Rahmen)', str_contains($karteFest, 'height:100%;min-height:200px;border-radius'));
+
 echo "\n== renderKachelZamg(): eingebettete ZAMG-Warnkarte (nur Österreich, Dietmars Wunsch 06.09.2026) ==\n";
 $zamg = callPrivate($hub, 'renderKachelZamg', []);
 check('bettet die ZAMG-URL als iframe ein', str_contains($zamg, '<iframe') && str_contains($zamg, 'warnungen.zamg.at'));

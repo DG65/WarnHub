@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.5.1-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.6.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -59,6 +59,13 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   Prüfung abzurufen. Braucht die PHP-Erweiterung `zlib` (für gzip, meist Standard) --
   fehlt sie, bleibt nur diese Quelle inaktiv, alle anderen funktionieren unabhängig
   davon weiter.
+- **Deutsche Ozonbelastung** (Umweltbundesamt, `luftdaten.umweltbundesamt.de`) --
+  optional, amtlicher Luftqualitätsindex, ausdrücklich NUR Ozon/Sommersmog (kein
+  allgemeines Luftgüte-Monitoring über weitere Schadstoffe, und keine private
+  Innenraum-Sensorik -- dafür ist WarnHub nicht gedacht). Amtliche 5-stufige Skala
+  (0 = sehr gut bis 4 = sehr schlecht), berechnet aus der stündlichen
+  Ozonkonzentration je Messstation. Anders als beim Waldbrandgefahrenindex liefert
+  die Quelle alle Stationen bundesweit in einem einzigen Abruf.
 - **Eigene Wetterstation** -- optional, unabhängig von allen übrigen Quellen: löst aus,
   sobald die lokal gemessene Windböe oder Regenrate den eigenen Schwellwert überschreitet.
   Beide gestuft in je drei Schwellwerten (Moderate/Severe/Extreme -- Wind Standard 40/65/90
@@ -237,7 +244,9 @@ einfach im Objektbaum in den Bereich des WebFronts verlinken:
 - **Kachel (Karte)** -- Kartenausschnitt (Esri-Straßenkarte), zentriert auf einen frei
   wählbaren Standort (Formularfeld "Standort für 'Kachel (Karte)'" im Panel "Prüfung &
   Status") -- auch mobile Standorte, folgt deren Live-Position. Markerfarbe nach höchstem
-  aktivem Schweregrad.
+  aktivem Schweregrad. Höhe standardmäßig automatisch (an die umgebende WebFront-/
+  Kachel-Visualisierung-Kachel angepasst) -- funktioniert nicht in jeder Konfiguration
+  zuverlässig, ersatzweise im selben Panel eine feste Pixelzahl eintragbar.
 - **Kachel (ZAMG-Warnkarte, Österreich)** -- bettet die offizielle ZAMG-Warnkarte
   (warnungen.zamg.at) direkt ein. Zeigt aktuell ganz Österreich, noch ohne automatische
   Zentrierung auf einen einzelnen Standort (bräuchte eine verifizierte Umrechnung in Österreichs
@@ -332,6 +341,10 @@ echtes WebFront nicht selbst gegenprüfbar -- Rückmeldungen willkommen.
   Meldewert stammt aus der jüngsten in der Stationsdatei verfügbaren Zeile -- je nach
   Aktualisierungsstand der Quelle kann das auch ein paar Tage zurückliegen, nicht
   zwingend der heutige Tag.
+- Die Ozonbelastung meldet nur Stationen, die tatsächlich Ozon messen -- längst nicht
+  jede der über 1000 UBA-Messstationen tut das (live geprüft: rund ein Viertel). Für
+  einen Standort ohne ozonmessende Station in erreichbarer Nähe kommt entsprechend
+  keine Meldung, auch wenn die eigentliche Ozonbelastung dort ähnlich sein könnte.
 - Die VKF-Hagelschutz-Anbindung ist **BETA und ungetestet**: das Protokoll ist aus der
   offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut,
   aber mangels eigener Signalbox nicht live gegengeprüft -- anders als jede andere Quelle in

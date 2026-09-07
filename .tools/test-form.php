@@ -337,6 +337,7 @@ check('Hinweis auf die fertigen WebFront-Kacheln steht im Prüfung & Status-Pane
 
 $karteStandortField = findByName($decoded['elements'], 'KartenkachelStandort');
 check('Auswahlfeld "KartenkachelStandort" (für die Karten-Kachel) vorhanden', $karteStandortField !== null);
+check('Höhenfeld "KartenkachelHoehePx" (für die Karten-Kachel) vorhanden', findByName($decoded['elements'], 'KartenkachelHoehePx') !== null);
 check('Auswahlfeld hat immer die Option "(kein Standort ausgewählt)" (leerer Wert erlaubt)', in_array(['caption' => '(kein Standort ausgewählt)', 'value' => ''], $karteStandortField['options'] ?? [], true));
 
 $fensterPanel = null;

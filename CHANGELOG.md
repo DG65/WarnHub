@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.6.0 (2026-09-07)
+
+- NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle --
+  amtlicher Luftqualitätsindex, ausdrücklich NUR Ozon/Sommersmog (Komponente
+  3), kein allgemeines Luftgüte-Monitoring über weitere Schadstoffe und
+  keine private Innenraum-Sensorik. Neue Property `QuelleOzonDe` +
+  `UbaOzonSchwelle` (Ab-Stufe 0-4, Standard 3). Amtliche 5-stufige Skala
+  (0=sehr gut bis 4=sehr schlecht, offizielle UBA-Bezeichnungen), amtliche
+  Ozon-Schwellen laut `/thresholds/json` (1-Stunden-Mittel, µg/m³): 0-60,
+  61-120, 121-180, 181-240, >240.
+- Anders als beim Waldbrandgefahrenindex liefert die UBA-API alle rund
+  1000 deutschen Stationen bundesweit in EINEM Abruf (live geprüft:
+  ~294 KB, < 1s) -- deshalb wie bei BAFU ein globaler Fetch statt
+  Standort-für-Standort. Neue Funktionen `fetchOzonDe()`,
+  `fetchUbaStations()`/`parseUbaStations()` (überspringt historische,
+  nicht mehr aktive Stationen), `fetchUbaOzoneReadings()`/
+  `parseUbaAirquality()` (nimmt je Station den neuesten verfügbaren
+  Zeitstempel; nicht jede Station misst Ozon -- live geprüft: rund ein
+  Viertel der aktiven Stationen).
+- Praxis-Fund beim Bauen: ein Zwei-Tage-Abfragezeitraum über alle
+  deutschen Stationen führte wiederholt zu HTTP 504 (Server-Timeout) --
+  ein Tag reicht für "neuester verfügbarer Wert" und liefert zuverlässig
+  in unter 1s.
+- Fix "Kachel (Karte)": die automatische Höhenanpassung (`height:100%`,
+  seit 1.5.1) funktioniert nicht in jeder WebFront-/Kachel-Visualisierung-
+  Konfiguration zuverlässig -- neue Property `KartenkachelHoehePx`
+  (0=automatisch, sonst feste Pixelzahl) im Panel "Prüfung & Status".
+  Praxis-Fund von kronos/Bricoleur im Symcon-Forum.
+- Dritte von drei gemeinsam recherchierten neuen Datenquellen (nach
+  Erdbeben Schweiz/Waldbrandgefahrenindex Deutschland) -- Dietmars
+  Wunsch 07.09.2026.
+
 ## 1.5.1 (2026-09-07)
 
 - Fix "Kachel (Karte)": lud bei manchen Nutzern keine Kartenkacheln (HTTP
