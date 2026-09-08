@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.11.0 (2026-09-07)
+
+- NEU: mobiler Standort erkennt jetzt zusätzlich zu Stellantis auch
+  Smartcar- (community Modul mb-stern/Smartcar, Symcon-Store-gelistet,
+  40+ Marken), BMW ConnectedDrive- (community Modul, GUID identisch
+  zwischen demel42-Original und Wolbolar-Fork) und Hyundai/Kia-Bluelink-
+  Fahrzeuge (community Modul da8ter/Bluelink) automatisch. Nachtrag zur
+  Forum-Recherche aus 1.10.0: bei genauerem Hinsehen liefern alle drei
+  zusätzlich untersuchten Module (die schon für die Fenster-/Kofferraum-
+  Recherche geprüft wurden) tatsächlich einen echten Standort-Datenpunkt
+  mit stabilem Ident -- Smartcar/Bluelink nutzen dieselbe "Latitude"/
+  "Longitude"-Konvention wie Stellantis, BMW eigene, markenspezifische
+  Idents ("bmw_current_latitude"/"...longitude"). Alle drei bewusst NUR
+  für den mobilen Standort genutzt, aus denselben Gründen wie bei
+  Stellantis keine Schutzaktions-Anbindung (kein EnableAction() auf einer
+  Fenster-/Kofferraum-Variable in irgendeinem der vier Module).
+- Der bisherige Stellantis-spezifische Suchpfad in
+  `DiscoverMobileStandorte()` wurde zu einer generischen, tabellengetriebenen
+  GUID+Ident-Suche (`DISCOVERY_LATLON_IDENTS`) verallgemeinert, damit
+  weitere Fahrzeug-/Fernzugriffs-Module künftig durch einen einzigen neuen
+  Tabelleneintrag ergänzt werden können, statt vier nahezu identische
+  Codeblöcke zu pflegen.
+
 ## 1.10.0 (2026-09-07)
 
 - NEU: mobiler Standort erkennt jetzt auch Stellantis-Fahrzeuge (Opel u. a.

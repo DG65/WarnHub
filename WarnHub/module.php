@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.10.0';
-    private const NEWS_VERSION = '1.10.0';
+    private const DOC_VERSION = '1.11.0';
+    private const NEWS_VERSION = '1.11.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -202,17 +202,40 @@ class WarnHub extends IPSModule
     // Für die Discovery zusätzlich Namenssuche als Fallback (andere
     // Wetterstationsmodule, gleiches Prinzip wie bei WebFront/Kachel-Visu).
     private const FROGGIT_GUID = '{499F8100-B051-E713-CEC0-499D795B2639}';
-    // Stellantis-Fahrzeuge (Opel u. a. ehemalige PSA-Marken, community
-    // Modul slausch/Symcon-Stellantis-Vehicles) -- GUID gegen den echten
-    // Quellcode verifiziert, 07.09.2026. Bewusst NUR für den mobilen
-    // Standort genutzt (stabile Idents "Latitude"/"Longitude", siehe
-    // DiscoverMobileStandorte()): das Modul ist Stand Version 0.4 ein
-    // reiner Auslese-Prototyp OHNE jede Fernbefehls-Funktion (kein
-    // einziges EnableAction() im Quellcode) und warnt selbst ausdrücklich
-    // vor unbeaufsichtigten/sicherheitskritischen Automationen -- eine
-    // Schutzaktions-Anbindung (Fenster/Kofferraum) kommt deshalb NICHT
-    // infrage, siehe auch DISCOVERY_KEYWORDS-Kommentar.
+    // Fahrzeug-/Fernzugriffs-Module für den mobilen Standort -- alle vier
+    // GUIDs UND Idents gegen den echten Quellcode verifiziert, 07.09.2026,
+    // auf Dietmars Bitte im Symcon-Forum recherchiert. Bewusst NUR für den
+    // mobilen Standort genutzt, NICHT für Schutzaktionen (Fenster/
+    // Kofferraum schließen): keines der vier Module hat dafür überhaupt
+    // eine Fernbefehls-Funktion im Quellcode (kein EnableAction() auf
+    // einer Fenster-/Kofferraum-Variable) -- Fenster-/Kofferraum-
+    // Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum, siehe
+    // DISCOVERY_KEYWORDS-Kommentar. Stellantis warnt zusätzlich selbst
+    // ausdrücklich vor unbeaufsichtigten/sicherheitskritischen
+    // Automationen (Version 0.4, reiner Auslese-Prototyp).
     private const STELLANTIS_VEHICLE_GUID = '{55719996-CD7E-4825-8B64-294601469EB5}';
+    // Smartcar (community Modul mb-stern/Smartcar, im Symcon Module Store
+    // gelistet, 40+ Fahrzeugmarken, aktiv gepflegt bis v4.8/03.09.2026) --
+    // Standort nur, wenn der Nutzer bei Smartcar den Zugriff "location"
+    // freigegeben hat (dynamische Rechte-Erkennung des Moduls selbst).
+    private const SMARTCAR_VEHICLE_GUID = '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}';
+    // BMW ConnectedDrive (community Modul, GUID identisch zwischen dem
+    // ursprünglichen demel42- und dem Wolbolar-Fork -- dieselbe
+    // Modul-Identität für Symcon, unabhängig vom installierten Git-Remote).
+    private const BMW_CONNECTEDDRIVE_VEHICLE_GUID = '{8FD2A163-E07A-A2A2-58CC-974155FAEE33}';
+    // Hyundai/Kia Bluelink (community Modul da8ter/Bluelink, Beta).
+    private const BLUELINK_VEHICLE_GUID = '{C3D4E5F6-789A-BCDE-F012-3456789ABCDE}';
+
+    // Ident-Paare je Fahrzeugmodul für die GUID-gescopte mobile-Standort-
+    // Suche in DiscoverMobileStandorte() -- robuster als ein Namensabgleich
+    // (siehe DISCOVERY_LATLON_PAIRS für die älteren, namensbasierten
+    // Quellen Tessie/Geofency, die keine so stabilen Idents liefern).
+    private const DISCOVERY_LATLON_IDENTS = [
+        ['label' => 'Stellantis', 'guid' => self::STELLANTIS_VEHICLE_GUID, 'lat' => 'Latitude', 'lon' => 'Longitude'],
+        ['label' => 'Smartcar', 'guid' => self::SMARTCAR_VEHICLE_GUID, 'lat' => 'Latitude', 'lon' => 'Longitude'],
+        ['label' => 'BMW ConnectedDrive', 'guid' => self::BMW_CONNECTEDDRIVE_VEHICLE_GUID, 'lat' => 'bmw_current_latitude', 'lon' => 'bmw_current_longitude'],
+        ['label' => 'Hyundai/Kia Bluelink', 'guid' => self::BLUELINK_VEHICLE_GUID, 'lat' => 'Latitude', 'lon' => 'Longitude'],
+    ];
 
     // Zweites unterstütztes Wetterstations-Modul: Wolbolar/IPSymconWeatherStation
     // (Sainlogic/Froggit/ELV über das Wunderground-Protokoll, GUID + Idents
@@ -600,7 +623,7 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
                     'onClick' => 'echo WHUB_DiscoverMobileStandorte($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", Stellantis-Fahrzeuge) und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
+                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", sowie Stellantis-, Smartcar-, BMW ConnectedDrive- und Hyundai/Kia-Bluelink-Fahrzeuge) und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
                 ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie- oder einer Geofency-Bridge-Variable): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
                 ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
                 [
@@ -1351,7 +1374,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen: neuer, unübersehbarer Sicherheitshinweis ganz oben im Panel zu "Fenster schließen"/"Kofferraum/Heckklappe schließen" -- weder Fahrzeug noch WarnHub können erkennen, ob sich eine Person im Bewegungsbereich der Scheibe/Klappe befindet, vorher nur versteckt im Hilfe-Popup'],
-                ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-Fahrzeuge (Opel u. a. ehemalige PSA-Marken, community Modul) automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): das Fremdmodul bietet aktuell keinerlei Fernbefehle und warnt selbst ausdrücklich vor sicherheitskritischen Automationen'],
+                ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-, Smartcar-, BMW ConnectedDrive- und Hyundai/Kia-Bluelink-Fahrzeuge automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): keines der vier community Module bietet dafür eine Fernbefehls-Funktion -- Fenster-/Kofferraum-Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2037,9 +2060,11 @@ class WarnHub extends IPSModule
      * unter derselben Instanz), die zu einem bekannten Namensmuster passen
      * (siehe DISCOVERY_LATLON_PAIRS) -- z. B. Tessies "Fahrzeugposition –
      * Breitengrad/Längengrad" oder Geofencys "Current Latitude/Longitude" --
-     * UND zusätzlich nach Stellantis-Fahrzeuginstanzen (GUID-gescopt, über
-     * die stabilen Idents "Latitude"/"Longitude", siehe
-     * STELLANTIS_VEHICLE_GUID-Kommentar oben) -- und ergänzt je Treffer
+     * UND zusätzlich nach Instanzen der vier GUID-gescopten Fahrzeug-/
+     * Fernzugriffs-Module (Stellantis, Smartcar, BMW ConnectedDrive,
+     * Hyundai/Kia Bluelink -- siehe DISCOVERY_LATLON_IDENTS-Kommentar
+     * oben, jeweils über deren stabile Idents statt Namensvergleich) --
+     * und ergänzt je Treffer
      * einen VORAKTIVIERTEN, bereits an die Live-Variablen gebundenen
      * mobilen Standort. Dietmars Nachfrage 04.09.2026: "Warum kannst du die
      * Zuordnung nicht auch gleich ... übernehmen?" -- bisher musste
@@ -2082,23 +2107,27 @@ class WarnHub extends IPSModule
             }
         }
 
-        // Stellantis-Fahrzeuge zusätzlich über ihre STABILEN Idents statt
-        // über einen Namensvergleich (siehe STELLANTIS_VEHICLE_GUID-
-        // Kommentar oben) -- robuster als DISCOVERY_LATLON_PAIRS, aber
-        // bewusst ein eigener, GUID-gescopter Pfad: "Breitengrad"/
-        // "Längengrad" liegen hier OHNE unterscheidenden Namens-Prefix
+        // Fahrzeug-/Fernzugriffs-Module zusätzlich über ihre STABILEN
+        // Idents statt über einen Namensvergleich (siehe
+        // DISCOVERY_LATLON_IDENTS-Kommentar oben) -- robuster als
+        // DISCOVERY_LATLON_PAIRS, aber bewusst ein eigener, GUID-gescopter
+        // Pfad je Modul: bei manchen (Stellantis/Smartcar/Bluelink) liegen
+        // "Breitengrad"/"Längengrad" OHNE unterscheidenden Namens-Prefix
         // direkt unter der Fahrzeuginstanz (anders als bei Tessie), ein
-        // reiner Namensabgleich wäre hier unnötig fragil, wo es doch
-        // echte Idents gibt. Praxis-Fund Froggit/Ecowitt 07.09.2026: Ident
-        // statt Name, wo immer möglich.
-        foreach (@IPS_GetInstanceListByModuleID(self::STELLANTIS_VEHICLE_GUID) ?: [] as $vehicleID) {
-            $latID = $this->findChildVariableByIdent($vehicleID, 'Latitude');
-            $lonID = $this->findChildVariableByIdent($vehicleID, 'Longitude');
-            if ($latID === null || $lonID === null) {
-                continue;
+        // reiner Namensabgleich wäre hier unnötig fragil, wo es doch echte
+        // Idents gibt. Praxis-Fund Froggit/Ecowitt 07.09.2026: Ident statt
+        // Name, wo immer möglich.
+        foreach (self::DISCOVERY_LATLON_IDENTS as $pattern) {
+            foreach (@IPS_GetInstanceListByModuleID($pattern['guid']) ?: [] as $vehicleID) {
+                $latID = $this->findChildVariableByIdent($vehicleID, $pattern['lat']);
+                $lonID = $this->findChildVariableByIdent($vehicleID, $pattern['lon']);
+                if ($latID === null || $lonID === null) {
+                    continue;
+                }
+                $key = $vehicleID . '|' . $pattern['guid'];
+                $latCandidates[$key] = $latID;
+                $lonCandidates[$key] = $lonID;
             }
-            $latCandidates[$vehicleID . '|stellantis'] = $latID;
-            $lonCandidates[$vehicleID . '|stellantis'] = $lonID;
         }
 
         $added = 0;
@@ -2133,7 +2162,7 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis-Fahrzeuge).';
+            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink).';
         }
         return sprintf('✅ %d mobile(r) Standort(e) gefunden und mit den Live-Variablen verknüpft -- bitte Umkreis/Schweregrad prüfen, dann unten „Übernehmen" klicken.', $added);
     }
