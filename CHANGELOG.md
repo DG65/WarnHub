@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.10.0 (2026-09-07)
+
+- NEU: mobiler Standort erkennt jetzt auch Stellantis-Fahrzeuge (Opel u. a.
+  ehemalige PSA-Marken, community Modul slausch/Symcon-Stellantis-Vehicles,
+  GUID `{55719996-CD7E-4825-8B64-294601469EB5}`) automatisch. Anders als
+  bei Tessie über die STABILEN Idents "Latitude"/"Longitude" statt über
+  einen Namensabgleich -- robuster, da "Breitengrad"/"Längengrad" hier
+  ohne unterscheidenden Namens-Prefix direkt unter der Fahrzeuginstanz
+  liegen. GUID und Idents gegen den echten Quellcode verifiziert.
+- Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum schließen):
+  das Stellantis-Modul ist Stand Version 0.4 ein reiner Auslese-Prototyp
+  ohne jede Fernbefehls-Funktion (kein einziges `EnableAction()` im
+  Quellcode) und warnt selbst ausdrücklich vor unbeaufsichtigten/
+  sicherheitskritischen Automationen.
+- Auf Dietmars Bitte zusätzlich im Symcon-Forum recherchiert, ob es
+  ANDERE Fahrzeug-Module analog zu Tessie gibt, die Fenster/Kofferraum
+  tatsächlich schließen können: vier reale Module wurden im Quellcode
+  geprüft (Stellantis, Smartcar -- Store-gelistet, 40+ Marken, aktiv
+  gepflegt bis v4.8, BMW ConnectedDrive, Hyundai/Kia Bluelink). Keines
+  davon bietet eine echte Fenster-/Kofferraum-Schließfunktion -- überall
+  nur Status (offen/zu), keine Aktion. Fenster-/Kofferraum-Fernsteuerung
+  bleibt damit ein Tesla-/Tessie-Spezifikum, keine Symcon-Modul-Lücke.
+
 ## 1.9.0 (2026-09-07)
 
 - Schutzaktionen-Panel: neuer, unübersehbarer Sicherheitshinweis zu

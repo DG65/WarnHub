@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.9.0';
-    private const NEWS_VERSION = '1.9.0';
+    private const DOC_VERSION = '1.10.0';
+    private const NEWS_VERSION = '1.10.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -202,6 +202,17 @@ class WarnHub extends IPSModule
     // Für die Discovery zusätzlich Namenssuche als Fallback (andere
     // Wetterstationsmodule, gleiches Prinzip wie bei WebFront/Kachel-Visu).
     private const FROGGIT_GUID = '{499F8100-B051-E713-CEC0-499D795B2639}';
+    // Stellantis-Fahrzeuge (Opel u. a. ehemalige PSA-Marken, community
+    // Modul slausch/Symcon-Stellantis-Vehicles) -- GUID gegen den echten
+    // Quellcode verifiziert, 07.09.2026. Bewusst NUR für den mobilen
+    // Standort genutzt (stabile Idents "Latitude"/"Longitude", siehe
+    // DiscoverMobileStandorte()): das Modul ist Stand Version 0.4 ein
+    // reiner Auslese-Prototyp OHNE jede Fernbefehls-Funktion (kein
+    // einziges EnableAction() im Quellcode) und warnt selbst ausdrücklich
+    // vor unbeaufsichtigten/sicherheitskritischen Automationen -- eine
+    // Schutzaktions-Anbindung (Fenster/Kofferraum) kommt deshalb NICHT
+    // infrage, siehe auch DISCOVERY_KEYWORDS-Kommentar.
+    private const STELLANTIS_VEHICLE_GUID = '{55719996-CD7E-4825-8B64-294601469EB5}';
 
     // Zweites unterstütztes Wetterstations-Modul: Wolbolar/IPSymconWeatherStation
     // (Sainlogic/Froggit/ELV über das Wunderground-Protokoll, GUID + Idents
@@ -589,7 +600,7 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
                     'onClick' => 'echo WHUB_DiscoverMobileStandorte($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude") und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
+                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", Stellantis-Fahrzeuge) und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
                 ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie- oder einer Geofency-Bridge-Variable): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
                 ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
                 [
@@ -1340,6 +1351,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen: neuer, unübersehbarer Sicherheitshinweis ganz oben im Panel zu "Fenster schließen"/"Kofferraum/Heckklappe schließen" -- weder Fahrzeug noch WarnHub können erkennen, ob sich eine Person im Bewegungsbereich der Scheibe/Klappe befindet, vorher nur versteckt im Hilfe-Popup'],
+                ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-Fahrzeuge (Opel u. a. ehemalige PSA-Marken, community Modul) automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): das Fremdmodul bietet aktuell keinerlei Fernbefehle und warnt selbst ausdrücklich vor sicherheitskritischen Automationen'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2025,12 +2037,15 @@ class WarnHub extends IPSModule
      * unter derselben Instanz), die zu einem bekannten Namensmuster passen
      * (siehe DISCOVERY_LATLON_PAIRS) -- z. B. Tessies "Fahrzeugposition –
      * Breitengrad/Längengrad" oder Geofencys "Current Latitude/Longitude" --
-     * und ergänzt je Treffer einen VORAKTIVIERTEN, bereits an die Live-
-     * Variablen gebundenen mobilen Standort. Dietmars Nachfrage 04.09.2026:
-     * "Warum kannst du die Zuordnung nicht auch gleich ... übernehmen?" --
-     * bisher musste QuellVarLat/QuellVarLon je Standort von Hand gesetzt
-     * werden. Läuft wie DiscoverWebFronts()/DiscoverSchutzaktionen() nur auf
-     * der offenen Formularmaske, "Übernehmen" bleibt der bewusste letzte Schritt.
+     * UND zusätzlich nach Stellantis-Fahrzeuginstanzen (GUID-gescopt, über
+     * die stabilen Idents "Latitude"/"Longitude", siehe
+     * STELLANTIS_VEHICLE_GUID-Kommentar oben) -- und ergänzt je Treffer
+     * einen VORAKTIVIERTEN, bereits an die Live-Variablen gebundenen
+     * mobilen Standort. Dietmars Nachfrage 04.09.2026: "Warum kannst du die
+     * Zuordnung nicht auch gleich ... übernehmen?" -- bisher musste
+     * QuellVarLat/QuellVarLon je Standort von Hand gesetzt werden. Läuft
+     * wie DiscoverWebFronts()/DiscoverSchutzaktionen() nur auf der offenen
+     * Formularmaske, "Übernehmen" bleibt der bewusste letzte Schritt.
      */
     public function DiscoverMobileStandorte(): string
     {
@@ -2067,6 +2082,25 @@ class WarnHub extends IPSModule
             }
         }
 
+        // Stellantis-Fahrzeuge zusätzlich über ihre STABILEN Idents statt
+        // über einen Namensvergleich (siehe STELLANTIS_VEHICLE_GUID-
+        // Kommentar oben) -- robuster als DISCOVERY_LATLON_PAIRS, aber
+        // bewusst ein eigener, GUID-gescopter Pfad: "Breitengrad"/
+        // "Längengrad" liegen hier OHNE unterscheidenden Namens-Prefix
+        // direkt unter der Fahrzeuginstanz (anders als bei Tessie), ein
+        // reiner Namensabgleich wäre hier unnötig fragil, wo es doch
+        // echte Idents gibt. Praxis-Fund Froggit/Ecowitt 07.09.2026: Ident
+        // statt Name, wo immer möglich.
+        foreach (@IPS_GetInstanceListByModuleID(self::STELLANTIS_VEHICLE_GUID) ?: [] as $vehicleID) {
+            $latID = $this->findChildVariableByIdent($vehicleID, 'Latitude');
+            $lonID = $this->findChildVariableByIdent($vehicleID, 'Longitude');
+            if ($latID === null || $lonID === null) {
+                continue;
+            }
+            $latCandidates[$vehicleID . '|stellantis'] = $latID;
+            $lonCandidates[$vehicleID . '|stellantis'] = $lonID;
+        }
+
         $added = 0;
         foreach ($latCandidates as $key => $latID) {
             if (!isset($lonCandidates[$key])) {
@@ -2099,7 +2133,7 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude").';
+            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis-Fahrzeuge).';
         }
         return sprintf('✅ %d mobile(r) Standort(e) gefunden und mit den Live-Variablen verknüpft -- bitte Umkreis/Schweregrad prüfen, dann unten „Übernehmen" klicken.', $added);
     }
