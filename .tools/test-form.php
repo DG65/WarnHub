@@ -252,6 +252,19 @@ $testOnClicks = array_column($testRow['items'] ?? [], 'onClick');
 check('jede Schaltfläche ruft WHUB_TestSchutzaktionen mit ihrem eigenen Kategorie-Schlüssel auf', count(array_filter($testOnClicks, fn ($c) => str_contains($c, "WHUB_TestSchutzaktionen(\$id, 'sturm')"))) === 1
     && count(array_filter($testOnClicks, fn ($c) => str_contains($c, "WHUB_TestSchutzaktionen(\$id, 'hagel')"))) === 1);
 
+// Sicherheitshinweis Fenster/Kofferraum (Einklemmgefahr, keine Hinderniserkennung)
+// muss als EIGENES, immer sichtbares Panel ganz oben stehen -- nicht nur
+// versteckt im "Welche Felder brauche ich?"-Popup, das ein Nutzer aktiv
+// aufklappen muss. Dietmars ausdrücklicher Wunsch 07.09.2026: "so stark
+// hervorheben, dass der Fokus des Nutzers auf diese Einstellung gelenkt wird".
+check('Sicherheitshinweis-Panel ist das ERSTE Element im Schutzaktionen-Panel (maximale Sichtbarkeit)', ($schutzaktionenPanel['items'][0]['type'] ?? null) === 'ExpansionPanel' && str_contains($schutzaktionenPanel['items'][0]['caption'] ?? '', 'SICHERHEITSHINWEIS'));
+$sicherheitsPanel = $schutzaktionenPanel['items'][0] ?? [];
+check('Sicherheitshinweis-Panel ist standardmäßig AUFGEKLAPPT, nicht hinter einem Klick versteckt', ($sicherheitsPanel['expanded'] ?? false) === true);
+$sicherheitsText = implode(' ', array_column($sicherheitsPanel['items'] ?? [], 'caption'));
+check('nennt explizit beide betroffenen Aktionstypen (Fenster schließen, Kofferraum/Heckklappe schließen)', str_contains($sicherheitsText, 'Fenster schließen') && str_contains($sicherheitsText, 'Kofferraum/Heckklappe schließen'));
+check('beschreibt die konkrete Gefahr: weder Fahrzeug noch WarnHub erkennen eine Person im Bewegungsbereich', str_contains($sicherheitsText, 'Person') && str_contains($sicherheitsText, 'Bewegungsbereich') && str_contains($sicherheitsText, 'KEINE zuverlässige Einklemmschutz'));
+check('enthält den ausdrücklichen Hinweis, die Funktion im Zweifel NICHT zu nutzen', str_contains($sicherheitsText, 'IM ZWEIFEL VERZICHTE AUF DIESE FUNKTION'));
+
 $webfrontsListe = findByName($decoded['elements'], 'WebFronts');
 $pushTypSpalte = null;
 foreach ($webfrontsListe['columns'] ?? [] as $col) {

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.9.0 (2026-09-07)
+
+- Schutzaktionen-Panel: neuer, unübersehbarer Sicherheitshinweis zu
+  "Fenster schließen" und "Kofferraum/Heckklappe schließen" -- als eigenes,
+  standardmäßig aufgeklapptes Panel ganz oben, statt wie bisher nur
+  versteckt im "Welche Felder brauche ich für welchen Aktionstyp?"-Popup,
+  das ein Nutzer erst aktiv anklicken musste. Dietmars ausdrücklicher
+  Wunsch 07.09.2026: "Da weder das Fahrzeug noch das SmartHome erkennen
+  kann, ob sich jemand im Gefahrenbereich des Schliessmechanismusses
+  befindet, müssen wir diese Stelle im Formular so stark hervorheben, dass
+  der Fokus des Nutzers auf diese Einstellungen gelenkt wird." Der Text
+  beschreibt die konkrete Gefahr (weder Fahrzeug noch WarnHub können eine
+  Person/Körperteil im Bewegungsbereich der schließenden Scheibe/Klappe
+  erkennen, keine Einklemmschutz-/Hinderniserkennung wie bei vielen
+  Garagentoren) und rät ausdrücklich, die Funktion im Zweifel nicht zu
+  nutzen. Der bestehende Hinweis im Hilfe-Popup (Teslas Kofferraum-Befehl
+  als reiner Umschalter ohne Richtung) bleibt zusätzlich bestehen und
+  verweist jetzt auf das neue Panel.
+
 ## 1.8.3 (2026-09-07)
 
 - Fix eigene Wetterstation (Froggit/Ecowitt): neuere Gateway-Generationen

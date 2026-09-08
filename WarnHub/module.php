@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.8.3';
-    private const NEWS_VERSION = '1.8.3';
+    private const DOC_VERSION = '1.9.0';
+    private const NEWS_VERSION = '1.9.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -791,6 +791,16 @@ class WarnHub extends IPSModule
             'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Kofferraum, Sirenen, Skripte)',
             'expanded' => false,
             'items' => [
+                [
+                    'type' => 'ExpansionPanel',
+                    'caption' => '🛑 SICHERHEITSHINWEIS -- Fenster/Kofferraum an Fahrzeugen: bitte unbedingt lesen',
+                    'expanded' => true,
+                    'items' => [
+                        ['type' => 'Label', 'caption' => 'Betrifft die beiden Aktionstypen "Fenster schließen" und "Kofferraum/Heckklappe schließen": Weder das Fahrzeug noch WarnHub können erkennen, ob sich gerade eine Person, eine Hand oder ein anderes Körperteil im Bewegungsbereich der schließenden Scheibe oder Klappe befindet.'],
+                        ['type' => 'Label', 'caption' => 'Anders als bei vielen Garagentoren gibt es hier KEINE zuverlässige Einklemmschutz- oder Hinderniserkennung, auf die sich WarnHub verlassen könnte -- die Aktion schließt unbeaufsichtigt, ohne Vorwarnung und unabhängig davon, ob gerade jemand danebensteht. Das kann zu ernsthaften Verletzungen führen.'],
+                        ['type' => 'Label', 'caption' => 'Aktiviere diese beiden Aktionstypen deshalb NUR, wenn du sicher bist, dass niemand unbeaufsichtigt in Reichweite des Fahrzeugs sein kann, wenn eine Warnung eintrifft (z. B. ein Fahrzeug, das ausschließlich auf einem nicht öffentlich zugänglichen Grundstück steht). IM ZWEIFEL VERZICHTE AUF DIESE FUNKTION und schließe Fenster/Kofferraum stattdessen selbst von Hand, sobald du die Warnung siehst.'],
+                    ],
+                ],
                 ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, Autofenster schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
                 ['type' => 'Label', 'caption' => 'Warnungen treffen oft Stunden vor ihrem eigentlichen Gültigkeitsbeginn ein -- eine Aktion feuert deshalb NICHT sofort bei Eingang der Meldung, sondern erst kurz vor dem tatsächlichen Beginn (Vorlauf unten, damit z. B. die Markise sicher fertig eingefahren ist). Warnungen ohne eigene Zeitangabe (kommt selten vor) lösen weiterhin sofort aus; bereits laufende/akute Warnungen ebenfalls.'],
                 ['type' => 'NumberSpinner', 'name' => 'SchutzaktionVorlaufMinuten', 'caption' => 'Vorlauf vor Gültigkeitsbeginn (Minuten)', 'minValue' => 0, 'maxValue' => 720],
@@ -801,8 +811,8 @@ class WarnHub extends IPSModule
                         'caption' => 'Felder je Aktionstyp',
                         'items' => [
                             ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-/Markisen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren/eingefahren, bitte am eigenen Aktor prüfen).'],
-                            ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern).'],
-                            ['type' => 'Label', 'caption' => 'Kofferraum/Heckklappe schließen: WICHTIG -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Deshalb zusätzlich zur Ziel-Variable zwingend eine Zustands-Variable angeben, die aktuell offene Klappen namentlich nennt (z. B. Tessies "Tür-/Klappenstatus") -- ausgelöst wird nur, wenn "Kofferraum" oder "Heckklappe" darin vorkommt, sonst passiert nichts. Ohne gültige Zustands-Variable feuert die Aktion GAR NICHT (Sicherheitssperre, kein Raten).'],
+                            ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern). 🛑 Beachte unbedingt den Sicherheitshinweis ganz oben im Panel -- Einklemmgefahr, keine Hinderniserkennung.'],
+                            ['type' => 'Label', 'caption' => 'Kofferraum/Heckklappe schließen: WICHTIG -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Deshalb zusätzlich zur Ziel-Variable zwingend eine Zustands-Variable angeben, die aktuell offene Klappen namentlich nennt (z. B. Tessies "Tür-/Klappenstatus") -- ausgelöst wird nur, wenn "Kofferraum" oder "Heckklappe" darin vorkommt, sonst passiert nichts. Ohne gültige Zustands-Variable feuert die Aktion GAR NICHT (Sicherheitssperre, kein Raten). 🛑 Beachte unbedingt den Sicherheitshinweis ganz oben im Panel -- Einklemmgefahr, keine Hinderniserkennung.'],
                             ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
                             ['type' => 'Label', 'caption' => 'Skript ausführen: Ziel-Skript statt Ziel-Variable/Zielwert.'],
                             ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise Sturm + Hagel an, bei Fenster schließen zusätzlich Starkregen.'],
@@ -1329,6 +1339,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "🔎 Objektbaum nach Schutzaktionen durchsuchen" findet jetzt auch Raffstore-/Jalousie-Steuerungen, deren Name selbst keinen Hinweis darauf gibt -- über Symcons eingebaute Rollladen-Variablendarstellung, unabhängig von Sprache/Eigennamen'],
                 ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Schutzaktionen: neuer, unübersehbarer Sicherheitshinweis ganz oben im Panel zu "Fenster schließen"/"Kofferraum/Heckklappe schließen" -- weder Fahrzeug noch WarnHub können erkennen, ob sich eine Person im Bewegungsbereich der Scheibe/Klappe befindet, vorher nur versteckt im Hilfe-Popup'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
