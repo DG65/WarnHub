@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.12.0 (2026-09-07)
+
+- NEU: mobiler Standort erkennt jetzt auch OVMS-native-Fahrzeuge
+  (community Modul lorbetzki/net.lorbetzki.native.ovms, für OVMS-Boxen
+  mit der älteren API V2). Dietmars eigener Fund 07.09.2026: bei der
+  Recherche nach der Stellantis-Anbindung auf "OVMS native" gestoßen.
+  Idents "location_latitude"/"location_longitude" sind im Quellcode FEST
+  vorregistriert (kein dynamischer Fallback wie beim Rest der
+  OVMS-Datenpunkte) -- verifiziert. Bewusst OHNE Schutzaktions-Anbindung
+  wie bei den vier anderen Fahrzeug-Modulen: `RequestAction()` ist im
+  Quellcode ein reiner Logging-Stub ohne echten Befehlsversand, trotz
+  vorhandener Trunk-STATUS-Variable ("status_bt_open"/"status_tr_open")
+  keine tatsächliche Fernsteuerung, kein Fenster überhaupt als Datenpunkt
+  vorgesehen.
+
 ## 1.11.1 (2026-09-07)
 
 - Dokumentation nachgezogen: drei Formular-Labels im Standorte-Panel

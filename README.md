@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.11.1-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.12.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -111,10 +111,10 @@ und Mindest-Schweregrad. Eine Warnung löst nur aus, wenn der Standort **geometr
 innerhalb der tatsächlichen Warnfläche (Polygon/Kreis der Meldung) oder ihres Umkreises
 liegt -- nicht anhand grober Postleitzahlen-/Gemeindegrenzen. Ein Standort kann statt fester
 Koordinaten auch an zwei Live-Variablen (Lat/Lon, z. B. aus Tessie, Geofency oder einem
-Stellantis-, Smartcar-, BMW ConnectedDrive- oder Hyundai/Kia-Bluelink-Fahrzeug) gebunden
-werden -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Eine eigene
-Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch (Tessie
-"Fahrzeugposition", Geofency "Current Latitude/Longitude", die vier genannten
+Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- oder OVMS-native-
+Fahrzeug) gebunden werden -- WarnHub liest dann bei jeder Prüfung die aktuelle Position.
+Eine eigene Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch
+(Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", die fünf genannten
 Fahrzeug-Module über deren jeweils stabile Idents) und legt direkt verknüpfte, aktivierte
 Standorte an -- kein manuelles Heraussuchen der Variablen-IDs nötig. Über einen
 "Push nur an"-Namensfilter lässt sich außerdem festlegen, dass ein Standort nur bestimmte
@@ -177,7 +177,7 @@ Danach eine neue Instanz vom Typ **WarnHub** anlegen.
    Symcon-Systemeinstellungen übernehmen" (liest die Kern-Instanz "Standort"), Adress-/
    PLZ-Suche über OpenStreetMap Nominatim, Punkt auf der Karte auswählen, oder Knopf
    "Fahrzeug-/Standort-Variablen suchen" für einen mobilen Standort (Tessie/Geofency/
-   Stellantis/Smartcar/BMW ConnectedDrive/Hyundai-Kia-Bluelink).
+   Stellantis/Smartcar/BMW ConnectedDrive/Hyundai-Kia-Bluelink/OVMS native).
 2. Datenquellen prüfen (NINA ist standardmäßig aktiv, alle anderen optional zusätzlich) --
    für eine eigene Wetterstation reicht meist der Knopf "Wetterstation suchen".
 3. Push-Benachrichtigung: Knopf "Push-Ziele suchen" klicken (findet WebFront-Instanzen,

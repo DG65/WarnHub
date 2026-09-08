@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.11.1';
-    private const NEWS_VERSION = '1.11.1';
+    private const DOC_VERSION = '1.12.0';
+    private const NEWS_VERSION = '1.12.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -225,6 +225,16 @@ class WarnHub extends IPSModule
     private const BMW_CONNECTEDDRIVE_VEHICLE_GUID = '{8FD2A163-E07A-A2A2-58CC-974155FAEE33}';
     // Hyundai/Kia Bluelink (community Modul da8ter/Bluelink, Beta).
     private const BLUELINK_VEHICLE_GUID = '{C3D4E5F6-789A-BCDE-F012-3456789ABCDE}';
+    // OVMS native (community Modul lorbetzki/net.lorbetzki.native.ovms,
+    // greift auf OVMS' eigene, als veraltet deklarierte API V2 zu -- für
+    // OVMS-Boxen ohne V3/MQTT). "location_latitude"/"location_longitude"
+    // sind FEST vorregistrierte Idents (kein dynamischer Fallback wie beim
+    // Rest der Datenpunkte), Dietmars Fund 07.09.2026. RequestAction() ist
+    // im Quellcode ein reiner Logging-Stub ohne echten Befehlsversand --
+    // trotz vorhandener Trunk-STATUS-Variable ("status_bt_open"/
+    // "status_tr_open") keine tatsächliche Fernsteuerung, kein Fenster
+    // überhaupt als Datenpunkt vorgesehen.
+    private const OVMS_NATIVE_VEHICLE_GUID = '{D8B35502-1B61-A6C7-25B5-0BC775116AC6}';
 
     // Ident-Paare je Fahrzeugmodul für die GUID-gescopte mobile-Standort-
     // Suche in DiscoverMobileStandorte() -- robuster als ein Namensabgleich
@@ -234,6 +244,7 @@ class WarnHub extends IPSModule
         ['label' => 'Stellantis', 'guid' => self::STELLANTIS_VEHICLE_GUID, 'lat' => 'Latitude', 'lon' => 'Longitude'],
         ['label' => 'Smartcar', 'guid' => self::SMARTCAR_VEHICLE_GUID, 'lat' => 'Latitude', 'lon' => 'Longitude'],
         ['label' => 'BMW ConnectedDrive', 'guid' => self::BMW_CONNECTEDDRIVE_VEHICLE_GUID, 'lat' => 'bmw_current_latitude', 'lon' => 'bmw_current_longitude'],
+        ['label' => 'OVMS native', 'guid' => self::OVMS_NATIVE_VEHICLE_GUID, 'lat' => 'location_latitude', 'lon' => 'location_longitude'],
         ['label' => 'Hyundai/Kia Bluelink', 'guid' => self::BLUELINK_VEHICLE_GUID, 'lat' => 'Latitude', 'lon' => 'Longitude'],
     ];
 
@@ -600,9 +611,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
-                ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-Fahrzeug -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Die Objektbaum-Suche im Standorte-Panel findet passende Variablenpaare automatisch und verknüpft sie direkt. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
+                ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeug -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Die Objektbaum-Suche im Standorte-Panel findet passende Variablenpaare automatisch und verknüpft sie direkt. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
                 ['type' => 'Label', 'caption' => 'Schutzaktionen feuern NICHT schon bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf im Schutzaktionen-Panel) -- eine morgens eintreffende, aber erst für den Nachmittag gültige Warnung fährt die Markise also nicht schon morgens ein. Die Push-Benachrichtigung selbst bleibt davon unberührt und kommt weiterhin sofort.'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Standorten/Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor -- mobile Standorte (Tessie-Fahrzeugposition, Geofency, Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-Fahrzeuge), die eigene Wetterstation (Froggit), WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen. Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Standorten/Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor -- mobile Standorte (Tessie-Fahrzeugposition, Geofency, Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeuge), die eigene Wetterstation (Froggit), WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen. Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
             ],
         ];
 
@@ -623,9 +634,9 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
                     'onClick' => 'echo WHUB_DiscoverMobileStandorte($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", sowie Stellantis-, Smartcar-, BMW ConnectedDrive- und Hyundai/Kia-Bluelink-Fahrzeuge) und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
-                ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-Fahrzeug): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
-                ['type' => 'Label', 'caption' => 'Welche Module genau: "Tessie" (DG65-eigenes Modul für Tesla), "Geofency" (Bridge für die gleichnamige Geofencing-App), sowie drei über den Symcon Module Store bzw. GitHub installierbare Community-Module -- im Store nach dem jeweiligen Namen suchen: "Stellantis Vehicles" (Opel u. a. ehemalige PSA-Marken, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ Fahrzeugmarken über die Smartcar-Plattform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, aktuell Beta).'],
+                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", sowie Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- und OVMS-native-Fahrzeuge) und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
+                ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeug): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
+                ['type' => 'Label', 'caption' => 'Welche Module genau: "Tessie" (DG65-eigenes Modul für Tesla), "Geofency" (Bridge für die gleichnamige Geofencing-App), sowie vier über den Symcon Module Store bzw. GitHub installierbare Community-Module -- im Store nach dem jeweiligen Namen suchen: "Stellantis Vehicles" (Opel u. a. ehemalige PSA-Marken, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ Fahrzeugmarken über die Smartcar-Plattform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, aktuell Beta), "OVMS native" (für OVMS-Boxen mit der älteren API V2, github.com/lorbetzki/net.lorbetzki.native.ovms).'],
                 ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
                 [
                     'type' => 'List',
@@ -1375,7 +1386,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen: neuer, unübersehbarer Sicherheitshinweis ganz oben im Panel zu "Fenster schließen"/"Kofferraum/Heckklappe schließen" -- weder Fahrzeug noch WarnHub können erkennen, ob sich eine Person im Bewegungsbereich der Scheibe/Klappe befindet, vorher nur versteckt im Hilfe-Popup'],
-                ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-, Smartcar-, BMW ConnectedDrive- und Hyundai/Kia-Bluelink-Fahrzeuge automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): keines der vier community Module bietet dafür eine Fernbefehls-Funktion -- Fenster-/Kofferraum-Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum'],
+                ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- und OVMS-native-Fahrzeuge automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): keines der fünf community Module bietet dafür eine Fernbefehls-Funktion -- Fenster-/Kofferraum-Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2061,10 +2072,10 @@ class WarnHub extends IPSModule
      * unter derselben Instanz), die zu einem bekannten Namensmuster passen
      * (siehe DISCOVERY_LATLON_PAIRS) -- z. B. Tessies "Fahrzeugposition –
      * Breitengrad/Längengrad" oder Geofencys "Current Latitude/Longitude" --
-     * UND zusätzlich nach Instanzen der vier GUID-gescopten Fahrzeug-/
+     * UND zusätzlich nach Instanzen der fünf GUID-gescopten Fahrzeug-/
      * Fernzugriffs-Module (Stellantis, Smartcar, BMW ConnectedDrive,
-     * Hyundai/Kia Bluelink -- siehe DISCOVERY_LATLON_IDENTS-Kommentar
-     * oben, jeweils über deren stabile Idents statt Namensvergleich) --
+     * Hyundai/Kia Bluelink, OVMS native -- siehe DISCOVERY_LATLON_IDENTS-
+     * Kommentar oben, jeweils über deren stabile Idents statt Namensvergleich) --
      * und ergänzt je Treffer
      * einen VORAKTIVIERTEN, bereits an die Live-Variablen gebundenen
      * mobilen Standort. Dietmars Nachfrage 04.09.2026: "Warum kannst du die
@@ -2163,7 +2174,7 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink).';
+            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink, OVMS native).';
         }
         return sprintf('✅ %d mobile(r) Standort(e) gefunden und mit den Live-Variablen verknüpft -- bitte Umkreis/Schweregrad prüfen, dann unten „Übernehmen" klicken.', $added);
     }

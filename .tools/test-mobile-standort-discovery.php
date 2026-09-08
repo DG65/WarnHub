@@ -54,8 +54,14 @@
 //    +- 17 Instanz "EV6" (Hyundai/Kia Bluelink, community Modul da8ter/Bluelink)
 //        +- 171 Var "Latitude", Ident "Latitude" (53.0)
 //        +- 172 Var "Longitude", Ident "Longitude" (12.0)
+//    +- 18 Instanz "Twizy" (OVMS native, community Modul
+//          lorbetzki/net.lorbetzki.native.ovms) -- eigene Idents mit
+//          "location_"-Prefix, FEST vorregistriert (kein dynamischer
+//          Fallback wie beim Rest der OVMS-Datenpunkte)
+//        +- 181 Var "latitude", Ident "location_latitude" (48.0)
+//        +- 182 Var "longitude", Ident "location_longitude" (7.0)
 $GLOBALS['whub_test_tree'] = [
-    0 => [10, 11, 12, 13, 14, 15, 16, 17],
+    0 => [10, 11, 12, 13, 14, 15, 16, 17, 18],
     10 => [101, 102, 103, 104],
     11 => [111, 112],
     12 => [121, 122, 123, 124],
@@ -64,6 +70,7 @@ $GLOBALS['whub_test_tree'] = [
     15 => [151, 152],
     16 => [161, 162],
     17 => [171, 172],
+    18 => [181, 182],
 ];
 $GLOBALS['whub_test_objects'] = [
     10 => ['ObjectType' => 1, 'ObjectName' => 'Kohlekasten', 'ParentID' => 0],
@@ -74,6 +81,7 @@ $GLOBALS['whub_test_objects'] = [
     15 => ['ObjectType' => 1, 'ObjectName' => '208 GT', 'ParentID' => 0],
     16 => ['ObjectType' => 1, 'ObjectName' => 'iX', 'ParentID' => 0],
     17 => ['ObjectType' => 1, 'ObjectName' => 'EV6', 'ParentID' => 0],
+    18 => ['ObjectType' => 1, 'ObjectName' => 'Twizy', 'ParentID' => 0],
     101 => ['ObjectType' => 2, 'ObjectName' => 'Fahrzeugposition – Breitengrad', 'ParentID' => 10],
     102 => ['ObjectType' => 2, 'ObjectName' => 'Fahrzeugposition – Längengrad', 'ParentID' => 10],
     103 => ['ObjectType' => 2, 'ObjectName' => 'Zielposition – Breitengrad', 'ParentID' => 10],
@@ -93,6 +101,8 @@ $GLOBALS['whub_test_objects'] = [
     162 => ['ObjectType' => 2, 'ObjectName' => 'current longitude', 'ParentID' => 16, 'ObjectIdent' => 'bmw_current_longitude'],
     171 => ['ObjectType' => 2, 'ObjectName' => 'Latitude', 'ParentID' => 17, 'ObjectIdent' => 'Latitude'],
     172 => ['ObjectType' => 2, 'ObjectName' => 'Longitude', 'ParentID' => 17, 'ObjectIdent' => 'Longitude'],
+    181 => ['ObjectType' => 2, 'ObjectName' => 'latitude', 'ParentID' => 18, 'ObjectIdent' => 'location_latitude'],
+    182 => ['ObjectType' => 2, 'ObjectName' => 'longitude', 'ParentID' => 18, 'ObjectIdent' => 'location_longitude'],
 ];
 $GLOBALS['whub_test_values'] = [
     101 => 48.5, 102 => 7.9, 103 => 52.0, 104 => 13.0,
@@ -103,12 +113,14 @@ $GLOBALS['whub_test_values'] = [
     151 => 47.0, 152 => 8.0,
     161 => 49.0, 162 => 11.0,
     171 => 53.0, 172 => 12.0,
+    181 => 48.0, 182 => 7.0,
 ];
 $GLOBALS['whub_test_instancesByModule'] = [
     '{55719996-CD7E-4825-8B64-294601469EB5}' => [14],
     '{1E1B7C9A-2D4F-4E8A-9C3B-7F6D5A4E2B10}' => [15],
     '{8FD2A163-E07A-A2A2-58CC-974155FAEE33}' => [16],
     '{C3D4E5F6-789A-BCDE-F012-3456789ABCDE}' => [17],
+    '{D8B35502-1B61-A6C7-25B5-0BC775116AC6}' => [18],
 ];
 
 function IPS_GetChildrenIDs(int $id): array
@@ -287,11 +299,11 @@ $hub->Create();
 
 echo "== DiscoverMobileStandorte(): Erstlauf ==\n";
 $msg = $hub->DiscoverMobileStandorte();
-check('meldet 7 gefundene mobile Standorte (2x Tessie + 1x Geofency + Stellantis + Smartcar + BMW + Bluelink)', str_contains($msg, '7 mobile'));
+check('meldet 8 gefundene mobile Standorte (2x Tessie + 1x Geofency + Stellantis + Smartcar + BMW + Bluelink + OVMS native)', str_contains($msg, '8 mobile'));
 [$field, , $valuesJson] = $hub->lastValuesUpdate('Standorte');
 check('schreibt in das Feld "Standorte"', $field === 'Standorte');
 $rows = json_decode($valuesJson, true);
-check('genau 7 Zeilen (Wetterstation ohne Treffer)', count($rows) === 7);
+check('genau 8 Zeilen (Wetterstation ohne Treffer)', count($rows) === 8);
 
 $byName = [];
 foreach ($rows as $r) {
@@ -308,6 +320,7 @@ check('"Astra Electric" -> Startwert aus dem aktuellen Variablenwert übernommen
 check('"208 GT" (Smartcar) -> über Ident gefunden (151/152)', ($byName['208 GT']['QuellVarLat'] ?? null) === 151 && ($byName['208 GT']['QuellVarLon'] ?? null) === 152);
 check('"iX" (BMW ConnectedDrive) -> über eigene, markenspezifische Idents "bmw_current_latitude"/"...longitude" gefunden (161/162), nicht die generischen "Latitude"/"Longitude"', ($byName['iX']['QuellVarLat'] ?? null) === 161 && ($byName['iX']['QuellVarLon'] ?? null) === 162);
 check('"EV6" (Hyundai/Kia Bluelink) -> über Ident gefunden (171/172)', ($byName['EV6']['QuellVarLat'] ?? null) === 171 && ($byName['EV6']['QuellVarLon'] ?? null) === 172);
+check('"Twizy" (OVMS native) -> über die fest vorregistrierten "location_latitude"/"location_longitude"-Idents gefunden (181/182)', ($byName['Twizy']['QuellVarLat'] ?? null) === 181 && ($byName['Twizy']['QuellVarLon'] ?? null) === 182);
 
 $allQuellVarLat = array_column($rows, 'QuellVarLat');
 $allQuellVarLon = array_column($rows, 'QuellVarLon');
@@ -317,9 +330,9 @@ check('das geofencyeigene Latitude/Longitude ohne "Current" (123/124) taucht in 
 echo "\n== Gegenprobe: erneute Suche nach 'Übernehmen' findet keine neuen Treffer mehr ==\n";
 $hub->SetProp('Standorte', $valuesJson);
 $msg2 = $hub->DiscoverMobileStandorte();
-check('meldet "keine neuen" statt erneut 7 Treffer (kein Duplikat)', str_contains($msg2, 'Keine neuen'));
+check('meldet "keine neuen" statt erneut 8 Treffer (kein Duplikat)', str_contains($msg2, 'Keine neuen'));
 [, , $valuesJson2] = $hub->lastValuesUpdate('Standorte');
-check('Zeilenzahl bleibt bei 7 (kein Duplikat entstanden)', count(json_decode($valuesJson2, true)) === 7);
+check('Zeilenzahl bleibt bei 8 (kein Duplikat entstanden)', count(json_decode($valuesJson2, true)) === 8);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
