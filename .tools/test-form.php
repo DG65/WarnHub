@@ -322,6 +322,14 @@ foreach ($standortePanel['items'] ?? [] as $item) {
 }
 check('Button "Fahrzeug-/Standort-Variablen suchen" (mobiler Standort) steht im Standorte-Panel', $mobilBtn !== null);
 
+// Dietmars Nachfrage 07.09.2026: "Kannst du dazu schreiben, um welche
+// Module es sich handelt die wir angebunden haben?" -- eigenes Label mit
+// allen sechs unterstützten Quellen samt Fundstelle (Store-Name/GitHub),
+// nicht nur in Code-Kommentaren/CHANGELOG.
+$standorteText = implode(' ', array_column($standortePanel['items'] ?? [], 'caption'));
+check('nennt alle sechs mobilen-Standort-Quellen namentlich (Tessie, Geofency, Stellantis Vehicles, Smartcar, BMW Connected Drive, Hyundai/Kia Bluelink)', str_contains($standorteText, 'Tessie') && str_contains($standorteText, 'Geofency') && str_contains($standorteText, 'Stellantis Vehicles') && str_contains($standorteText, 'Smartcar') && str_contains($standorteText, 'BMW Connected Drive') && str_contains($standorteText, 'Hyundai/Kia Bluelink'));
+check('nennt die GitHub-Fundstellen der drei nicht im Store-Suchnamen eindeutigen Community-Module', str_contains($standorteText, 'github.com/slausch/Symcon-Stellantis-Vehicles') && str_contains($standorteText, 'github.com/mb-stern/Smartcar') && str_contains($standorteText, 'github.com/da8ter/Bluelink'));
+
 check('Feld "WetterstationInstanceID" (eigene Wetterstation) vorhanden', findByName($decoded['elements'], 'WetterstationInstanceID') !== null);
 check('manuelles Feld "WetterstationWindVariableID" (andere Fabrikate, z. B. KNX) vorhanden', findByName($decoded['elements'], 'WetterstationWindVariableID') !== null);
 check('manuelles Feld "WetterstationRegenVariableID" (andere Fabrikate, z. B. KNX) vorhanden', findByName($decoded['elements'], 'WetterstationRegenVariableID') !== null);

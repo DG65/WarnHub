@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.11.1 (2026-09-07)
+
+- Dokumentation nachgezogen: drei Formular-Labels im Standorte-Panel
+  nannten nach 1.11.0 noch immer nur "Tessie oder Geofency" statt aller
+  sechs unterstützten mobilen-Standort-Quellen (waren zuvor nur in
+  Code-Kommentaren/CHANGELOG erfasst, nicht im sichtbaren Formulartext).
+  Neues Label nennt jetzt zusätzlich explizit, um welche Module es sich
+  handelt und wo man sie findet (Store-Suchname bzw. GitHub-Repo) --
+  Dietmars Nachfrage 07.09.2026: "um welche Module es sich handelt die
+  wir angebunden haben".
+
 ## 1.11.0 (2026-09-07)
 
 - NEU: mobiler Standort erkennt jetzt zusätzlich zu Stellantis auch
