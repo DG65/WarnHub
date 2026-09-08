@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.12.0';
-    private const NEWS_VERSION = '1.12.0';
+    private const DOC_VERSION = '1.12.1';
+    private const NEWS_VERSION = '1.12.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1387,6 +1387,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Schutzaktionen: neuer, unübersehbarer Sicherheitshinweis ganz oben im Panel zu "Fenster schließen"/"Kofferraum/Heckklappe schließen" -- weder Fahrzeug noch WarnHub können erkennen, ob sich eine Person im Bewegungsbereich der Scheibe/Klappe befindet, vorher nur versteckt im Hilfe-Popup'],
                 ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- und OVMS-native-Fahrzeuge automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): keines der fünf community Module bietet dafür eine Fernbefehls-Funktion -- Fenster-/Kofferraum-Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum'],
+                ['type' => 'Label', 'caption' => '• Fix Push-/Schutzaktions-Schwall: der DWD vergibt bei "Vorabinformationen vor Unwetter" für dieselbe andauernde Gefahr alle 15-30 Minuten eine NEUE Meldungs-ID statt eines Updates der alten -- das führte zu Schwärmen mehrerer Push-Benachrichtigungen für ein und dasselbe Ereignis und hätte theoretisch auch Schutzaktionen (Jalousie/Markise/Garage) wiederholt auslösen können. Push und Schutzaktionen erkennen fortlaufende Meldungen jetzt am Ereignistyp statt an der wechselnden ID und lösen pro andauerndem Ereignis nur noch einmal aus'],
+                ['type' => 'Label', 'caption' => '• Fix Sprachauswahl: eine über NINA aggregierte Meldung konnte komplett auf Englisch erscheinen, wenn deren deutschsprachiger Eintrag nicht exakt "de-DE"/"de" geschrieben war -- die Erkennung ist jetzt toleranter (Groß-/Kleinschreibung, Leerraum)'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2519,20 +2521,39 @@ class WarnHub extends IPSModule
         return $out;
     }
 
+    /**
+     * Wählt aus einem CAP-`info[]`-Array den deutschsprachigen Eintrag.
+     *
+     * NINA aggregiert Meldungen aus mehreren Quellen (MoWaS/KATWARN/BIWAPP/DWD/
+     * LHP/Polizei) mit uneinheitlicher `language`-Schreibweise -- ein exakter
+     * Vergleich auf 'de-DE'/'de' hatte einzelne Meldungen (z. B. mit 'DE' oder
+     * 'de-DE ' mit Leerraum) verfehlt und still auf den ersten, teils
+     * englischsprachigen Eintrag zurückfallen lassen (live beobachtet: eine
+     * Gewitterwarnung erschien komplett auf Englisch). Bewusst kein komplettes
+     * Verwerfen ohne deutschen Treffer -- eine Sicherheitswarnung lieber in
+     * Fremdsprache zeigen als sie stillschweigend zu unterschlagen.
+     *
+     * @param array<int,array<string,mixed>> $infoList
+     * @return array<string,mixed>|null
+     */
+    private function selectGermanCapInfo(array $infoList): ?array
+    {
+        foreach ($infoList as $info) {
+            $lang = strtolower(trim((string) ($info['language'] ?? '')));
+            if ($lang !== '' && strpos($lang, 'de') === 0) {
+                return $info;
+            }
+        }
+        return $infoList[0] ?? null;
+    }
+
     private function fetchNinaDetail(string $id): ?array
     {
         $meta = $this->httpGetJson('https://warnung.bund.de/api31/warnings/' . rawurlencode($id) . '.json');
         if ($meta === null || !isset($meta['info'][0])) {
             return null;
         }
-        $infoDe = null;
-        foreach ($meta['info'] as $info) {
-            if (($info['language'] ?? '') === 'de-DE' || ($info['language'] ?? '') === 'de') {
-                $infoDe = $info;
-                break;
-            }
-        }
-        $infoDe = $infoDe ?? $meta['info'][0];
+        $infoDe = $this->selectGermanCapInfo($meta['info']);
 
         $geo = $this->httpGetJson('https://warnung.bund.de/api31/warnings/' . rawurlencode($id) . '.geojson');
         [$rings, $circles] = $this->extractGeoJsonGeometry($geo);
@@ -3293,12 +3314,19 @@ class WarnHub extends IPSModule
         return $out;
     }
 
-    /** Prüft, ob ein Wetterstations-Identifier für IRGENDEINEN Standort noch als aktiv verfolgt wird (siehe fetchWetterstation()-Entwarnungslogik). */
+    /**
+     * Prüft, ob ein Wetterstations-Identifier für IRGENDEINEN Standort noch
+     * als aktiv verfolgt wird (siehe fetchWetterstation()-Entwarnungslogik).
+     * $seen ist seit der Umstellung auf episodenbasierte Schlüssel
+     * (warningEpisodeKey(), Dietmars Meldung 08.09.2026 zu Push-Schwärmen)
+     * nicht mehr NACH der identifier benannt -- die identifier steckt
+     * stattdessen im Wert jedes Eintrags, dort wird gesucht.
+     */
     private function wetterstationIdentifierWasSeen(string $identifier): bool
     {
         $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
-        foreach (array_keys($seen) as $pairKey) {
-            if (strstr($pairKey, '|', true) === $identifier) {
+        foreach ($seen as $entry) {
+            if (($entry['identifier'] ?? null) === $identifier) {
                 return true;
             }
         }
@@ -4280,6 +4308,23 @@ class WarnHub extends IPSModule
         return sprintf('✅ %d Schutzaktion(en) für "%s" ausgelöst: %s', count($matching), $label, implode(', ', $names));
     }
 
+    /**
+     * Stabiler Schlüssel für eine "Warnungs-Episode" an einem Standort --
+     * anders als die rohe CAP-`identifier`, die z. B. der DWD bei seinen
+     * "Vorabinformationen vor Unwetter" (PVW) alle 15-30 Minuten NEU
+     * vergibt, obwohl es inhaltlich dieselbe andauernde Gefahr ist (live
+     * beobachtet: 6 verschiedene Identifier für "Starkes Gewitter" binnen
+     * einer Stunde). Ein Dedup über `identifier` hätte bei jedem Reissue
+     * erneut gepusht UND erneut Schutzaktionen ausgelöst -- Dietmars
+     * Meldung 08.09.2026: "10 Meldungen auf einmal" bei einem einzigen
+     * Push-Schwall. `event` (statt `headline`, die z. B. die Gültigkeit
+     * enthalten kann) bleibt über Reissues hinweg stabil.
+     */
+    private function warningEpisodeKey(array $w, string $standortName): string
+    {
+        return $w['source'] . '|' . $w['event'] . '|' . $standortName;
+    }
+
     private function processWarnings(array $warnings): array
     {
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
@@ -4295,7 +4340,7 @@ class WarnHub extends IPSModule
         // automatisch schützen, nur nicht ständig benachrichtigt werden).
         $pushAktiv = $this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed();
 
-        $stillPresent = [];
+        $stillPresentEpisodes = [];
         $active = [];
         $newlyPushed = 0;
         $escalated = 0;
@@ -4321,7 +4366,6 @@ class WarnHub extends IPSModule
                 }
             }
 
-            $stillPresent[$w['identifier']] = true;
             $category = $this->classifyEventCategory($w['event'], $w['headline']);
             // Schutzaktionen sollen erst kurz VOR dem tatsächlichen Beginn
             // einer Warnung feuern, nicht schon in dem Moment, in dem die
@@ -4345,7 +4389,7 @@ class WarnHub extends IPSModule
                 if (isset($w['forStandort']) && $w['forStandort'] !== $standort['Name']) {
                     continue;
                 }
-                $pairKey = $w['identifier'] . '|' . $standort['Name'];
+                $episodeKey = $this->warningEpisodeKey($w, $standort['Name']);
                 $coords = $this->resolveStandortCoords($standort);
                 $pushZiele = $this->parsePushZielNames($standort['PushZielFilter']);
 
@@ -4378,9 +4422,11 @@ class WarnHub extends IPSModule
                     continue;
                 }
 
+                $stillPresentEpisodes[$episodeKey] = true;
+
                 if ($w['msgType'] === 'Cancel') {
-                    if (isset($seen[$pairKey])) {
-                        unset($seen[$pairKey]);
+                    if (isset($seen[$episodeKey])) {
+                        unset($seen[$episodeKey]);
                         $this->logHistory('entwarnung', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
@@ -4410,19 +4456,29 @@ class WarnHub extends IPSModule
                     'expires' => $w['expires'],
                 ];
 
-                // Erneut pushen, wenn die Meldung NEU ist ODER seit dem letzten
-                // Push tatsächlich HOCHGESTUFT wurde (z. B. DWD verschärft eine
-                // laufende Sturmwarnung von Moderate auf Severe) -- vorher blieb
-                // eine bereits gesehene Warnung für immer stumm, auch wenn sie
-                // sich deutlich verschlimmerte. Eine Abstufung pusht bewusst
+                // Erneut pushen, wenn die Meldung NEU ist (auch: eine neue
+                // Episode nach einer ECHTEN Lücke -- die vorige ist
+                // abgelaufen, bevor diese beginnt) ODER seit dem letzten
+                // Push tatsächlich HOCHGESTUFT wurde (z. B. DWD verschärft
+                // eine laufende Sturmwarnung von Moderate auf Severe).
+                // Reissues derselben Episode mit fortlaufender/überlappender
+                // Gültigkeit (siehe warningEpisodeKey()) aktualisieren den
+                // gemerkten Zustand nur still, OHNE erneut zu pushen --
+                // sonst pusht z. B. jede der alle 15-30 Minuten neu
+                // vergebenen DWD-PVW-Identifier erneut, obwohl es dieselbe
+                // andauernde Gefahr ist (Dietmars Meldung 08.09.2026: "10
+                // Meldungen auf einmal"). Eine Abstufung pusht bewusst
                 // NICHT erneut (keine dringende Nachricht), hält die
                 // gespeicherte Severity aber aktuell, damit ein SPÄTERES
                 // erneutes Ansteigen auf denselben Wert wieder zählt.
-                $seenEntry = $seen[$pairKey] ?? null;
-                $isNewWarning = $seenEntry === null;
+                $seenEntry = $seen[$episodeKey] ?? null;
+                $prevExpiresTs = $seenEntry !== null && !empty($seenEntry['expires']) ? strtotime((string) $seenEntry['expires']) : false;
+                $currentStartTs = !empty($w['onset']) ? strtotime((string) $w['onset']) : (!empty($w['effective']) ? strtotime((string) $w['effective']) : false);
+                $isGenuineGap = $seenEntry !== null && $prevExpiresTs !== false && $currentStartTs !== false && $prevExpiresTs < $currentStartTs;
+                $isNewWarning = $seenEntry === null || $isGenuineGap;
                 $isEscalation = !$isNewWarning && $this->severityRank($w['severity']) > $this->severityRank($seenEntry['severity'] ?? 'Unknown');
                 if ($isNewWarning || $isEscalation) {
-                    $seen[$pairKey] = ['msgType' => $w['msgType'], 'pushedAt' => time(), 'severity' => $w['severity']];
+                    $seen[$episodeKey] = ['identifier' => $w['identifier'], 'msgType' => $w['msgType'], 'pushedAt' => time(), 'severity' => $w['severity'], 'expires' => $w['expires']];
                     $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
                     if ($pushAktiv) {
                         $text = $this->buildPushText($standort['Name'], $w, $nameMatched);
@@ -4443,7 +4499,9 @@ class WarnHub extends IPSModule
                         $escalated++;
                     }
                 } elseif ($seenEntry !== null) {
-                    $seen[$pairKey]['severity'] = $w['severity'];
+                    $seen[$episodeKey]['severity'] = $w['severity'];
+                    $seen[$episodeKey]['identifier'] = $w['identifier'];
+                    $seen[$episodeKey]['expires'] = $w['expires'] ?? $seenEntry['expires'] ?? null;
                 }
 
                 foreach ($actions as $idx => $action) {
@@ -4472,7 +4530,14 @@ class WarnHub extends IPSModule
                     if ($this->severityRank($w['severity']) < $action['MinSeverity']) {
                         continue;
                     }
-                    $fireKey = $w['identifier'] . '|' . $idx;
+                    // Über die Episode (nicht die rohe, bei Reissues
+                    // wechselnde identifier) gekeyt -- sonst würde z. B. ein
+                    // alle 15-30 Minuten neu vergebener DWD-PVW-Identifier
+                    // dieselbe Schutzaktion (Jalousie/Markise/Garage) erneut
+                    // auslösen, obwohl die andauernde Gefahr unverändert ist
+                    // (Dietmars Meldung 08.09.2026, dieselbe Ursache wie beim
+                    // Push-Schwall).
+                    $fireKey = $episodeKey . '|' . $idx;
                     if (isset($fired[$fireKey])) {
                         continue;
                     }
@@ -4518,7 +4583,10 @@ class WarnHub extends IPSModule
                     if ($this->isContactOpen($kontakt['VariableID']) !== true) {
                         continue;
                     }
-                    $fensterKey = $w['identifier'] . '|' . $kontakt['Name'];
+                    // Ebenfalls episodenbasiert -- sonst würde ein bereits
+                    // offener Fensterkontakt bei jedem DWD-Reissue erneut
+                    // gemeldet, obwohl er die ganze Zeit unverändert offen war.
+                    $fensterKey = $episodeKey . '|' . $kontakt['Name'];
                     if (isset($seenFenster[$fensterKey])) {
                         continue;
                     }
@@ -4555,19 +4623,24 @@ class WarnHub extends IPSModule
         }
         $this->WriteAttributeString('SeenFensterWarnungen', json_encode($seenFenster));
 
-        // Warnungen, die im aktuellen Abruf nicht mehr auftauchen (abgelaufen/
-        // aus der Quelle entfernt), still aus dem "gesehen"-Speicher nehmen --
-        // kein Cancel-Ereignis vorhanden, daher keine Entwarnungs-Push, nur
-        // Bereinigung, damit der Zustand nicht dauerhaft "aktiv" bleibt.
-        foreach (array_keys($seen) as $pairKey) {
-            $identifier = strstr($pairKey, '|', true) ?: $pairKey;
-            if (!isset($stillPresent[$identifier])) {
-                unset($seen[$pairKey]);
+        // Episoden, die im aktuellen Abruf nicht mehr auftauchen (abgelaufen/
+        // aus der Quelle entfernt), still aus dem "gesehen"-/"ausgelöst"-
+        // Speicher nehmen -- kein Cancel-Ereignis vorhanden, daher keine
+        // Entwarnungs-Push, nur Bereinigung, damit der Zustand nicht
+        // dauerhaft "aktiv" bleibt.
+        foreach (array_keys($seen) as $episodeKey) {
+            if (!isset($stillPresentEpisodes[$episodeKey])) {
+                unset($seen[$episodeKey]);
             }
         }
         foreach (array_keys($fired) as $fireKey) {
-            $identifier = strstr($fireKey, '|', true) ?: $fireKey;
-            if (!isset($stillPresent[$identifier])) {
+            // $fireKey = episodeKey . '|' . $idx -- der Aktions-Index hängt
+            // hinten dran, daher am LETZTEN '|' trennen (die episodeKey
+            // selbst enthält bereits '|' als Trenner zwischen source/event/
+            // Standort).
+            $lastPipe = strrpos($fireKey, '|');
+            $episodeKey = $lastPipe !== false ? substr($fireKey, 0, $lastPipe) : $fireKey;
+            if (!isset($stillPresentEpisodes[$episodeKey])) {
                 unset($fired[$fireKey]);
             }
         }

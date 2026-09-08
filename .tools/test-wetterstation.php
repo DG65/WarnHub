@@ -601,7 +601,7 @@ echo "\n== wetterstationIdentifierWasSeen(): isoliert geprüft ==\n";
 $hub17 = new WarnHub();
 $hub17->Create();
 check('ohne jede SeenWarnings-Eintragung -> false', callPrivate($hub17, 'wetterstationIdentifierWasSeen', ['wetterstation-windboe-10']) === false);
-$hub17->WriteAttributeString('SeenWarnings', json_encode(['wetterstation-windboe-10|Zuhause' => ['msgType' => 'Alert', 'pushedAt' => time(), 'severity' => 'Severe']]));
+$hub17->WriteAttributeString('SeenWarnings', json_encode(['wetterstation|Sturm (eigene Messung)|Zuhause' => ['identifier' => 'wetterstation-windboe-10', 'msgType' => 'Alert', 'pushedAt' => time(), 'severity' => 'Severe']]));
 check('mit passendem Eintrag (unabhängig vom Standort-Teil) -> true', callPrivate($hub17, 'wetterstationIdentifierWasSeen', ['wetterstation-windboe-10']) === true);
 check('mit abweichendem Identifier -> false', callPrivate($hub17, 'wetterstationIdentifierWasSeen', ['wetterstation-regenrate-10']) === false);
 
@@ -616,7 +616,7 @@ echo "\n== fetchWetterstation(): NACH einer laut SeenWarnings zuvor aktiven Warn
 $hub19 = new WarnHub();
 $hub19->Create();
 $hub19->SetProp('WetterstationInstanceID', 10);
-$hub19->WriteAttributeString('SeenWarnings', json_encode(['wetterstation-windboe-10|Zuhause' => ['msgType' => 'Alert', 'pushedAt' => time(), 'severity' => 'Severe']]));
+$hub19->WriteAttributeString('SeenWarnings', json_encode(['wetterstation|Sturm (eigene Messung)|Zuhause' => ['identifier' => 'wetterstation-windboe-10', 'msgType' => 'Alert', 'pushedAt' => time(), 'severity' => 'Severe']]));
 $GLOBALS['whub_test_values'] = [101 => 10.0, 102 => 0.0]; // jetzt ruhig
 $resultCancel = callPrivate($hub19, 'fetchWetterstation');
 check('genau ein Eintrag (das Cancel für Windböe)', count($resultCancel) === 1);

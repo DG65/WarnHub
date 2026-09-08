@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.12.1 (2026-09-08)
+
+- Fix Push-/Schutzaktions-Schwall: der DWD vergibt bei seinen
+  "Vorabinformationen vor Unwetter" (PVW) für dieselbe andauernde Gefahr
+  alle 15-30 Minuten eine NEUE CAP-`identifier` statt eines Updates der
+  alten (live beobachtet: 6 verschiedene Identifier für "Starkes Gewitter"
+  binnen einer Stunde). Push-Dedup UND Schutzaktions-Auslösung hingen
+  bisher ausschließlich an dieser rohen `identifier`, dadurch löste jedes
+  Reissue erneut aus -- bei mehreren betroffenen Standorten (Zuhause +
+  mobile Standorte) ein Schwall mehrerer Pushes für ein und dasselbe
+  Ereignis. Dietmars Meldung 08.09.2026: "Mit jedem Push 10 Meldungen auf
+  einmal". Neuer, stabiler Episoden-Schlüssel aus Quelle+Ereignistyp+
+  Standort (`warningEpisodeKey()`) statt der wechselnden `identifier`:
+  Reissues mit fortlaufender/überlappender Gültigkeit aktualisieren den
+  Zustand nur still, ohne erneut zu pushen oder eine Schutzaktion erneut
+  auszulösen. Eine ECHTE Lücke (die vorige Episode war bereits abgelaufen,
+  bevor die neue beginnt) sowie eine Eskalation im Schweregrad lösen
+  weiterhin wie gewohnt erneut aus.
+- Fix Sprachauswahl bei NINA-aggregierten Meldungen: eine Gewitterwarnung
+  (Ortenaukreis) erschien komplett auf Englisch, weil ihr deutschsprachiger
+  `info`-Eintrag nicht exakt als `de-DE`/`de` geschrieben war und der
+  bisherige exakte Stringvergleich sie deshalb verfehlte -- stillschweigender
+  Rückfall auf den ersten, englischsprachigen Eintrag. Erkennung jetzt
+  toleranter (Groß-/Kleinschreibung, umgebender Leerraum). Live an Dietmars
+  eigener Instanz gefunden, nicht aus dem Forum.
+
 ## 1.12.0 (2026-09-07)
 
 - NEU: mobiler Standort erkennt jetzt auch OVMS-native-Fahrzeuge
