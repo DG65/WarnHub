@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.12.1';
-    private const NEWS_VERSION = '1.12.1';
+    private const DOC_VERSION = '1.12.2';
+    private const NEWS_VERSION = '1.12.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1389,6 +1389,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- und OVMS-native-Fahrzeuge automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): keines der fünf community Module bietet dafür eine Fernbefehls-Funktion -- Fenster-/Kofferraum-Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum'],
                 ['type' => 'Label', 'caption' => '• Fix Push-/Schutzaktions-Schwall: der DWD vergibt bei "Vorabinformationen vor Unwetter" für dieselbe andauernde Gefahr alle 15-30 Minuten eine NEUE Meldungs-ID statt eines Updates der alten -- das führte zu Schwärmen mehrerer Push-Benachrichtigungen für ein und dasselbe Ereignis und hätte theoretisch auch Schutzaktionen (Jalousie/Markise/Garage) wiederholt auslösen können. Push und Schutzaktionen erkennen fortlaufende Meldungen jetzt am Ereignistyp statt an der wechselnden ID und lösen pro andauerndem Ereignis nur noch einmal aus'],
                 ['type' => 'Label', 'caption' => '• Fix Sprachauswahl: eine über NINA aggregierte Meldung konnte komplett auf Englisch erscheinen, wenn deren deutschsprachiger Eintrag nicht exakt "de-DE"/"de" geschrieben war -- die Erkennung ist jetzt toleranter (Groß-/Kleinschreibung, Leerraum)'],
+                ['type' => 'Label', 'caption' => '• "Kachel (Alle Warnungen)": jede Karte lässt sich jetzt per Klick aufklappen und zeigt dann die volle Handlungsempfehlung, den genauen Gültigkeitszeitraum sowie die komplette amtliche Beschreibung -- unabgekürzt, anders als die Push-Benachrichtigung, die von WFC_PushNotification/VISU_PostNotificationEx hart auf 256 Byte begrenzt wird. Push-Texte nennen außerdem jetzt zuerst die Handlungsempfehlung und die Gültigkeit, erst danach (falls noch Platz ist) die ausführliche Beschreibung -- vorher konnte eine lange Beschreibung das ganze Byte-Budget aufbrauchen. Praxis-Wunsch kronos, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4447,6 +4448,7 @@ class WarnHub extends IPSModule
                     'event' => $w['event'],
                     'headline' => $w['headline'],
                     'description' => $w['description'],
+                    'instruction' => $w['instruction'] ?? '',
                     'severity' => $w['severity'],
                     'category' => $category,
                     'source' => $w['source'],
@@ -4697,15 +4699,24 @@ class WarnHub extends IPSModule
 
     private function buildPushText(string $standortName, array $w, bool $nameMatched = false): string
     {
+        // Reihenfolge bewusst NICHT die Lesereihenfolge einer CAP-Meldung:
+        // WFC_PushNotification/VISU_PostNotificationEx kappen hart bei
+        // 256 Byte (truncateBytes()) -- bei der bisherigen Reihenfolge fraß
+        // eine lange amtliche Beschreibung (bei DWD häufig) das ganze Budget
+        // auf, sodass die eigentlich handlungsrelevante Instruction ("Meiden
+        // Sie...") und "Gültig bis" praktisch nie im Push ankamen.
+        // Handlungsempfehlung + Gültigkeit stehen deshalb VOR der (oft
+        // langen) Beschreibung -- Praxis-Fund kronos, Symcon-Forum,
+        // 09.09.2026. Die volle Beschreibung bleibt trotzdem angehängt
+        // (überlebt die Kürzung bei kürzeren Meldungen) und ist bei Bedarf
+        // zusätzlich vollständig per Klick in "Kachel (Alle Warnungen)"
+        // abrufbar (siehe renderKachelAlleWarnungen()).
         $text = $standortName . ': ' . $w['headline'];
-        if ($w['description'] !== '') {
-            $text .= '. ' . $w['description'];
-        }
         // Handlungsempfehlung der Quelle (CAP <instruction>, z. B. "Meiden Sie
-        // den Aufenthalt im Wald") -- wurde bisher eingelesen, aber nirgends
-        // angezeigt. Echter, unmittelbar nutzbarer Inhalt, kein Eigenwert.
+        // den Aufenthalt im Wald") -- echter, unmittelbar nutzbarer Inhalt,
+        // kein Eigenwert.
         if (!empty($w['instruction'])) {
-            $text .= ' ' . $w['instruction'];
+            $text .= '. ' . $w['instruction'];
         }
         if ($w['expires'] !== null) {
             $text .= ' Gültig bis ' . $this->formatDateDe($w['expires']) . ' Uhr.';
@@ -4714,6 +4725,9 @@ class WarnHub extends IPSModule
         // vorgetäuschter Präzision (siehe fetchMeteoalarmCountry()).
         if ($nameMatched) {
             $text .= ' (Namensabgleich, keine Warnfläche verfügbar.)';
+        }
+        if ($w['description'] !== '') {
+            $text .= ' ' . $w['description'];
         }
         return $this->truncateBytes($text, 256);
     }
@@ -4806,6 +4820,13 @@ class WarnHub extends IPSModule
 .whub-card-dismiss:hover{opacity:1;}
 @media (prefers-color-scheme:dark){.whub-card-dismiss{background:rgba(255,255,255,0.14);}}
 .whub-allwarn-reset{font-size:11.5px;font-weight:600;text-align:center;padding:10px 0 2px 0;opacity:0.65;cursor:pointer;text-decoration:underline;}
+.whub-card-expandable{cursor:pointer;}
+.whub-card-chevron{float:right;margin-right:16px;opacity:0.4;font-size:12px;transition:transform 0.15s ease;}
+.whub-card.whub-expanded .whub-card-chevron{transform:rotate(90deg);}
+.whub-card-detail{margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.08);font-size:12px;line-height:1.45;opacity:0.85;}
+@media (prefers-color-scheme:dark){.whub-card-detail{border-top-color:rgba(255,255,255,0.12);}}
+.whub-card-detail-instruction{font-weight:600;margin-bottom:5px;}
+.whub-card-detail-validity{opacity:0.7;margin-bottom:5px;}
 /* .whub-card/.whub-empty setzen selbst display:flex -- ohne diese Regel
    gewinnt das gegen das versteckende [hidden]-Attribut (gleiche Spezifität,
    Autoren-CSS schlägt die Browser-Vorgabe), das JS-gesteuerte Ausblenden in
@@ -5021,12 +5042,48 @@ HTML;
             // Standort ebenfalls aktiv ist (eigener Schlüssel je Standort).
             $key = htmlspecialchars(($w['identifier'] ?? '') . '|' . ($w['standort'] ?? ''));
             $eventAttr = htmlspecialchars($eventRaw);
+
+            // Push-Benachrichtigungen kappen laut Symcon-Doku hart bei
+            // 256 Byte (siehe truncateBytes()) -- der volle, unabgekürzte
+            // Text (Handlungsempfehlung + Gültigkeitszeitraum + komplette
+            // amtliche Beschreibung) ist deshalb hier zusätzlich per Klick
+            // auf die Karte abrufbar. Praxis-Wunsch kronos, Symcon-Forum,
+            // 09.09.2026.
+            $detailParts = [];
+            if (!empty($w['instruction'])) {
+                $detailParts[] = '<div class="whub-card-detail-instruction">' . nl2br(htmlspecialchars($w['instruction'])) . '</div>';
+            }
+            $validity = '';
+            if (!empty($w['effective'])) {
+                $effTs = strtotime((string) $w['effective']);
+                if ($effTs !== false) {
+                    $validity .= 'Beginn: ' . htmlspecialchars(date('d.m. H:i', $effTs)) . ' Uhr. ';
+                }
+            }
+            if (!empty($w['expires'])) {
+                $expTs = strtotime((string) $w['expires']);
+                if ($expTs !== false) {
+                    $validity .= 'Gültig bis: ' . htmlspecialchars(date('d.m. H:i', $expTs)) . ' Uhr.';
+                }
+            }
+            if ($validity !== '') {
+                $detailParts[] = '<div class="whub-card-detail-validity">' . trim($validity) . '</div>';
+            }
+            if (!empty($w['description'])) {
+                $detailParts[] = '<div class="whub-card-detail-desc">' . nl2br(htmlspecialchars($w['description'])) . '</div>';
+            }
+            $hasDetail = count($detailParts) > 0;
+            $detailBlock = $hasDetail ? '<div class="whub-card-detail" hidden>' . implode('', $detailParts) . '</div>' : '';
+            $expandableClass = $hasDetail ? ' whub-card-expandable' : '';
+            $chevron = $hasDetail ? '<span class="whub-card-chevron">›</span>' : '';
+
             $cards .= <<<HTML
-<div class="whub-card" data-key="{$key}" data-event="{$eventAttr}" style="border-left-color:{$color};position:relative;padding-right:36px;">
+<div class="whub-card{$expandableClass}" data-key="{$key}" data-event="{$eventAttr}" style="border-left-color:{$color};position:relative;padding-right:36px;">
   <div class="whub-card-icon">{$icon}</div>
   <div class="whub-card-body">
-    <div class="whub-card-title">{$eventLabel}</div>
+    <div class="whub-card-title">{$eventLabel}{$chevron}</div>
     <div class="whub-card-sub">{$sub}</div>
+    {$detailBlock}
   </div>
   <div class="whub-card-dismiss" title="Ausblenden">✕</div>
 </div>
@@ -5101,13 +5158,28 @@ HTML;
 
     cards.forEach(function (c) {
       var btn = c.querySelector('.whub-card-dismiss');
-      if (!btn) { return; }
-      btn.addEventListener('click', function () {
-        var key = c.getAttribute('data-key');
-        if (dismissed.indexOf(key) === -1) { dismissed.push(key); }
-        try { localStorage.setItem(dismissKey, JSON.stringify(dismissed)); } catch (e) {}
-        applyVisibility();
-      });
+      if (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation(); // nicht gleichzeitig die Detailansicht auf-/zuklappen
+          var key = c.getAttribute('data-key');
+          if (dismissed.indexOf(key) === -1) { dismissed.push(key); }
+          try { localStorage.setItem(dismissKey, JSON.stringify(dismissed)); } catch (e2) {}
+          applyVisibility();
+        });
+      }
+      // Volltext (Handlungsempfehlung/Gültigkeit/Beschreibung) per Klick
+      // auf-/zuklappen -- Push-Benachrichtigungen kappen hart bei 256 Byte,
+      // hier steht der komplette Text (Praxis-Wunsch kronos, Symcon-Forum,
+      // 09.09.2026).
+      if (c.classList.contains('whub-card-expandable')) {
+        var detail = c.querySelector('.whub-card-detail');
+        if (detail) {
+          c.addEventListener('click', function () {
+            detail.hidden = !detail.hidden;
+            c.classList.toggle('whub-expanded', !detail.hidden);
+          });
+        }
+      }
     });
 
     if (filterbar) {

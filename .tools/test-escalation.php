@@ -244,6 +244,22 @@ $textOhne = callPrivate($hub, 'buildPushText', ['Zuhause', machWarnung('Severe',
 check('ohne Handlungsempfehlung: kein Artefakt/doppeltes Leerzeichen im Text', !str_contains($textOhne, '  '));
 check('ohne Handlungsempfehlung bleibt der Text unverändert kurz (kein leerer Anhang)', mb_strlen($textOhne) < mb_strlen($textMit));
 
+echo "\n== buildPushText(): Handlungsempfehlung + Gültigkeit überleben die 256-Byte-Kappung VOR einer langen Beschreibung (Praxis-Fund kronos, Symcon-Forum, 09.09.2026) ==\n";
+$langeWarnung = [
+    'identifier' => 'test-lang-1', 'source' => 'test', 'msgType' => 'Alert', 'event' => 'Sturm',
+    'headline' => 'Sturmböen', 'severity' => 'Severe', 'instruction' => 'Meiden Sie den Aufenthalt im Freien und sichern Sie lose Gegenstände.',
+    // Eine bewusst lange amtliche Beschreibung (deutlich > 256 Byte allein) --
+    // vorher fraß GENAU sowas das komplette Push-Budget auf, sodass
+    // Instruction/Gültigkeit gar nicht mehr ankamen.
+    'description' => str_repeat('Sehr ausführliche amtliche Beschreibung mit vielen Details zur Wetterlage. ', 8),
+    'expires' => date('c', time() + 3600),
+];
+$textLang = callPrivate($hub, 'buildPushText', ['Zuhause', $langeWarnung]);
+check('Text bleibt innerhalb der 256-Byte-Grenze', strlen($textLang) <= 256);
+check('Handlungsempfehlung überlebt die Kürzung (steht VOR der langen Beschreibung)', str_contains($textLang, 'Meiden Sie den Aufenthalt im Freien'));
+check('Gültigkeitszeitraum überlebt die Kürzung', str_contains($textLang, 'Gültig bis'));
+check('von der langen Beschreibung selbst steht (falls überhaupt) nur noch ein abgeschnittenes Fragment im Push -- der Rest ist stattdessen vollständig per Klick in "Kachel (Alle Warnungen)" abrufbar', !str_contains($textLang, str_repeat('Sehr ausführliche amtliche Beschreibung mit vielen Details zur Wetterlage. ', 8)));
+
 echo "\n== processWarnings(): bereits abgelaufene Warnung wird NICHT mehr als aktiv gewertet ==\n";
 $hub2 = new WarnHub();
 $hub2->Create();

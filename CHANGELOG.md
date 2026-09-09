@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.12.2 (2026-09-09)
+
+- "Kachel (Alle Warnungen)": jede Karte lässt sich jetzt per Klick
+  aufklappen und zeigt dann die vollständige Handlungsempfehlung, den
+  genauen Gültigkeitszeitraum (Beginn + Ende) sowie die komplette amtliche
+  Beschreibung -- unabgekürzt, XSS-sicher escaped, zeilenumbruch-sicher.
+  Klick auf den vorhandenen "✕"-Ausblenden-Button klappt dabei bewusst
+  NICHT gleichzeitig den Detailbereich auf (`stopPropagation`).
+- Push-Text-Reihenfolge geändert: Handlungsempfehlung (CAP `instruction`)
+  und Gültigkeitszeitraum stehen jetzt VOR der (oft langen) amtlichen
+  Beschreibung, nicht mehr danach. `WFC_PushNotification`/
+  `VISU_PostNotificationEx` kappen Text laut Symcon-Doku hart auf 256 Byte
+  -- vorher konnte eine lange Beschreibung (bei DWD häufig) dieses Budget
+  komplett aufbrauchen, sodass die eigentlich handlungsrelevante
+  Empfehlung und die Gültigkeit im Push praktisch nie ankamen. Beide
+  Änderungen zusammen: Praxis-Wunsch kronos, Symcon-Forum, 09.09.2026
+  ("Push-Meldungen werden abgeschnitten" / "Detail-Text auch im Webfront
+  abrufbar"). Der 256-Byte-Deckel selbst ist eine Plattformgrenze der
+  genannten Symcon-Funktionen und lässt sich nicht umgehen -- die volle
+  Information steht dafür jetzt vollständig in der Kachel.
+
 ## 1.12.1 (2026-09-08)
 
 - Fix Push-/Schutzaktions-Schwall: der DWD vergibt bei seinen

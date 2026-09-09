@@ -288,6 +288,27 @@ check('"Alle wieder einblenden"-Reset vorhanden und clientseitig verdrahtet', st
 // (c.hidden = true), das Ausblenden hätte optisch GAR NICHTS bewirkt.
 check('.whub-card[hidden]/.whub-empty[hidden] überschreiben deren eigenes display:flex -- sonst bewirkt c.hidden=true optisch nichts', str_contains($htmlAlle, '.whub-card[hidden],.whub-empty[hidden]{display:none;}'));
 
+echo "\n== renderKachelAlleWarnungen(): Klick-zum-Aufklappen für den vollen Text (Push kappt hart bei 256 Byte, Praxis-Wunsch kronos, Symcon-Forum, 09.09.2026) ==\n";
+$mitDetail = [
+    ['identifier' => 'd1', 'standort' => 'Zuhause', 'event' => 'Starkregen', 'headline' => '', 'severity' => 'Severe', 'category' => 'starkregen', 'source' => 'test',
+     'description' => "Erste Zeile.\nZweite Zeile mit <script>alert(1)</script> & Sonderzeichen.",
+     'instruction' => 'Meiden Sie den Aufenthalt im Freien.',
+     'effective' => date('c', 1700000000 - 3600), 'expires' => date('c', 1700000000 + 3600)],
+    // Zweite Karte OHNE jeglichen Detail-Inhalt -- Rückwärtskompatibilität
+    // mit einfachen Warnungen (z. B. eigene Wetterstation ohne CAP-Text).
+    ['identifier' => 'd2', 'standort' => 'Zweitwohnsitz', 'event' => 'Sturm', 'headline' => '', 'severity' => 'Moderate', 'category' => 'sturm', 'source' => 'test', 'expires' => null],
+];
+$htmlDetail = callPrivate($hub, 'renderKachelAlleWarnungen', [$mitDetail, 1700000000, false]);
+check('genau EINE der beiden Karten (die mit Inhalt) bekommt die Klick-zum-Aufklappen-Klasse', substr_count($htmlDetail, 'class="whub-card whub-card-expandable"') === 1);
+check('genau EIN Chevron-Indikator (nur bei der Karte MIT Detail)', substr_count($htmlDetail, '<span class="whub-card-chevron">') === 1);
+check('Detailbereich ist standardmäßig eingeklappt (hidden)', str_contains($htmlDetail, 'class="whub-card-detail" hidden'));
+check('Handlungsempfehlung steht im Detailbereich', str_contains($htmlDetail, 'Meiden Sie den Aufenthalt im Freien.'));
+check('Beschreibung wird zeilenumbruch-sicher (nl2br) eingebettet', str_contains($htmlDetail, 'Erste Zeile.<br />'));
+check('Beschreibung wird XSS-sicher escaped (kein rohes <script>)', str_contains($htmlDetail, '&lt;script&gt;alert(1)&lt;/script&gt;') && !str_contains($htmlDetail, '<script>alert(1)</script>'));
+check('Gültigkeitszeitraum (Beginn UND Ende) steht im Detailbereich', str_contains($htmlDetail, 'Beginn:') && str_contains($htmlDetail, 'Gültig bis:'));
+check('Ausblenden-Button ruft stopPropagation auf -- Klick auf "✕" klappt nicht gleichzeitig den Detailbereich auf', str_contains($htmlDetail, 'e.stopPropagation()'));
+check('Klick auf die Karte selbst schaltet den Detailbereich per JS um', str_contains($htmlDetail, 'detail.hidden = !detail.hidden') && str_contains($htmlDetail, "classList.toggle('whub-expanded'"));
+
 echo "\n== renderKachelKarte(): Übersichts-Kachel mit ALLEN aktiven Standorten + Legende (Dietmars Fund 07.09.2026: eine Instanz-Variable geht an jeden Betrachter gleich) ==\n";
 $hub->SetProp('Standorte', json_encode([]));
 $karteLeer = callPrivate($hub, 'renderKachelKarte', [[], false]);
