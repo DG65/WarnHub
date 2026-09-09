@@ -309,6 +309,17 @@ check('Gültigkeitszeitraum (Beginn UND Ende) steht im Detailbereich', str_conta
 check('Ausblenden-Button ruft stopPropagation auf -- Klick auf "✕" klappt nicht gleichzeitig den Detailbereich auf', str_contains($htmlDetail, 'e.stopPropagation()'));
 check('Klick auf die Karte selbst schaltet den Detailbereich per JS um', str_contains($htmlDetail, 'detail.hidden = !detail.hidden') && str_contains($htmlDetail, "classList.toggle('whub-expanded'"));
 
+echo "\n== renderKachelAlleWarnungen(): Startzustand über \$defaultExpanded steuerbar (Praxis-Wunsch ruan, Symcon-Forum, 09.09.2026: 'lieber alles sofort sehen') ==\n";
+$htmlAufgeklappt = callPrivate($hub, 'renderKachelAlleWarnungen', [$mitDetail, 1700000000, false, true]);
+check('mit AlleWarnungenAufgeklappt=true: Detailbereich der Karte MIT Inhalt startet OHNE hidden', str_contains($htmlAufgeklappt, 'class="whub-card-detail">') && !str_contains($htmlAufgeklappt, 'class="whub-card-detail" hidden'));
+check('mit AlleWarnungenAufgeklappt=true: die Karte trägt von Anfang an die whub-expanded-Klasse (Chevron korrekt gedreht)', str_contains($htmlAufgeklappt, 'class="whub-card whub-card-expandable whub-expanded"'));
+check('Klick-zum-Umschalten bleibt trotzdem verfügbar -- nur der Startzustand ändert sich, die Karte lässt sich weiterhin einzeln zuklappen', str_contains($htmlAufgeklappt, 'detail.hidden = !detail.hidden'));
+check('genau EINE Karte trägt die whub-expanded-Klasse (die OHNE Detail-Inhalt bleibt unverändert, nichts zum Aufklappen vorhanden)', substr_count($htmlAufgeklappt, 'class="whub-card whub-card-expandable whub-expanded"') === 1);
+
+// Default-Parameter ohne expliziten vierten Wert bleibt wie bisher eingeklappt (Rückwärtskompatibilität für den bestehenden Aufrufer).
+$htmlDefaultParam = callPrivate($hub, 'renderKachelAlleWarnungen', [$mitDetail, 1700000000, false]);
+check('ohne expliziten 4. Parameter: weiterhin eingeklappter Standardzustand (Rückwärtskompatibilität)', str_contains($htmlDefaultParam, 'class="whub-card-detail" hidden'));
+
 echo "\n== renderKachelKarte(): Übersichts-Kachel mit ALLEN aktiven Standorten + Legende (Dietmars Fund 07.09.2026: eine Instanz-Variable geht an jeden Betrachter gleich) ==\n";
 $hub->SetProp('Standorte', json_encode([]));
 $karteLeer = callPrivate($hub, 'renderKachelKarte', [[], false]);

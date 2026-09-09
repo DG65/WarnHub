@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.13.1';
-    private const NEWS_VERSION = '1.13.1';
+    private const DOC_VERSION = '1.13.2';
+    private const NEWS_VERSION = '1.13.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -504,6 +504,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyString('WebFronts', '[]');
         $this->RegisterPropertyInteger('KartenkachelHoehePx', 0);
         $this->RegisterPropertyInteger('ZamgKachelHoehePx', 0);
+        $this->RegisterPropertyBoolean('AlleWarnungenAufgeklappt', false);
 
         $this->RegisterTimer('PollTimer', 0, 'WHUB_Poll($_IPS[\'TARGET\']);');
         $this->RegisterTimer('SirenOffTimer', 0, 'WHUB_CheckSirenOff($_IPS[\'TARGET\']);');
@@ -674,7 +675,7 @@ class WarnHub extends IPSModule
         @$this->SetValue('KachelUebersicht', $this->renderKachelUebersicht($active, $lastTs, $snoozed));
         @$this->SetValue('KachelKarte', $this->renderKachelKarte($active, $snoozed));
         @$this->SetValue('KachelZamg', $this->renderKachelZamg());
-        @$this->SetValue('KachelAlle', $this->renderKachelAlleWarnungen($active, $lastTs, $snoozed));
+        @$this->SetValue('KachelAlle', $this->renderKachelAlleWarnungen($active, $lastTs, $snoozed, $this->ReadPropertyBoolean('AlleWarnungenAufgeklappt')));
     }
 
     // ----------------------------------------------------------------
@@ -1120,7 +1121,9 @@ class WarnHub extends IPSModule
         }
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: fünf weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)", "Kachel (Übersicht)" und "Kachel (Alle Warnungen)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Alle enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '📜 "Kachel (Alle Warnungen)": wie "Kachel (Übersicht)", aber OHNE 8er-Deckel -- scrollbare Liste aller aktiven Warnungen, sortiert nach Schweregrad. Jede Karte hat einen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt (wie die Zoomstufe bei "Kachel (Karte)"), betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen.'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => '📜 "Kachel (Alle Warnungen)": wie "Kachel (Übersicht)", aber OHNE 8er-Deckel -- scrollbare Liste aller aktiven Warnungen, sortiert nach Schweregrad. Jede Karte hat einen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt (wie die Zoomstufe bei "Kachel (Karte)"), betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen. Jede Karte lässt sich außerdem per Klick aufklappen (Handlungsempfehlung, Gültigkeitszeitraum, volle amtliche Beschreibung).'];
+        $pruefungItems[] = ['type' => 'CheckBox', 'name' => 'AlleWarnungenAufgeklappt', 'caption' => '"Kachel (Alle Warnungen)": Karten standardmäßig aufgeklappt anzeigen (statt eingeklappt) -- Klick zum Ein-/Ausklappen bleibt trotzdem je Karte möglich'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Praxis-Wunsch ruan, Symcon-Forum, 09.09.2026: lieber alles sofort sehen können, ohne jede Karte einzeln anklicken zu müssen.'];
         $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine Straßenkarte (Esri) mit JEDEM aktiven Standort als eigenem, farbigen Pin (auch mobile Standorte -- folgt deren Live-Position) plus einer kleinen Legende zum Anklicken. Startansicht zeigt alle Standorte gemeinsam; ein Klick auf einen Pin/Legenden-Eintrag zoomt auf diesen -- die Wahl merkt sich der jeweilige Browser für sich (z. B. dein Handy unterwegs auf "Kohlekasten", das Tablet zuhause weiterhin auf alle bzw. den eigenen Standort). Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js von unpkg.com, Kartenkacheln von server.arcgisonline.com -- bewusst nicht OpenStreetMaps eigene Tile-Server, die für eingebettete Drittanbieter-Widgets wie diese Kachel einen Referer-Header verlangen und je nach Browser/WebFront blockieren können).'];
         $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => 'Höhe "Kachel (Karte)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
         $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur, Symcon-Forum, 07.09.2026: Karte skalierte nur in der Breite, nicht in der Höhe). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
@@ -1558,6 +1561,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: "Datenquellen" nach D-A-CH gruppiert -- "Allgemein" (Meteoalarm, eigene Wetterstation, Abfragetakt) bleibt immer offen, darunter je ein zuklappbares Länder-Panel (🇩🇪/🇦🇹/🇨🇭). Das Panel des über den Symcon-Systemstandort erkannten Heimatlands klappt beim allerersten Öffnen automatisch auf. Praxis-Wunsch Dietmar (angeregt durch hfichtingers Rückmeldung, dass ihn als Österreicher die deutschen Quellen gar nicht interessieren)'],
                 ['type' => 'Label', 'caption' => '• NEU: alle Panels merken sich jetzt selbst, ob sie zuletzt auf- oder zugeklappt waren -- kein "Formular scrollt sich nach jedem Speichern wieder von vorne auf" mehr. Dietmars Wunsch 09.09.2026'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Alle Warnungen)": der DWD reißt bei seinen "Vorabinformationen vor Unwetter" die CAP-Update-Kette faktisch ab und schickt für dieselbe andauernde Gefahr alle 15-30 Minuten eine neue Meldungs-ID -- das erschien bisher als mehrere fast identische, leicht unterschiedlich formulierte Karten für ein und dasselbe Ereignis (Push-Zustellung war seit 1.12.1 bereits korrekt, nur die Anzeige war betroffen). Es wird jetzt nur noch die jeweils aktuellste Fassung gezeigt. Praxis-Fund ruan, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von vornherein aufgeklappt zeigen (Schalter "AlleWarnungenAufgeklappt" im Panel "Prüfung & Status"), statt jede einzeln anklicken zu müssen -- Ein-/Ausklappen per Klick bleibt trotzdem weiterhin je Karte möglich. Praxis-Wunsch ruan, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -5226,7 +5230,7 @@ HTML;
      * dieser rein optischen Ausblendung komplett unberührt -- die laufen
      * serverseitig auf der VOLLEN Liste weiter.
      */
-    private function renderKachelAlleWarnungen(array $active, int $lastTs, bool $snoozed = false): string
+    private function renderKachelAlleWarnungen(array $active, int $lastTs, bool $snoozed = false, bool $defaultExpanded = false): string
     {
         $time = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr' : '--:--';
         if ($snoozed) {
@@ -5308,12 +5312,18 @@ HTML;
                 $detailParts[] = '<div class="whub-card-detail-desc">' . nl2br(htmlspecialchars($w['description'])) . '</div>';
             }
             $hasDetail = count($detailParts) > 0;
-            $detailBlock = $hasDetail ? '<div class="whub-card-detail" hidden>' . implode('', $detailParts) . '</div>' : '';
+            // Praxis-Wunsch ruan, Symcon-Forum, 09.09.2026: wahlweise alle
+            // Karten von vornherein aufgeklappt (AlleWarnungenAufgeklappt) --
+            // das Ein-/Ausklappen per Klick bleibt trotzdem für jede Karte
+            // einzeln verfügbar, nur der Startzustand ändert sich.
+            $startExpanded = $hasDetail && $defaultExpanded;
+            $detailBlock = $hasDetail ? '<div class="whub-card-detail"' . ($startExpanded ? '' : ' hidden') . '>' . implode('', $detailParts) . '</div>' : '';
             $expandableClass = $hasDetail ? ' whub-card-expandable' : '';
+            $expandedClass = $startExpanded ? ' whub-expanded' : '';
             $chevron = $hasDetail ? '<span class="whub-card-chevron">›</span>' : '';
 
             $cards .= <<<HTML
-<div class="whub-card{$expandableClass}" data-key="{$key}" data-event="{$eventAttr}" style="border-left-color:{$color};position:relative;padding-right:36px;">
+<div class="whub-card{$expandableClass}{$expandedClass}" data-key="{$key}" data-event="{$eventAttr}" style="border-left-color:{$color};position:relative;padding-right:36px;">
   <div class="whub-card-icon">{$icon}</div>
   <div class="whub-card-body">
     <div class="whub-card-title">{$eventLabel}{$chevron}</div>

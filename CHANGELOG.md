@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.13.2 (2026-09-09)
+
+- NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von
+  vornherein aufgeklappt zeigen -- neuer Schalter "AlleWarnungenAufgeklappt"
+  im Panel "Prüfung & Status" (Standard: eingeklappt wie bisher). Das
+  Ein-/Ausklappen per Klick bleibt trotzdem für jede Karte einzeln
+  verfügbar, nur der Startzustand ändert sich. Praxis-Wunsch ruan,
+  Symcon-Forum, 09.09.2026: "alles sofort sehen und lesen zu können".
+
 ## 1.13.1 (2026-09-09)
 
 - Fix "Kachel (Alle Warnungen)": derselbe DWD-Reissue-Effekt, der bereits
