@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.12.3 (2026-09-09)
+
+- Fix: schaltet man NINA-Aggregation UND die direkten DWD-Wetterwarnungen
+  bewusst ab (z. B. in Österreich/der Schweiz, wo andere Quellen die
+  amtlichen Warnungen abdecken), legte die bisherige
+  "gibt es überhaupt eine aktive Datenquelle"-Prüfung
+  (`QuelleNina || QuelleDwd`, unverändert seit der allerersten Version)
+  die KOMPLETTE Instanz lahm (`SetStatus(104)`, Poll-Timer auf 0) --
+  obwohl z. B. GeoSphere Austria oder eine der sieben anderen seither
+  dazugekommenen Quellen aktiv war. Neue, vollständige Prüfung
+  (`hasAnyActiveSource()`) über alle zehn Ein/Aus-Datenquellen plus
+  Hagelschutz-CH (URL-Property) und die eigene Wetterstation
+  (Instanz-ID-Property), mit einem Drift-Schutztest, der künftig
+  automatisch fehlschlägt, falls eine neue Datenquelle wieder vergessen
+  wird. Praxis-Fund hfichtinger, Symcon-Forum, 09.09.2026.
+- E-Mail-Push: eine Zieladresse kann jetzt mehrere Empfänger enthalten,
+  mit Komma oder Semikolon getrennt -- WarnHub trennt die Adressen selbst
+  auf und ruft `SMTP_SendMailEx()` für jede einzeln auf (das offizielle
+  SMTP-Modul ist Symcon-intern/closed-source, sein Verhalten bei einem
+  kombinierten Mehrfach-Empfänger-String war am Quellcode nicht
+  verifizierbar). Ein Fehlschlag bei einer Adresse verhindert nicht den
+  Versand an die übrigen. Praxis-Wunsch hfichtinger, Symcon-Forum,
+  09.09.2026.
+
 ## 1.12.2 (2026-09-09)
 
 - "Kachel (Alle Warnungen)": jede Karte lässt sich jetzt per Klick

@@ -51,6 +51,11 @@ function TUPO_SendMessage(int $id, string $title, string $message, int $priority
 function SMTP_SendMailEx(int $id, string $empfaenger, string $betreff, string $inhalt): bool
 {
     $GLOBALS['whub_test_pushCalls'][] = ['email', $id, $empfaenger, $betreff, $inhalt];
+    // Testhilfe, um EINE bestimmte Adresse gezielt fehlschlagen zu lassen
+    // (partieller Versand bei mehreren Adressen in einer Zieladresse).
+    if (($GLOBALS['whub_test_smtpFailFor'] ?? null) === $empfaenger) {
+        return false;
+    }
     return true;
 }
 function IPS_GetInstanceListByModuleID(string $guid): array
@@ -294,6 +299,31 @@ $GLOBALS['whub_test_pushCalls'] = [];
 $sentLeer = callPrivate($hub4b, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
 check('kein Versand ohne Zieladresse (0 zugestellt)', $sentLeer === 0);
 check('SMTP_SendMailEx wird gar nicht erst aufgerufen', count($GLOBALS['whub_test_pushCalls']) === 0);
+
+echo "\n== pushToAllWebfronts(): mehrere E-Mail-Adressen in einer Zieladresse (Komma/Semikolon getrennt) -- Praxis-Wunsch hfichtinger, Symcon-Forum, 09.09.2026 ==\n";
+$hub4c = new WarnHub();
+$hub4c->Create();
+$hub4c->SetProp('WebFronts', json_encode([
+    ['InstanceID' => 205, 'Name' => 'Mail Familie', 'Typ' => 'email', 'Aktiv' => true, 'Zieladresse' => 'anna@example.com, bernd@example.com;  carla@example.com'],
+]));
+$GLOBALS['whub_test_pushCalls'] = [];
+$sentMulti = callPrivate($hub4c, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
+check('meldet 1 zugestelltes Ziel (die EINE Zeile), obwohl SMTP_SendMailEx dreimal aufgerufen wird', $sentMulti === 1);
+$emailAdressen = array_column(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'email'), 2);
+check('SMTP_SendMailEx wird für JEDE der 3 Adressen einzeln aufgerufen (nicht mit kombiniertem Rohstring)', $emailAdressen === ['anna@example.com', 'bernd@example.com', 'carla@example.com']);
+
+echo "\n== pushToAllWebfronts(): eine fehlschlagende Adresse innerhalb mehrerer verhindert nicht den Versand an die übrigen ==\n";
+$GLOBALS['whub_test_smtpFailFor'] = 'bernd@example.com';
+$hub4d = new WarnHub();
+$hub4d->Create();
+$hub4d->SetProp('WebFronts', json_encode([
+    ['InstanceID' => 206, 'Name' => 'Mail Familie 2', 'Typ' => 'email', 'Aktiv' => true, 'Zieladresse' => 'anna@example.com,bernd@example.com'],
+]));
+$GLOBALS['whub_test_pushCalls'] = [];
+$sentPartial = callPrivate($hub4d, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
+check('mindestens eine Adresse erfolgreich -> Ziel zählt trotzdem als zugestellt', $sentPartial === 1);
+check('SMTP_SendMailEx wurde trotz einer fehlschlagenden Adresse für BEIDE Adressen versucht', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'email')) === 2);
+$GLOBALS['whub_test_smtpFailFor'] = null;
 
 echo "\n== Ende-zu-Ende: mobiler Standort mit eigenem Push-Ziel über processWarnings() ==\n";
 $hub3 = new WarnHub();

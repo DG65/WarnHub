@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.12.2';
-    private const NEWS_VERSION = '1.12.2';
+    private const DOC_VERSION = '1.12.3';
+    private const NEWS_VERSION = '1.12.3';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -171,6 +171,26 @@ class WarnHub extends IPSModule
 
     private const SEVERITY_RANK = ['Unknown' => 0, 'Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
     private const SEVERITY_ICON = ['Unknown' => 'ℹ️', 'Minor' => 'ℹ️', 'Moderate' => '⚠️', 'Severe' => '🚨', 'Extreme' => '🆘'];
+
+    /**
+     * Alle einfachen Ein/Aus-Datenquellen -- für ApplyChanges()' Prüfung
+     * "hat diese Instanz überhaupt eine aktive Quelle konfiguriert?". Diese
+     * Prüfung hing bis 1.12.2 hart-codiert NUR an QuelleNina/QuelleDwd (Rest
+     * aus der allerersten Version) und wurde bei KEINER der seither
+     * dazugekommenen acht Datenquellen mitgezogen -- ein Nutzer, der NINA+DWD
+     * bewusst abschaltet (z. B. hfichtinger, Österreich, nutzt stattdessen
+     * GeoSphere Austria), bekam die komplette Instanz lahmgelegt
+     * (SetStatus(104), Poll-Timer 0), obwohl eine echte Quelle lief.
+     * Praxis-Fund hfichtinger, Symcon-Forum, 09.09.2026. WICHTIG: eine NEUE
+     * einfache Ein/Aus-Datenquelle IMMER hier mit ergänzen, sonst wiederholt
+     * sich exakt dieser Fehler. Hagelschutz-CH (URL-Property statt Bool) und
+     * die eigene Wetterstation (Instanz-ID statt Bool) sind bewusst NICHT
+     * hier drin -- die werden in hasAnyActiveSource() separat geprüft.
+     */
+    private const SOURCE_TOGGLE_PROPERTIES = [
+        'QuelleNina', 'QuelleDwd', 'QuellePegelonline', 'QuelleBfsOdl', 'QuelleMeteoalarm',
+        'QuelleGeosphereAt', 'QuelleBafuHydroCh', 'QuelleSedErdbebenCh', 'QuelleWaldbrandDe', 'QuelleOzonDe',
+    ];
 
     // Kachel-Visualisierung -- Symcons zweite, neuere Push-fähige Oberfläche
     // NEBEN dem klassischen WebFront-Konfigurator. GUID gegen den offiziellen
@@ -535,8 +555,7 @@ class WarnHub extends IPSModule
         $this->MaintainVariable('KachelAlle', 'Kachel (Alle Warnungen)', VARIABLETYPE_STRING, '~HTMLBox', 9, true);
         $this->refreshStatusVariables();
 
-        $hasSource = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
-        if (!$hasSource) {
+        if (!$this->hasAnyActiveSource()) {
             $this->SetStatus(104);
             $this->SetTimerInterval('PollTimer', 0);
             return;
@@ -545,6 +564,23 @@ class WarnHub extends IPSModule
         $minutes = max(1, $this->ReadPropertyInteger('PollIntervalMinutes'));
         $this->SetTimerInterval('PollTimer', $minutes * 60 * 1000);
         $this->SetStatus(102);
+    }
+
+    /** @see SOURCE_TOGGLE_PROPERTIES -- plus die zwei Datenquellen, die keinen einfachen Bool-Schalter haben. */
+    private function hasAnyActiveSource(): bool
+    {
+        foreach (self::SOURCE_TOGGLE_PROPERTIES as $prop) {
+            if ($this->ReadPropertyBoolean($prop)) {
+                return true;
+            }
+        }
+        if (trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '') {
+            return true;
+        }
+        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -793,7 +829,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => $this->webfrontStatusLine()],
                 ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul), Pushover- (Community-Modul) und SMTP-Instanzen (offizielles Symcon-Modul, für E-Mail). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
                 ['type' => 'Label', 'caption' => 'Telegram/Pushover/E-Mail: Anbindung anhand des echten Quellcodes bzw. der echten Funktionssignatur der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot-/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
-                ['type' => 'Label', 'caption' => 'E-Mail (SMTP): eine gefundene SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger -- deshalb zunächst INAKTIV angelegt. Erst in der Spalte "Zieladresse" die gewünschte E-Mail-Adresse eintragen, dann in der Spalte "Aktiv" aktivieren.'],
+                ['type' => 'Label', 'caption' => 'E-Mail (SMTP): eine gefundene SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger -- deshalb zunächst INAKTIV angelegt. Erst in der Spalte "Zieladresse" die gewünschte E-Mail-Adresse eintragen, dann in der Spalte "Aktiv" aktivieren. Mehrere Adressen: einfach mit Komma oder Semikolon getrennt in dasselbe Feld eintragen.'],
                 [
                     'type' => 'List',
                     'name' => 'WebFronts',
@@ -1390,6 +1426,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix Push-/Schutzaktions-Schwall: der DWD vergibt bei "Vorabinformationen vor Unwetter" für dieselbe andauernde Gefahr alle 15-30 Minuten eine NEUE Meldungs-ID statt eines Updates der alten -- das führte zu Schwärmen mehrerer Push-Benachrichtigungen für ein und dasselbe Ereignis und hätte theoretisch auch Schutzaktionen (Jalousie/Markise/Garage) wiederholt auslösen können. Push und Schutzaktionen erkennen fortlaufende Meldungen jetzt am Ereignistyp statt an der wechselnden ID und lösen pro andauerndem Ereignis nur noch einmal aus'],
                 ['type' => 'Label', 'caption' => '• Fix Sprachauswahl: eine über NINA aggregierte Meldung konnte komplett auf Englisch erscheinen, wenn deren deutschsprachiger Eintrag nicht exakt "de-DE"/"de" geschrieben war -- die Erkennung ist jetzt toleranter (Groß-/Kleinschreibung, Leerraum)'],
                 ['type' => 'Label', 'caption' => '• "Kachel (Alle Warnungen)": jede Karte lässt sich jetzt per Klick aufklappen und zeigt dann die volle Handlungsempfehlung, den genauen Gültigkeitszeitraum sowie die komplette amtliche Beschreibung -- unabgekürzt, anders als die Push-Benachrichtigung, die von WFC_PushNotification/VISU_PostNotificationEx hart auf 256 Byte begrenzt wird. Push-Texte nennen außerdem jetzt zuerst die Handlungsempfehlung und die Gültigkeit, erst danach (falls noch Platz ist) die ausführliche Beschreibung -- vorher konnte eine lange Beschreibung das ganze Byte-Budget aufbrauchen. Praxis-Wunsch kronos, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix: schaltet man NINA UND die direkten DWD-Wetterwarnungen bewusst ab (z. B. in Österreich/der Schweiz, andere Quellen decken das ab), legte das bisher die KOMPLETTE Instanz lahm, obwohl eine andere Datenquelle (z. B. GeoSphere Austria) aktiv war -- die "gibt es überhaupt eine aktive Quelle"-Prüfung kannte nur NINA/DWD und wurde bei keiner der seither dazugekommenen acht weiteren Quellen mitgezogen. Praxis-Fund hfichtinger, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• E-Mail-Push: eine Zieladresse kann jetzt mehrere Empfänger enthalten, mit Komma oder Semikolon getrennt -- jede Adresse bekommt einen eigenen Versand, unabhängig vom internen Verhalten des SMTP-Moduls bei mehreren Empfängern. Praxis-Wunsch hfichtinger, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -5509,7 +5547,23 @@ HTML;
                     continue;
                 }
                 $body = '<html><body>' . nl2br(htmlspecialchars($text)) . '</body></html>';
-                $ok = @SMTP_SendMailEx($w['InstanceID'], $empfaenger, $title, $body);
+                // Mehrere Adressen mit Komma/Semikolon getrennt möglich --
+                // SMTP_SendMailEx ist Symcon-intern/closed-source (kein
+                // öffentliches Repo), ihr Verhalten bei einem kombinierten
+                // Mehrfach-Empfänger-String lässt sich am Quellcode nicht
+                // verifizieren. Deshalb selbst aufsplitten und je Adresse
+                // EINEN eigenen Aufruf machen -- unabhängig davon, was das
+                // SMTP-Modul intern mit einem Rohstring anfängt. Praxis-
+                // Wunsch hfichtinger, Symcon-Forum, 09.09.2026.
+                $adressen = array_values(array_filter(array_map('trim', preg_split('/[,;]+/', $empfaenger))));
+                $ok = false;
+                foreach ($adressen as $adresse) {
+                    if (@SMTP_SendMailEx($w['InstanceID'], $adresse, $title, $body)) {
+                        $ok = true;
+                    } else {
+                        $this->LogError('pushToAllWebfronts', 'E-Mail an "' . $adresse . '" (Ziel "' . $w['Name'] . '") fehlgeschlagen.');
+                    }
+                }
             } else {
                 if (!function_exists('WFC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
