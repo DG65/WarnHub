@@ -248,13 +248,44 @@ check('Zeitstempel 0 (nie geprüft) -> "noch nie geprüft"', str_contains($statu
 echo "\n== hexToRgba(): korrekte Umrechnung für die Icon-Hintergrundfarbe ==\n";
 check('#FF453A (systemRed) -> rgba(255,69,58,0.18)', callPrivate($hub, 'hexToRgba', ['#FF453A', 0.18]) === 'rgba(255,69,58,0.18)');
 
-echo "\n== officialMapLinksHtml(): Links zu den drei amtlichen Warnkarten (Dietmars Wunsch 06.09.2026) ==\n";
-$mapLinks = callPrivate($hub, 'officialMapLinksHtml', []);
-check('enthält den DWD-Link', str_contains($mapLinks, 'dwd.de'));
-check('enthält den ZAMG-Link', str_contains($mapLinks, 'zamg.at'));
-check('enthält den MeteoSchweiz-Link', str_contains($mapLinks, 'meteoswiss.admin.ch'));
-check('öffnet extern (target="_blank", rel="noopener" -- kein iframe, DWD/MeteoSchweiz sperren das per X-Frame-Options)', substr_count($mapLinks, 'target="_blank"') === 3 && substr_count($mapLinks, 'rel="noopener"') === 3);
-check('Kachel (kompakt) enthält die Kartenlinks', str_contains($statusOne, 'whub-maplinks') && str_contains($statusOne, 'zamg.at'));
+echo "\n== officialMapLinksHtml(): zeigt nur Links der tatsächlich aktivierten Länder-Quellen (Dietmars Wunsch 06.09.2026, verfeinert nach Praxis-Wunsch hfichtinger, Symcon-Forum, 09.09.2026) ==\n";
+$hubLinksDe = new WarnHub();
+$hubLinksDe->Create(); // Standardzustand: NINA+DWD aktiv, AT/CH aus
+$mapLinksDe = callPrivate($hubLinksDe, 'officialMapLinksHtml', []);
+check('Standardzustand (nur NINA/DWD aktiv) -> nur der DWD-Link erscheint', str_contains($mapLinksDe, 'dwd.de') && !str_contains($mapLinksDe, 'zamg.at') && !str_contains($mapLinksDe, 'meteoswiss.admin.ch'));
+
+$hubLinksAt = new WarnHub();
+$hubLinksAt->Create();
+$hubLinksAt->SetProp('QuelleNina', false);
+$hubLinksAt->SetProp('QuelleDwd', false);
+$hubLinksAt->SetProp('QuelleGeosphereAt', true);
+$mapLinksAt = callPrivate($hubLinksAt, 'officialMapLinksHtml', []);
+check('nur GeoSphere Austria aktiv -> nur der ZAMG-Link erscheint (genau hfichtingers Fall)', !str_contains($mapLinksAt, 'dwd.de') && str_contains($mapLinksAt, 'zamg.at') && !str_contains($mapLinksAt, 'meteoswiss.admin.ch'));
+
+$hubLinksCh = new WarnHub();
+$hubLinksCh->Create();
+$hubLinksCh->SetProp('QuelleNina', false);
+$hubLinksCh->SetProp('QuelleDwd', false);
+$hubLinksCh->SetProp('QuelleSedErdbebenCh', true);
+$mapLinksCh = callPrivate($hubLinksCh, 'officialMapLinksHtml', []);
+check('nur Schweizer Erdbeben aktiv -> nur der MeteoSchweiz-Link erscheint', !str_contains($mapLinksCh, 'dwd.de') && !str_contains($mapLinksCh, 'zamg.at') && str_contains($mapLinksCh, 'meteoswiss.admin.ch'));
+
+$hubLinksAlle = new WarnHub();
+$hubLinksAlle->Create();
+$hubLinksAlle->SetProp('QuelleGeosphereAt', true);
+$hubLinksAlle->SetProp('QuelleBafuHydroCh', true);
+$mapLinksAlle = callPrivate($hubLinksAlle, 'officialMapLinksHtml', []);
+check('alle drei Länder-Quellen aktiv -> alle drei Links erscheinen', str_contains($mapLinksAlle, 'dwd.de') && str_contains($mapLinksAlle, 'zamg.at') && str_contains($mapLinksAlle, 'meteoswiss.admin.ch'));
+check('öffnet extern (target="_blank", rel="noopener" -- kein iframe, DWD/MeteoSchweiz sperren das per X-Frame-Options)', substr_count($mapLinksAlle, 'target="_blank"') === 3 && substr_count($mapLinksAlle, 'rel="noopener"') === 3);
+
+$hubLinksKeine = new WarnHub();
+$hubLinksKeine->Create();
+$hubLinksKeine->SetProp('QuelleNina', false);
+$hubLinksKeine->SetProp('QuelleDwd', false);
+$mapLinksKeine = callPrivate($hubLinksKeine, 'officialMapLinksHtml', []);
+check('KEINE Länder-Quelle aktiv (z. B. nur Meteoalarm/eigene Wetterstation) -> sicherheitshalber trotzdem alle drei Links, statt einen leer wirkenden Bereich zu zeigen', str_contains($mapLinksKeine, 'dwd.de') && str_contains($mapLinksKeine, 'zamg.at') && str_contains($mapLinksKeine, 'meteoswiss.admin.ch'));
+
+check('Kachel (kompakt) enthält die Kartenlinks', str_contains($statusOne, 'whub-maplinks') && str_contains($statusOne, 'dwd.de'));
 check('Kachel (Übersicht) enthält die Kartenlinks', str_contains($uebersichtEmpty, 'whub-maplinks') && str_contains($uebersichtEmpty, 'dwd.de'));
 
 echo "\n== renderKachelAlleWarnungen(): scrollbare Liste OHNE 8er-Deckel + Ausblenden/Filter (Dietmars Einwand 07.09.2026: 'die 100. Meldung noch ansehen können') ==\n";

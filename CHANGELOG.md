@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.13.3 (2026-09-09)
+
+- Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭
+  MeteoSchweiz) zeigten bisher immer alle drei fest, unabhängig davon,
+  welche Länder-Quellen tatsächlich aktiviert waren -- z. B. der
+  DWD-Link auch für einen Nutzer, der ausschließlich GeoSphere Austria
+  aktiviert hat. `officialMapLinksHtml()` zeigt jetzt nur noch den Link
+  zu einem Land, dessen direkte Quelle (NINA/DWD, GeoSphere Austria,
+  BAFU/SED-Erdbeben/Hagelschutz-CH) tatsächlich aktiv ist. Ist gar keine
+  davon aktiv (z. B. nur Meteoalarm/eigene Wetterstation), erscheinen
+  weiterhin sicherheitshalber alle drei, statt eines leer wirkenden
+  Bereichs. Praxis-Wunsch hfichtinger, Symcon-Forum, 09.09.2026.
+
 ## 1.13.2 (2026-09-09)
 
 - NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von

@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.13.2';
-    private const NEWS_VERSION = '1.13.2';
+    private const DOC_VERSION = '1.13.3';
+    private const NEWS_VERSION = '1.13.3';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1562,6 +1562,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: alle Panels merken sich jetzt selbst, ob sie zuletzt auf- oder zugeklappt waren -- kein "Formular scrollt sich nach jedem Speichern wieder von vorne auf" mehr. Dietmars Wunsch 09.09.2026'],
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Alle Warnungen)": der DWD reißt bei seinen "Vorabinformationen vor Unwetter" die CAP-Update-Kette faktisch ab und schickt für dieselbe andauernde Gefahr alle 15-30 Minuten eine neue Meldungs-ID -- das erschien bisher als mehrere fast identische, leicht unterschiedlich formulierte Karten für ein und dasselbe Ereignis (Push-Zustellung war seit 1.12.1 bereits korrekt, nur die Anzeige war betroffen). Es wird jetzt nur noch die jeweils aktuellste Fassung gezeigt. Praxis-Fund ruan, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von vornherein aufgeklappt zeigen (Schalter "AlleWarnungenAufgeklappt" im Panel "Prüfung & Status"), statt jede einzeln anklicken zu müssen -- Ein-/Ausklappen per Klick bleibt trotzdem weiterhin je Karte möglich. Praxis-Wunsch ruan, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭 MeteoSchweiz) zeigten bisher immer alle drei, unabhängig davon, welche Länder-Quellen tatsächlich aktiviert waren. Jetzt erscheint nur noch der Link zu einem Land, dessen direkte Quelle aktiv ist (ist gar keine aktiv, sicherheitshalber weiterhin alle drei). Praxis-Wunsch hfichtinger, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -5085,13 +5086,38 @@ CSS;
      * nach Standort zu filtern, kein Mehrwert durch Auswahl. Dietmars
      * Wunsch 06.09.2026.
      */
+    /**
+     * Zeigt nur die Links der Länder, deren direkte Datenquelle tatsächlich
+     * aktiv ist -- vorher standen immer alle drei fest da, unabhängig von
+     * der eigenen Konfiguration (z. B. der DWD-Link für einen Nutzer, der
+     * ausschließlich GeoSphere Austria aktiviert hat). Ist KEINE der drei
+     * Länder-Quellen aktiv (z. B. nur Meteoalarm/PEGELONLINE/eigene
+     * Wetterstation), werden sicherheitshalber trotzdem alle drei gezeigt --
+     * besser ein paar überflüssige Links als eine leer wirkende Kachel.
+     * Praxis-Wunsch hfichtinger, Symcon-Forum, 09.09.2026.
+     */
     private function officialMapLinksHtml(): string
     {
-        return '<div class="whub-maplinks">'
-            . '<a href="' . htmlspecialchars(self::DWD_MAP_URL) . '" target="_blank" rel="noopener">🇩🇪 DWD</a>'
-            . '<a href="' . htmlspecialchars(self::ZAMG_MAP_URL) . '" target="_blank" rel="noopener">🇦🇹 ZAMG</a>'
-            . '<a href="' . htmlspecialchars(self::METEOSWISS_MAP_URL) . '" target="_blank" rel="noopener">🇨🇭 MeteoSchweiz</a>'
-            . '</div>';
+        $zeigeDe = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
+        $zeigeAt = $this->ReadPropertyBoolean('QuelleGeosphereAt');
+        $zeigeCh = $this->ReadPropertyBoolean('QuelleBafuHydroCh')
+            || $this->ReadPropertyBoolean('QuelleSedErdbebenCh')
+            || trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '';
+        if (!$zeigeDe && !$zeigeAt && !$zeigeCh) {
+            $zeigeDe = $zeigeAt = $zeigeCh = true;
+        }
+
+        $links = '';
+        if ($zeigeDe) {
+            $links .= '<a href="' . htmlspecialchars(self::DWD_MAP_URL) . '" target="_blank" rel="noopener">🇩🇪 DWD</a>';
+        }
+        if ($zeigeAt) {
+            $links .= '<a href="' . htmlspecialchars(self::ZAMG_MAP_URL) . '" target="_blank" rel="noopener">🇦🇹 ZAMG</a>';
+        }
+        if ($zeigeCh) {
+            $links .= '<a href="' . htmlspecialchars(self::METEOSWISS_MAP_URL) . '" target="_blank" rel="noopener">🇨🇭 MeteoSchweiz</a>';
+        }
+        return '<div class="whub-maplinks">' . $links . '</div>';
     }
 
     /**
