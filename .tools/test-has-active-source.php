@@ -220,6 +220,23 @@ $hub5->SetProp('QuelleDwd', false);
 $hub5->SetProp('WetterstationInstanceID', 12345);
 check('konfigurierte Wetterstation-Instanz-ID zählt als aktive Quelle', callPrivate($hub5, 'hasAnyActiveSource') === true);
 
+// Auch OHNE Instanz -- nur die manuelle Wind- oder Regen-Variable gesetzt
+// (z. B. KNX/Netatmo/TFA ohne automatische Erkennung) -- exakt wie Poll()
+// das ebenfalls als "Wetterstation aktiv" wertet (siehe dort).
+$hub5b = new WarnHub();
+$hub5b->Create();
+$hub5b->SetProp('QuelleNina', false);
+$hub5b->SetProp('QuelleDwd', false);
+$hub5b->SetProp('WetterstationWindVariableID', 999);
+check('nur manuell gesetzte Wind-Variable (ohne Instanz) zählt ebenfalls als aktive Quelle', callPrivate($hub5b, 'hasAnyActiveSource') === true);
+
+$hub5c = new WarnHub();
+$hub5c->Create();
+$hub5c->SetProp('QuelleNina', false);
+$hub5c->SetProp('QuelleDwd', false);
+$hub5c->SetProp('WetterstationRegenVariableID', 998);
+check('nur manuell gesetzte Regen-Variable (ohne Instanz) zählt ebenfalls als aktive Quelle', callPrivate($hub5c, 'hasAnyActiveSource') === true);
+
 $hub6 = new WarnHub();
 $hub6->Create();
 $hub6->SetProp('QuelleNina', false);

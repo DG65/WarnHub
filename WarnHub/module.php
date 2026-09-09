@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.12.4';
-    private const NEWS_VERSION = '1.12.4';
+    private const DOC_VERSION = '1.13.0';
+    private const NEWS_VERSION = '1.13.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -521,6 +521,20 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeBoolean('ForumHintGone', false);
+        // Länder-Code (de/at/ch/...) des Symcon-Systemstandorts, in Poll()
+        // im Hintergrund aktualisiert (siehe reverseGeocodeStandort(), 6h
+        // Cache) -- GetConfigurationForm() liest NUR diesen Cache, macht
+        // selbst KEINEN Netzwerkaufruf (würde das Öffnen der Konsole
+        // verlangsamen). Steuert, welches Land-Panel bei "Datenquellen"
+        // beim allerersten Öffnen aufgeklappt ist. Dietmars Idee 09.09.2026.
+        $this->RegisterAttributeString('HeimLandCode', '');
+        // Merkt sich je Panel-Name, ob der Nutzer es zuletzt manuell auf-
+        // oder zugeklappt hat (JSON-Map Panel-Name -> bool) -- übersteuert
+        // den sonstigen Default (Land-Erkennung bzw. fest einprogrammiert).
+        // Dietmars Wunsch 09.09.2026: "Formular scrollt sich halb zu Tode"
+        // nach jedem Speichern, weil alle Panels immer auf denselben festen
+        // Zustand zurückspringen.
+        $this->RegisterAttributeString('PanelExpandedState', '{}');
 
         // Für IPSView & Co.: WarnHub ist ohne eigene Statusvariablen komplett
         // "headless" (nur Push + Konsolen-Statuszeile) -- IPSView baut eigene
@@ -577,10 +591,55 @@ class WarnHub extends IPSModule
         if (trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '') {
             return true;
         }
-        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0) {
+        // Wie in Poll() -- eine Wetterstation gilt auch als aktiv, wenn NUR
+        // die Wind-/Regen-Variable manuell gesetzt ist, ganz ohne
+        // Froggit/Sainlogic/Meteobridge-Instanz (z. B. KNX/Netatmo/TFA ohne
+        // automatische Erkennung). Ursprünglich hier vergessen, hätte
+        // dieselbe Instanz-Lahmlegung wie bei den fehlenden Quellen (siehe
+        // Klassenkonstante) für GENAU diese eine Konfiguration erneut
+        // ermöglicht.
+        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0
+            || $this->ReadPropertyInteger('WetterstationWindVariableID') > 0
+            || $this->ReadPropertyInteger('WetterstationRegenVariableID') > 0) {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Aktueller Auf-/Zugeklappt-Zustand eines Panels aus PanelExpandedState
+     * -- $default gilt nur, solange der Nutzer dieses Panel noch nie selbst
+     * per Klick verändert hat (siehe TogglePanelExpanded()).
+     */
+    private function getPanelExpandedState(string $panelName, bool $default): bool
+    {
+        $state = json_decode($this->ReadAttributeString('PanelExpandedState'), true) ?: [];
+        return array_key_exists($panelName, $state) ? (bool) $state[$panelName] : $default;
+    }
+
+    /**
+     * Von ExpansionPanels via 'onClick' aufgerufen -- feuert laut Symcon-
+     * Community-Erfahrung bei JEDEM Auf-/Zuklappen (beide Richtungen), OHNE
+     * dass die Richtung selbst als Parameter mitgeliefert wird (keine
+     * onOpen/onClose-Unterscheidung im SDK, verifiziert gegen
+     * community.symcon.de/t/expansionpanel-onclick/50897). $wasExpanded ist
+     * deshalb der Zustand, den WIR beim Rendern selbst gesetzt hatten (als
+     * PHP-Literal fest in den onClick-String eingebettet) -- der Klick kehrt
+     * ihn genau einmal um. Rein clientseitige UI-Feedback-Aktion, braucht
+     * kein UpdateFormField (das Auf-/Zuklappen selbst hat der Client schon
+     * nativ erledigt), nur das Merken für den nächsten Formular-Aufbau.
+     */
+    public function TogglePanelExpanded(string $panelName, bool $wasExpanded): void
+    {
+        $state = json_decode($this->ReadAttributeString('PanelExpandedState'), true) ?: [];
+        $state[$panelName] = !$wasExpanded;
+        $this->WriteAttributeString('PanelExpandedState', json_encode($state));
+    }
+
+    /** Baut das 'onClick' für ein Panel, das sich seinen Auf-/Zugeklappt-Zustand merkt (siehe getPanelExpandedState()/TogglePanelExpanded()). */
+    private function rememberPanelOnClick(string $panelName, bool $currentlyExpanded): string
+    {
+        return 'WHUB_TogglePanelExpanded($id, ' . json_encode($panelName) . ', ' . ($currentlyExpanded ? 'true' : 'false') . ');';
     }
 
     /**
@@ -636,10 +695,12 @@ class WarnHub extends IPSModule
         if ($news !== null) {
             $form['elements'][] = $news;
         }
+        $expDokuHilfe = $this->getPanelExpandedState('DokuHilfe', false);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '📖  Dokumentation & Hilfe',
-            'expanded' => false,
+            'expanded' => $expDokuHilfe,
+            'onClick' => $this->rememberPanelOnClick('DokuHilfe', $expDokuHilfe),
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
@@ -653,10 +714,12 @@ class WarnHub extends IPSModule
             ],
         ];
 
+        $expStandorte = $this->getPanelExpandedState('Standorte', true);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '📍  Standorte (Umkreis-Definition)',
-            'expanded' => true,
+            'expanded' => $expStandorte,
+            'onClick' => $this->rememberPanelOnClick('Standorte', $expStandorte),
             'items' => [
                 ['type' => 'Label', 'caption' => 'Jeder Standort erhält Warnungen nur, wenn eine Meldung innerhalb des angegebenen Umkreises liegt und mindestens den gewählten Schweregrad erreicht. Mehrere Standorte sind möglich (z. B. eigener Wohnort + Zweitwohnsitz/Angehörige).'],
                 [
@@ -714,110 +777,167 @@ class WarnHub extends IPSModule
             ],
         ];
 
+        // D-A-CH-Gruppierung -- Dietmars Vorschlag 09.09.2026, nachdem das
+        // Datenquellen-Panel über die vielen Einzelquellen hinweg sehr lang
+        // geworden war (Praxis-Fund hfichtinger: DWD/PEGELONLINE/BfS-ODL
+        // interessieren ihn in Österreich gar nicht). "Allgemein" bleibt
+        // immer offen (grenzüberschreitende Quellen + Wetterstation +
+        // Abfragetakt), darunter je ein zuklappbares Land-Panel. Das
+        // Heimatland-Panel klappt beim allerersten Öffnen automatisch auf
+        // (HeimLandCode, siehe refreshHeimLandCode()) -- eine spätere
+        // manuelle Wahl des Nutzers (PanelExpandedState) hat immer Vorrang.
+        $heimLand = $this->ReadAttributeString('HeimLandCode');
+        $expDatenquellen = $this->getPanelExpandedState('Datenquellen', true);
+        $expDqAllgemein = $this->getPanelExpandedState('DatenquellenAllgemein', true);
+        $expDqDe = $this->getPanelExpandedState('DatenquellenDe', $heimLand === 'de');
+        $expDqAt = $this->getPanelExpandedState('DatenquellenAt', $heimLand === 'at');
+        $expDqCh = $this->getPanelExpandedState('DatenquellenCh', $heimLand === 'ch');
+        $expHagelschutz = $this->getPanelExpandedState('HagelschutzCh', false);
+
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '🌐  Datenquellen',
-            'expanded' => true,
+            'expanded' => $expDatenquellen,
+            'onClick' => $this->rememberPanelOnClick('Datenquellen', $expDatenquellen),
             'items' => [
-                ['type' => 'CheckBox', 'name' => 'QuelleNina', 'caption' => 'NINA-Aggregation (MoWaS/Katwarn/Biwapp/DWD/Hochwasser/Polizei, warnung.bund.de)'],
-                ['type' => 'CheckBox', 'name' => 'QuelleDwd', 'caption' => 'Zusätzlich direkte DWD-Wetterwarnungen (mehr Detail als die NINA-Zusammenfassung)'],
-                ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => 'Pegelstände (PEGELONLINE/WSV) -- warnt bei Pegeln über dem mittleren bzw. bisherigen Höchstwasser in der Nähe eines Standorts'],
-                ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => 'Radioaktivität (BfS Ortsdosisleistung) -- eigener Schwellwert, keine amtliche Meldestufe'],
-                ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => 'Schwellwert Radioaktivität (µSv/h)', 'digits' => 3, 'minValue' => 0.05],
                 [
-                    'type' => 'PopupButton',
-                    'caption' => 'Was bedeutet dieser Wert? (Einordnung Dosisleistung/Verweildauer)',
-                    'popup' => [
-                        'caption' => 'Ortsdosisleistung -- Einordnung',
-                        'items' => $this->bfsOdlReferencePopupItems(),
+                    'type' => 'ExpansionPanel',
+                    'name' => 'DatenquellenAllgemeinPanel',
+                    'caption' => 'Allgemein (grenzüberschreitend)',
+                    'expanded' => $expDqAllgemein,
+                    'onClick' => $this->rememberPanelOnClick('DatenquellenAllgemein', $expDqAllgemein),
+                    'items' => [
+                        ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
+                        ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung unten bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
+                        ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
+                        [
+                            'type' => 'SelectInstance',
+                            'name' => 'WetterstationInstanceID',
+                            'caption' => 'Instanz der Wetterstation',
+                        ],
+                        [
+                            'type' => 'Button',
+                            'caption' => '🔎 Wetterstation suchen (Froggit/Sainlogic/ELV/Meteobridge & Co.)',
+                            'onClick' => 'echo WHUB_DiscoverWetterstation($id);',
+                        ],
+                        ['type' => 'Label', 'caption' => 'Findet Froggit (auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware), Sainlogic/ELV (Wunderground-Protokoll) sowie Meteobridge/Meteohub (deckt als Datenlogger-Aggregator zusätzlich weitere Marken wie DAVIS ab). Findet sich keines davon, wird zuletzt systemweit nach Variablen mit dem passenden Symcon-Standardprofil gesucht (z. B. eine bereits profilierte KNX-Wetterstation) -- nur bei einem eindeutigen Treffer übernommen.'],
+                        ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation ohne zugewiesenes Profil, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
+                        ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)'],
+                        ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)'],
+                        ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
+                        ['type' => 'Label', 'caption' => 'Windböe -- drei Schwellwerte statt einem: eine Markise ist deutlich windempfindlicher als ein robustes Raffstore. Jede Schutzaktions-Zeile wählt über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert.'],
+                        [
+                            'type' => 'PopupButton',
+                            'caption' => 'Welchen Schwellwert wähle ich?',
+                            'popup' => [
+                                'caption' => 'Windböen-Schwellwerte -- Einordnung',
+                                'items' => [
+                                    ['type' => 'Label', 'caption' => 'Die Standardwerte lehnen sich an die amtlichen DWD-Windwarnstufen an (Windböen ab 50 km/h, Sturmböen 65-89 km/h, schwere Sturmböen 90-104 km/h) -- die Moderate-Stufe liegt bewusst darunter, weil Sachschutz (Markise, Raffstore) mehr Vorlauf braucht als eine reine Personen-Warnung.'],
+                                    ['type' => 'Label', 'caption' => 'Moderate (Standard 40 km/h): knapp über EN-13561-Windwiderstandsklasse 2 (bis 38 km/h) -- die Grenze, ab der eine durchschnittliche Wohnhaus-Markise gefährdet ist. Empfehlung für Markisen/Sonnensegel: "Ab Schweregrad" auf Moderate setzen.'],
+                                    ['type' => 'Label', 'caption' => 'Severe (Standard 65 km/h): entspricht DWDs "Sturmböen". Empfehlung für Standard-Raffstore/Rollladen/Garagentor: "Ab Schweregrad" auf Severe setzen.'],
+                                    ['type' => 'Label', 'caption' => 'Extreme (Standard 90 km/h): entspricht DWDs "schwere Sturmböen" -- nur für besonders robuste Systeme oder als allgemeiner Auffangwert sinnvoll.'],
+                                    ['type' => 'Label', 'caption' => 'Die tatsächliche Windwiderstandsklasse hängt vom Produkt, den Führungsschienen und der Montage ab -- die Herstellerangabe (falls vorhanden) hat immer Vorrang vor diesen Richtwerten.'],
+                                ],
+                            ],
+                        ],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleModerate', 'caption' => 'Schwellwert Windböe -- Moderate (km/h)', 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleSevere', 'caption' => 'Schwellwert Windböe -- Severe (km/h)', 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleExtreme', 'caption' => 'Schwellwert Windböe -- Extreme (km/h)', 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'Label', 'caption' => 'Regenrate -- ebenfalls drei Schwellwerte statt einem, analog zur Windböe.'],
+                        [
+                            'type' => 'PopupButton',
+                            'caption' => 'Welchen Regen-Schwellwert wähle ich?',
+                            'popup' => [
+                                'caption' => 'Regenraten-Schwellwerte -- Einordnung',
+                                'items' => [
+                                    ['type' => 'Label', 'caption' => 'Die Standardwerte entsprechen DWDs eigenen amtlichen Starkregen-Warnstufen (1 Stunde): Moderate 15 mm/h ("Markante Wetterwarnung"), Severe 25 mm/h ("Unwetterwarnung"), Extreme 40 mm/h ("Warnung vor extremem Unwetter").'],
+                                    ['type' => 'Label', 'caption' => 'Wie bei der Windböe wählt jede Schutzaktions-Zeile über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert (z. B. Fenster schließen schon bei Moderate, ein robustes Garagentor erst bei Severe).'],
+                                ],
+                            ],
+                        ],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleModerate', 'caption' => 'Schwellwert Regenrate -- Moderate (mm/h)', 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleSevere', 'caption' => 'Schwellwert Regenrate -- Severe (mm/h)', 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleExtreme', 'caption' => 'Schwellwert Regenrate -- Extreme (mm/h)', 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'CheckBox', 'name' => 'WetterstationAutoRueckstellung', 'caption' => 'Automatische Rückstellung nach Windberuhigung (Raffstore/Markise/Garage)'],
+                        ['type' => 'Label', 'caption' => 'Die EINZIGE Ausnahme von "keine automatische Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert liefert. Stellt eine durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktion automatisch auf den Wert zurück, den sie unmittelbar vor dem Auslösen hatte -- aber erst, nachdem Wind UND Regen seit 20 Minuten durchgehend wieder unter der Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen mitten im Sturm). Gilt NUR für durch die eigene Wetterstation ausgelöste Aktionen, nicht für amtliche Warnungen. Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen bleiben wie gehabt ohne Rückstellung. Jede Rückstellung wird in der Warnungs-Historie (WHUB_GetHistory()) protokolliert, eine anstehende Rückstellung steht unten im Panel "Prüfung & Status".'],
+                        ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
                     ],
                 ],
-                ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
-                ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung oben bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
-                ['type' => 'CheckBox', 'name' => 'QuelleGeosphereAt', 'caption' => 'Zusätzlich direkte GeoSphere-Austria-Warnungen (warnungen.zamg.at) -- koordinatengenau für österreichische Standorte, präziser als Meteoalarm'],
-                ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für österreichische Standorte automatisch von Meteoalarm (koordinatengenau statt Namensabgleich) -- analog zur direkten DWD-Anbindung, die für deutsche Standorte den entsprechenden NINA-Kanal ersetzt. Amtliche Quelle (GeoSphere Austria/ZAMG), kein Zugangsschlüssel nötig.'],
-                ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
-                ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
-                ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar. Deckt Schweizer Standorte ab -- für Deutschland liefert PEGELONLINE oben bereits Pegelstände.'],
-                ['type' => 'CheckBox', 'name' => 'QuelleSedErdbebenCh', 'caption' => 'Zusätzlich Schweizer Erdbeben (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle)'],
-                ['type' => 'Label', 'caption' => 'Amtliche seismologische Überwachung, keine Wetterquelle. Anders als bei Wetterwarnungen liefert die Quelle selbst weder eine Warnfläche noch ein "Gültig bis" -- ein Erdbeben ist ein Momentereignis. WarnHub bildet deshalb einen eigenen Kreis um das Epizentrum (Radius nach Magnitude gestuft -- eine grobe eigene Näherung, KEINE amtliche Gefährdungsfläche) und ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt es nicht mehr als aktiv. Deckt nur die Schweiz ab.'],
-                ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => 'Zusätzlich deutscher Waldbrandgefahrenindex (DWD) -- amtliche 5-stufige Skala, je Standort die nächstgelegene Messstation'],
-                ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => 'Ab Gefahrenstufe (1-5)', 'minValue' => 1, 'maxValue' => 5],
-                ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter.'],
-                ['type' => 'CheckBox', 'name' => 'QuelleOzonDe', 'caption' => 'Zusätzlich deutsche Ozonbelastung (Umweltbundesamt) -- amtlicher Luftqualitätsindex, nur Ozon/Sommersmog'],
-                ['type' => 'NumberSpinner', 'name' => 'UbaOzonSchwelle', 'caption' => 'Ab Luftqualitätsindex-Stufe (0-4)', 'minValue' => 0, 'maxValue' => 4],
-                ['type' => 'Label', 'caption' => 'Nutzt das Umweltbundesamt (UBA) als amtliche Quelle für Ozonmesswerte, ausdrücklich NUR Ozon/Sommersmog -- kein allgemeines Luftgüte-Monitoring und keine private Innenraum-Sensorik (dafür ist WarnHub nicht gedacht, siehe Forum-Diskussion). Amtliche 5-stufige Skala (0 = sehr gut bis 4 = sehr schlecht), berechnet aus der stündlichen Ozonkonzentration je Messstation (0-60 µg/m³ = Stufe 0, ... über 240 µg/m³ = Stufe 4).'],
-                ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                 [
-                    'type' => 'SelectInstance',
-                    'name' => 'WetterstationInstanceID',
-                    'caption' => 'Instanz der Wetterstation',
+                    'type' => 'ExpansionPanel',
+                    'name' => 'DatenquellenDePanel',
+                    'caption' => '🇩🇪  Deutschland',
+                    'expanded' => $expDqDe,
+                    'onClick' => $this->rememberPanelOnClick('DatenquellenDe', $expDqDe),
+                    'items' => [
+                        ['type' => 'CheckBox', 'name' => 'QuelleNina', 'caption' => 'NINA-Aggregation (MoWaS/Katwarn/Biwapp/DWD/Hochwasser/Polizei, warnung.bund.de)'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleDwd', 'caption' => 'Zusätzlich direkte DWD-Wetterwarnungen (mehr Detail als die NINA-Zusammenfassung)'],
+                        ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => 'Pegelstände (PEGELONLINE/WSV) -- warnt bei Pegeln über dem mittleren bzw. bisherigen Höchstwasser in der Nähe eines Standorts'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => 'Radioaktivität (BfS Ortsdosisleistung) -- eigener Schwellwert, keine amtliche Meldestufe'],
+                        ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => 'Schwellwert Radioaktivität (µSv/h)', 'digits' => 3, 'minValue' => 0.05],
+                        [
+                            'type' => 'PopupButton',
+                            'caption' => 'Was bedeutet dieser Wert? (Einordnung Dosisleistung/Verweildauer)',
+                            'popup' => [
+                                'caption' => 'Ortsdosisleistung -- Einordnung',
+                                'items' => $this->bfsOdlReferencePopupItems(),
+                            ],
+                        ],
+                        ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => 'Zusätzlich deutscher Waldbrandgefahrenindex (DWD) -- amtliche 5-stufige Skala, je Standort die nächstgelegene Messstation'],
+                        ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => 'Ab Gefahrenstufe (1-5)', 'minValue' => 1, 'maxValue' => 5],
+                        ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter.'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleOzonDe', 'caption' => 'Zusätzlich deutsche Ozonbelastung (Umweltbundesamt) -- amtlicher Luftqualitätsindex, nur Ozon/Sommersmog'],
+                        ['type' => 'NumberSpinner', 'name' => 'UbaOzonSchwelle', 'caption' => 'Ab Luftqualitätsindex-Stufe (0-4)', 'minValue' => 0, 'maxValue' => 4],
+                        ['type' => 'Label', 'caption' => 'Nutzt das Umweltbundesamt (UBA) als amtliche Quelle für Ozonmesswerte, ausdrücklich NUR Ozon/Sommersmog -- kein allgemeines Luftgüte-Monitoring und keine private Innenraum-Sensorik (dafür ist WarnHub nicht gedacht, siehe Forum-Diskussion). Amtliche 5-stufige Skala (0 = sehr gut bis 4 = sehr schlecht), berechnet aus der stündlichen Ozonkonzentration je Messstation (0-60 µg/m³ = Stufe 0, ... über 240 µg/m³ = Stufe 4).'],
+                    ],
                 ],
                 [
-                    'type' => 'Button',
-                    'caption' => '🔎 Wetterstation suchen (Froggit/Sainlogic/ELV/Meteobridge & Co.)',
-                    'onClick' => 'echo WHUB_DiscoverWetterstation($id);',
+                    'type' => 'ExpansionPanel',
+                    'name' => 'DatenquellenAtPanel',
+                    'caption' => '🇦🇹  Österreich',
+                    'expanded' => $expDqAt,
+                    'onClick' => $this->rememberPanelOnClick('DatenquellenAt', $expDqAt),
+                    'items' => [
+                        ['type' => 'CheckBox', 'name' => 'QuelleGeosphereAt', 'caption' => 'Zusätzlich direkte GeoSphere-Austria-Warnungen (warnungen.zamg.at) -- koordinatengenau für österreichische Standorte, präziser als Meteoalarm'],
+                        ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für österreichische Standorte automatisch von Meteoalarm (koordinatengenau statt Namensabgleich) -- analog zur direkten DWD-Anbindung, die für deutsche Standorte den entsprechenden NINA-Kanal ersetzt. Amtliche Quelle (GeoSphere Austria/ZAMG), kein Zugangsschlüssel nötig.'],
+                    ],
                 ],
-                ['type' => 'Label', 'caption' => 'Findet Froggit (auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware), Sainlogic/ELV (Wunderground-Protokoll) sowie Meteobridge/Meteohub (deckt als Datenlogger-Aggregator zusätzlich weitere Marken wie DAVIS ab). Findet sich keines davon, wird zuletzt systemweit nach Variablen mit dem passenden Symcon-Standardprofil gesucht (z. B. eine bereits profilierte KNX-Wetterstation) -- nur bei einem eindeutigen Treffer übernommen.'],
-                ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation ohne zugewiesenes Profil, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
-                ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)'],
-                ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)'],
-                ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
-                ['type' => 'Label', 'caption' => 'Windböe -- drei Schwellwerte statt einem: eine Markise ist deutlich windempfindlicher als ein robustes Raffstore. Jede Schutzaktions-Zeile wählt über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert.'],
                 [
-                    'type' => 'PopupButton',
-                    'caption' => 'Welchen Schwellwert wähle ich?',
-                    'popup' => [
-                        'caption' => 'Windböen-Schwellwerte -- Einordnung',
-                        'items' => [
-                            ['type' => 'Label', 'caption' => 'Die Standardwerte lehnen sich an die amtlichen DWD-Windwarnstufen an (Windböen ab 50 km/h, Sturmböen 65-89 km/h, schwere Sturmböen 90-104 km/h) -- die Moderate-Stufe liegt bewusst darunter, weil Sachschutz (Markise, Raffstore) mehr Vorlauf braucht als eine reine Personen-Warnung.'],
-                            ['type' => 'Label', 'caption' => 'Moderate (Standard 40 km/h): knapp über EN-13561-Windwiderstandsklasse 2 (bis 38 km/h) -- die Grenze, ab der eine durchschnittliche Wohnhaus-Markise gefährdet ist. Empfehlung für Markisen/Sonnensegel: "Ab Schweregrad" auf Moderate setzen.'],
-                            ['type' => 'Label', 'caption' => 'Severe (Standard 65 km/h): entspricht DWDs "Sturmböen". Empfehlung für Standard-Raffstore/Rollladen/Garagentor: "Ab Schweregrad" auf Severe setzen.'],
-                            ['type' => 'Label', 'caption' => 'Extreme (Standard 90 km/h): entspricht DWDs "schwere Sturmböen" -- nur für besonders robuste Systeme oder als allgemeiner Auffangwert sinnvoll.'],
-                            ['type' => 'Label', 'caption' => 'Die tatsächliche Windwiderstandsklasse hängt vom Produkt, den Führungsschienen und der Montage ab -- die Herstellerangabe (falls vorhanden) hat immer Vorrang vor diesen Richtwerten.'],
+                    'type' => 'ExpansionPanel',
+                    'name' => 'DatenquellenChPanel',
+                    'caption' => '🇨🇭  Schweiz',
+                    'expanded' => $expDqCh,
+                    'onClick' => $this->rememberPanelOnClick('DatenquellenCh', $expDqCh),
+                    'items' => [
+                        ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
+                        ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
+                        ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar.'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleSedErdbebenCh', 'caption' => 'Zusätzlich Schweizer Erdbeben (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle)'],
+                        ['type' => 'Label', 'caption' => 'Amtliche seismologische Überwachung, keine Wetterquelle. Anders als bei Wetterwarnungen liefert die Quelle selbst weder eine Warnfläche noch ein "Gültig bis" -- ein Erdbeben ist ein Momentereignis. WarnHub bildet deshalb einen eigenen Kreis um das Epizentrum (Radius nach Magnitude gestuft -- eine grobe eigene Näherung, KEINE amtliche Gefährdungsfläche) und ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt es nicht mehr als aktiv.'],
+                        [
+                            'type' => 'ExpansionPanel',
+                            'name' => 'HagelschutzChPanel',
+                            'caption' => '🧪  BETA: Hagelschutz Schweiz (VKF-Signalbox)',
+                            'expanded' => $expHagelschutz,
+                            'onClick' => $this->rememberPanelOnClick('HagelschutzCh', $expHagelschutz),
+                            'items' => [
+                                ['type' => 'Label', 'caption' => 'AUSDRÜCKLICH BETA -- ungetestet: Diese Anbindung wurde ausschließlich aus der offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut. Ohne eigene Signalbox konnte der Live-Abruf selbst nicht gegengeprüft werden -- die sonst in diesem Modul durchgehend befolgte "live verifizieren"-Regel wird hier bewusst ausgesetzt. Rückmeldungen (funktioniert/funktioniert nicht) sind ausdrücklich willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
+                                ['type' => 'Label', 'caption' => 'Setzt eine physisch bei einem konkreten Schweizer Gebäude registrierte VKF-Hagelschutz-Signalbox voraus (hagelschutz-einfach-automatisch.ch) -- kein reiner Software-Zugang. Ohne eigene Signalbox einfach leer lassen, dann bleibt diese Quelle inaktiv.'],
+                                ['type' => 'ValidationTextBox', 'name' => 'HagelschutzPollUrl', 'caption' => 'Poll-URL der eigenen Signalbox'],
+                                ['type' => 'Label', 'caption' => 'Die vollständige Adresse aus der eigenen Signalbox-Konfiguration eintragen (Format https://meteo.netitservices.com/api/v1/devices/<deviceId>/poll?hwtypeId=<HID>) -- nicht selbst aus deviceId/hwtypeId zusammensetzen, da sich das Format zwischen Signalbox-Generationen unterscheiden kann. Meldet eine Hagelwarnung am Symcon-Systemstandort, sobald die Signalbox "currentState" ungleich 0 zurückgibt (inkl. Testalarm).'],
+                            ],
                         ],
                     ],
                 ],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleModerate', 'caption' => 'Schwellwert Windböe -- Moderate (km/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleSevere', 'caption' => 'Schwellwert Windböe -- Severe (km/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleExtreme', 'caption' => 'Schwellwert Windböe -- Extreme (km/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'Label', 'caption' => 'Regenrate -- ebenfalls drei Schwellwerte statt einem, analog zur Windböe.'],
-                [
-                    'type' => 'PopupButton',
-                    'caption' => 'Welchen Regen-Schwellwert wähle ich?',
-                    'popup' => [
-                        'caption' => 'Regenraten-Schwellwerte -- Einordnung',
-                        'items' => [
-                            ['type' => 'Label', 'caption' => 'Die Standardwerte entsprechen DWDs eigenen amtlichen Starkregen-Warnstufen (1 Stunde): Moderate 15 mm/h ("Markante Wetterwarnung"), Severe 25 mm/h ("Unwetterwarnung"), Extreme 40 mm/h ("Warnung vor extremem Unwetter").'],
-                            ['type' => 'Label', 'caption' => 'Wie bei der Windböe wählt jede Schutzaktions-Zeile über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert (z. B. Fenster schließen schon bei Moderate, ein robustes Garagentor erst bei Severe).'],
-                        ],
-                    ],
-                ],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleModerate', 'caption' => 'Schwellwert Regenrate -- Moderate (mm/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleSevere', 'caption' => 'Schwellwert Regenrate -- Severe (mm/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleExtreme', 'caption' => 'Schwellwert Regenrate -- Extreme (mm/h)', 'digits' => 1, 'minValue' => 1],
-                ['type' => 'CheckBox', 'name' => 'WetterstationAutoRueckstellung', 'caption' => 'Automatische Rückstellung nach Windberuhigung (Raffstore/Markise/Garage)'],
-                ['type' => 'Label', 'caption' => 'Die EINZIGE Ausnahme von "keine automatische Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert liefert. Stellt eine durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktion automatisch auf den Wert zurück, den sie unmittelbar vor dem Auslösen hatte -- aber erst, nachdem Wind UND Regen seit 20 Minuten durchgehend wieder unter der Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen mitten im Sturm). Gilt NUR für durch die eigene Wetterstation ausgelöste Aktionen, nicht für amtliche Warnungen. Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen bleiben wie gehabt ohne Rückstellung. Jede Rückstellung wird in der Warnungs-Historie (WHUB_GetHistory()) protokolliert, eine anstehende Rückstellung steht unten im Panel "Prüfung & Status".'],
-                ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
             ],
         ];
 
-        $form['elements'][] = [
-            'type' => 'ExpansionPanel',
-            'caption' => '🧪  BETA: Hagelschutz Schweiz (VKF-Signalbox)',
-            'expanded' => false,
-            'items' => [
-                ['type' => 'Label', 'caption' => 'AUSDRÜCKLICH BETA -- ungetestet: Diese Anbindung wurde ausschließlich aus der offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut. Ohne eigene Signalbox konnte der Live-Abruf selbst nicht gegengeprüft werden -- die sonst in diesem Modul durchgehend befolgte "live verifizieren"-Regel wird hier bewusst ausgesetzt. Rückmeldungen (funktioniert/funktioniert nicht) sind ausdrücklich willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
-                ['type' => 'Label', 'caption' => 'Setzt eine physisch bei einem konkreten Schweizer Gebäude registrierte VKF-Hagelschutz-Signalbox voraus (hagelschutz-einfach-automatisch.ch) -- kein reiner Software-Zugang. Ohne eigene Signalbox einfach leer lassen, dann bleibt diese Quelle inaktiv.'],
-                ['type' => 'ValidationTextBox', 'name' => 'HagelschutzPollUrl', 'caption' => 'Poll-URL der eigenen Signalbox'],
-                ['type' => 'Label', 'caption' => 'Die vollständige Adresse aus der eigenen Signalbox-Konfiguration eintragen (Format https://meteo.netitservices.com/api/v1/devices/<deviceId>/poll?hwtypeId=<HID>) -- nicht selbst aus deviceId/hwtypeId zusammensetzen, da sich das Format zwischen Signalbox-Generationen unterscheiden kann. Meldet eine Hagelwarnung am Symcon-Systemstandort, sobald die Signalbox "currentState" ungleich 0 zurückgibt (inkl. Testalarm).'],
-            ],
-        ];
-
+        $expBenachrichtigung = $this->getPanelExpandedState('Benachrichtigung', true);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '🔔  Benachrichtigung',
-            'expanded' => true,
+            'expanded' => $expBenachrichtigung,
+            'onClick' => $this->rememberPanelOnClick('Benachrichtigung', $expBenachrichtigung),
             'items' => [
                 ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte Push-Ziele (WebFront/Kachel-Visualisierung/Telegram/Pushover/E-Mail, auch Handy)'],
                 ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton (nur WebFront/Kachel-Visualisierung)', 'options' => $this->soundOptions()],
@@ -868,10 +988,12 @@ class WarnHub extends IPSModule
             ],
         ];
 
+        $expSchutzaktionen = $this->getPanelExpandedState('Schutzaktionen', false);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Kofferraum, Sirenen, Skripte)',
-            'expanded' => false,
+            'expanded' => $expSchutzaktionen,
+            'onClick' => $this->rememberPanelOnClick('Schutzaktionen', $expSchutzaktionen),
             'items' => [
                 [
                     'type' => 'ExpansionPanel',
@@ -946,10 +1068,12 @@ class WarnHub extends IPSModule
             ],
         ];
 
+        $expFenster = $this->getPanelExpandedState('FensterUeberwachung', false);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '🪟  Fenster-/Tür-Überwachung',
-            'expanded' => false,
+            'expanded' => $expFenster,
+            'onClick' => $this->rememberPanelOnClick('FensterUeberwachung', $expFenster),
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub kann ein Fenster oder eine Tür nicht selbst schließen -- anders als Raffstore/Markise/Garage gibt es dafür keinen generischen Aktor. Ist aber ein Öffnungskontakt vorhanden, kann WarnHub erkennen, dass er offen ist, und bei einer passenden aktiven Warnung gezielt darauf hinweisen.'],
                 [
@@ -1010,10 +1134,12 @@ class WarnHub extends IPSModule
             'caption' => '🧪 Testbenachrichtigung senden',
             'onClick' => 'echo WHUB_TestPush($id);',
         ];
+        $expPruefung = $this->getPanelExpandedState('PruefungStatus', true);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
             'caption' => '🔎  Prüfung & Status',
-            'expanded' => true,
+            'expanded' => $expPruefung,
+            'onClick' => $this->rememberPanelOnClick('PruefungStatus', $expPruefung),
             'items' => $pruefungItems,
         ];
 
@@ -1429,6 +1555,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix: schaltet man NINA UND die direkten DWD-Wetterwarnungen bewusst ab (z. B. in Österreich/der Schweiz, andere Quellen decken das ab), legte das bisher die KOMPLETTE Instanz lahm, obwohl eine andere Datenquelle (z. B. GeoSphere Austria) aktiv war -- die "gibt es überhaupt eine aktive Quelle"-Prüfung kannte nur NINA/DWD und wurde bei keiner der seither dazugekommenen acht weiteren Quellen mitgezogen. Praxis-Fund hfichtinger, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• E-Mail-Push: eine Zieladresse kann jetzt mehrere Empfänger enthalten, mit Komma oder Semikolon getrennt -- jede Adresse bekommt einen eigenen Versand, unabhängig vom internen Verhalten des SMTP-Moduls bei mehreren Empfängern. Praxis-Wunsch hfichtinger, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix: die 256-Byte-Kürzung galt bisher für ALLE Push-Kanäle gleichermaßen -- dabei ist das nachweislich nur eine Grenze von WebFront/Kachel-Visualisierung. Telegram, Pushover und vor allem E-Mail (keine bekannte Längenbeschränkung) bekommen jetzt den vollen, unabgekürzten Text. Praxis-Fund hfichtinger, Symcon-Forum: "Mail kann auch mehr"'],
+                ['type' => 'Label', 'caption' => '• NEU: "Datenquellen" nach D-A-CH gruppiert -- "Allgemein" (Meteoalarm, eigene Wetterstation, Abfragetakt) bleibt immer offen, darunter je ein zuklappbares Länder-Panel (🇩🇪/🇦🇹/🇨🇭). Das Panel des über den Symcon-Systemstandort erkannten Heimatlands klappt beim allerersten Öffnen automatisch auf. Praxis-Wunsch Dietmar (angeregt durch hfichtingers Rückmeldung, dass ihn als Österreicher die deutschen Quellen gar nicht interessieren)'],
+                ['type' => 'Label', 'caption' => '• NEU: alle Panels merken sich jetzt selbst, ob sie zuletzt auf- oder zugeklappt waren -- kein "Formular scrollt sich nach jedem Speichern wieder von vorne auf" mehr. Dietmars Wunsch 09.09.2026'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2068,6 +2196,29 @@ class WarnHub extends IPSModule
             return null; // Standort-Instanz existiert, ist aber nicht konfiguriert
         }
         return ['lat' => $lat, 'lon' => $lon];
+    }
+
+    /**
+     * Aktualisiert HeimLandCode aus dem Symcon-Systemstandort -- bewusst
+     * NUR hier in Poll() (Hintergrund-Timer), NICHT in
+     * GetConfigurationForm(), damit das Öffnen der Konsole nie auf einen
+     * Nominatim-Netzwerkaufruf wartet. reverseGeocodeStandort() cached
+     * selbst 6h, ist also außerhalb des allerersten Aufrufs praktisch
+     * kostenlos. Kein konfigurierter Systemstandort bzw. ein fehlgeschlagener
+     * Abruf lässt den zuletzt bekannten Wert einfach unangetastet stehen,
+     * statt ihn zu löschen -- besser eine leicht veraltete als gar keine
+     * Voreinstellung fürs Formular.
+     */
+    private function refreshHeimLandCode(): void
+    {
+        $loc = $this->getSystemLocation();
+        if ($loc === null) {
+            return;
+        }
+        $geo = $this->reverseGeocodeStandort($loc['lat'], $loc['lon']);
+        if ($geo['countryCode'] !== '') {
+            $this->WriteAttributeString('HeimLandCode', $geo['countryCode']);
+        }
     }
 
     /**
@@ -4242,6 +4393,7 @@ class WarnHub extends IPSModule
         if ($this->ReadPropertyBoolean('WetterstationAutoRueckstellung')) {
             $this->checkWetterstationAutoRestore();
         }
+        $this->refreshHeimLandCode();
 
         $this->WriteAttributeInteger('LastPollTs', time());
         $this->WriteAttributeString('LastActiveWarningsJson', json_encode($result['active']));

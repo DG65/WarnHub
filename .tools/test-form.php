@@ -191,6 +191,25 @@ function findByName(array $elements, string $name): ?array
     return null;
 }
 
+/** Wie findByName(), aber mit beliebigem Prädikat -- für Elemente ohne eindeutigen 'name' (Panels/Popups/Buttons), rekursiv über beliebig tief verschachtelte 'items' (seit der D-A-CH-Gruppierung 09.09.2026 auch mehrstufig). */
+function findItem(array $elements, callable $predicate): ?array
+{
+    foreach ($elements as $el) {
+        if ($predicate($el)) {
+            return $el;
+        }
+        foreach (['items', 'columns'] as $k) {
+            if (isset($el[$k]) && is_array($el[$k])) {
+                $found = findItem($el[$k], $predicate);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+    }
+    return null;
+}
+
 $kartenfeld = findByName($decoded['elements'], 'KartenStandort');
 check('SelectLocation-Kartenfeld "KartenStandort" vorhanden', ($kartenfeld['type'] ?? null) === 'SelectLocation');
 check('Kartenfeld-value ist ein JSON-String, kein verschachteltes Objekt (WebFront erwartet String, siehe Live-Fund "[object Object] is not valid JSON")', is_string($kartenfeld['value'] ?? null));
@@ -210,14 +229,11 @@ check('"QuelleSedErdbebenCh"-Checkbox vorhanden (Schweizer Erdbeben)', findByNam
 check('"QuelleWaldbrandDe"-Checkbox vorhanden (Waldbrandgefahrenindex)', findByName($decoded['elements'], 'QuelleWaldbrandDe') !== null);
 check('Schwellwert-Feld "WaldbrandDeSchwelle" vorhanden', findByName($decoded['elements'], 'WaldbrandDeSchwelle') !== null);
 
-$hagelschutzPanel = null;
-foreach ($decoded['elements'] as $el) {
-    if (str_contains($el['caption'] ?? '', 'BETA: Hagelschutz Schweiz')) {
-        $hagelschutzPanel = $el;
-        break;
-    }
-}
-check('eigenes, klar als BETA gekennzeichnetes Panel "Hagelschutz Schweiz" vorhanden', $hagelschutzPanel !== null);
+// Seit der D-A-CH-Gruppierung (09.09.2026) ein verschachteltes Panel
+// innerhalb Datenquellen > Schweiz, nicht mehr top-level -- deshalb
+// rekursive Suche.
+$hagelschutzPanel = findItem($decoded['elements'], fn ($el) => str_contains($el['caption'] ?? '', 'BETA: Hagelschutz Schweiz'));
+check('eigenes, klar als BETA gekennzeichnetes Panel "Hagelschutz Schweiz" vorhanden (verschachtelt unter Datenquellen > Schweiz)', $hagelschutzPanel !== null);
 check('Feld "HagelschutzPollUrl" steht in diesem Panel', findByName($hagelschutzPanel['items'] ?? [], 'HagelschutzPollUrl') !== null);
 
 $schutzaktionenListe = findByName($decoded['elements'], 'Schutzaktionen');
@@ -286,23 +302,13 @@ foreach ($decoded['elements'] as $el) {
         break;
     }
 }
-$bfsPopup = null;
-foreach ($datenquellenPanel['items'] ?? [] as $item) {
-    if (($item['type'] ?? '') === 'PopupButton' && str_contains($item['caption'] ?? '', 'bedeutet dieser Wert')) {
-        $bfsPopup = $item;
-        break;
-    }
-}
+// Seit der D-A-CH-Gruppierung (09.09.2026) verschachtelt unter
+// Datenquellen > Deutschland bzw. > Allgemein -- rekursive Suche.
+$bfsPopup = findItem($datenquellenPanel['items'] ?? [], fn ($item) => ($item['type'] ?? '') === 'PopupButton' && str_contains($item['caption'] ?? '', 'bedeutet dieser Wert'));
 check('Popup "Was bedeutet dieser Wert?" (Dosisleistung/Verweildauer) steht im Datenquellen-Panel', $bfsPopup !== null);
 check('Popup enthält mindestens 5 Einordnungszeilen', $bfsPopup !== null && count($bfsPopup['popup']['items'] ?? []) >= 5);
 
-$windPopup = null;
-foreach ($datenquellenPanel['items'] ?? [] as $item) {
-    if (($item['type'] ?? '') === 'PopupButton' && str_contains($item['caption'] ?? '', 'Welchen Schwellwert')) {
-        $windPopup = $item;
-        break;
-    }
-}
+$windPopup = findItem($datenquellenPanel['items'] ?? [], fn ($item) => ($item['type'] ?? '') === 'PopupButton' && str_contains($item['caption'] ?? '', 'Welchen Schwellwert'));
 check('Popup "Welchen Schwellwert wähle ich?" (Windböen-Einordnung) steht im Datenquellen-Panel', $windPopup !== null);
 check('Popup erklärt alle drei Stufen (Moderate/Severe/Extreme)', $windPopup !== null && count($windPopup['popup']['items'] ?? []) >= 4);
 
@@ -340,13 +346,7 @@ check('Schwellwert-Feld "WetterstationRegenSchwelleModerate" vorhanden', findByN
 check('Schwellwert-Feld "WetterstationRegenSchwelleSevere" vorhanden', findByName($decoded['elements'], 'WetterstationRegenSchwelleSevere') !== null);
 check('Schwellwert-Feld "WetterstationRegenSchwelleExtreme" vorhanden', findByName($decoded['elements'], 'WetterstationRegenSchwelleExtreme') !== null);
 check('Auto-Rückstellungs-Checkbox "WetterstationAutoRueckstellung" vorhanden', findByName($decoded['elements'], 'WetterstationAutoRueckstellung') !== null);
-$wetterstationBtn = null;
-foreach ($datenquellenPanel['items'] ?? [] as $item) {
-    if (($item['type'] ?? '') === 'Button' && str_contains($item['onClick'] ?? '', 'WHUB_DiscoverWetterstation')) {
-        $wetterstationBtn = $item;
-        break;
-    }
-}
+$wetterstationBtn = findItem($datenquellenPanel['items'] ?? [], fn ($item) => ($item['type'] ?? '') === 'Button' && str_contains($item['onClick'] ?? '', 'WHUB_DiscoverWetterstation'));
 check('Button "Wetterstation suchen" steht im Datenquellen-Panel', $wetterstationBtn !== null);
 
 check('Feld "SchutzaktionVorlaufMinuten" (Vorlauf vor Gültigkeitsbeginn) im Schutzaktionen-Panel vorhanden', findByName($decoded['elements'], 'SchutzaktionVorlaufMinuten') !== null);
@@ -390,6 +390,89 @@ $logErrorRef->invokeArgs($hub, ['TestContext', 'Test-Fehlermeldung']);
 check('genau ein LogMessage()-Aufruf', count($GLOBALS['whub_test_logMessageCalls']) === 1);
 check('Nachricht enthält Kontext und Meldung', ($GLOBALS['whub_test_logMessageCalls'][0][0] ?? '') === 'TestContext: Test-Fehlermeldung');
 check('Typ ist KL_ERROR', ($GLOBALS['whub_test_logMessageCalls'][0][1] ?? null) === KL_ERROR);
+
+function callPrivate(object $obj, string $method, array $args = [])
+{
+    $ref = new ReflectionMethod($obj, $method);
+    return $ref->invokeArgs($obj, $args);
+}
+
+echo "\n== getPanelExpandedState()/TogglePanelExpanded(): merkt sich den Auf-/Zugeklappt-Zustand eines Panels über PanelExpandedState (Dietmars Wunsch 09.09.2026: 'Formular scrollt sich halb zu Tode') ==\n";
+$hubPanel = new WarnHub();
+$hubPanel->Create();
+check('ohne jede Eintragung: der übergebene Default gilt (true)', callPrivate($hubPanel, 'getPanelExpandedState', ['Test', true]) === true);
+check('ohne jede Eintragung: der übergebene Default gilt (false)', callPrivate($hubPanel, 'getPanelExpandedState', ['Test', false]) === false);
+callPrivate($hubPanel, 'TogglePanelExpanded', ['Test', true]); // war beim Rendern "true" (aufgeklappt) -- Klick kehrt es um
+check('nach einem Klick (war aufgeklappt): jetzt als zugeklappt gemerkt, unabhängig vom Default', callPrivate($hubPanel, 'getPanelExpandedState', ['Test', true]) === false);
+callPrivate($hubPanel, 'TogglePanelExpanded', ['Test', false]); // beim nächsten Rendern war es laut Speicher "false" -- erneuter Klick kehrt WIEDER um
+check('nach einem zweiten Klick: wieder aufgeklappt (Rundlauf funktioniert)', callPrivate($hubPanel, 'getPanelExpandedState', ['Test', true]) === true);
+check('ein ANDERES Panel bleibt von diesem Merken unberührt', callPrivate($hubPanel, 'getPanelExpandedState', ['AnderesPanel', false]) === false);
+
+$onClickStr = callPrivate($hubPanel, 'rememberPanelOnClick', ['MeinPanel', true]);
+check('rememberPanelOnClick() liefert den korrekten WHUB_TogglePanelExpanded()-Aufruf mit Panel-Name und aktuellem Zustand als Literal', $onClickStr === 'WHUB_TogglePanelExpanded($id, "MeinPanel", true);');
+$onClickStr2 = callPrivate($hubPanel, 'rememberPanelOnClick', ['MeinPanel', false]);
+check('rememberPanelOnClick() mit false-Zustand', $onClickStr2 === 'WHUB_TogglePanelExpanded($id, "MeinPanel", false);');
+
+echo "\n== Panel-Zustand wird auch für die übrigen Top-Level-Panels gemerkt (nicht nur Datenquellen) ==\n";
+$dokuPanel = findItem($decoded['elements'], fn ($el) => ($el['caption'] ?? '') === '📖  Dokumentation & Hilfe');
+check('"Dokumentation & Hilfe" hat ein onClick zum Merken des Zustands', str_contains($dokuPanel['onClick'] ?? '', 'WHUB_TogglePanelExpanded($id, "DokuHilfe"'));
+check('"Dokumentation & Hilfe" bleibt ohne gespeicherten Zustand wie bisher zugeklappt', ($dokuPanel['expanded'] ?? null) === false);
+check('"Standorte" hat ein onClick zum Merken des Zustands', str_contains($standortePanel['onClick'] ?? '', 'WHUB_TogglePanelExpanded($id, "Standorte"'));
+check('"Standorte" bleibt ohne gespeicherten Zustand wie bisher aufgeklappt', ($standortePanel['expanded'] ?? null) === true);
+check('"Schutzaktionen" hat ein onClick zum Merken des Zustands', str_contains($schutzaktionenPanel['onClick'] ?? '', 'WHUB_TogglePanelExpanded($id, "Schutzaktionen"'));
+check('"Schutzaktionen" bleibt ohne gespeicherten Zustand wie bisher zugeklappt', ($schutzaktionenPanel['expanded'] ?? null) === false);
+check('der verschachtelte Sicherheitshinweis bekommt KEIN eigenes Merk-onClick -- bleibt fest immer aufgeklappt (Sicherheitsrelevanz, Dietmars ausdrücklicher Wunsch 07.09.2026)', !array_key_exists('onClick', $sicherheitsPanel));
+$fensterPanelState = findItem($decoded['elements'], fn ($el) => ($el['caption'] ?? '') === '🪟  Fenster-/Tür-Überwachung');
+check('"Fenster-/Tür-Überwachung" hat ein onClick zum Merken des Zustands', str_contains($fensterPanelState['onClick'] ?? '', 'WHUB_TogglePanelExpanded($id, "FensterUeberwachung"'));
+$pruefungPanel = findItem($decoded['elements'], fn ($el) => ($el['caption'] ?? '') === '🔎  Prüfung & Status');
+check('"Prüfung & Status" hat ein onClick zum Merken des Zustands', str_contains($pruefungPanel['onClick'] ?? '', 'WHUB_TogglePanelExpanded($id, "PruefungStatus"'));
+$benachrichtigungPanel = findItem($decoded['elements'], fn ($el) => ($el['caption'] ?? '') === '🔔  Benachrichtigung');
+check('"Benachrichtigung" hat ein onClick zum Merken des Zustands', str_contains($benachrichtigungPanel['onClick'] ?? '', 'WHUB_TogglePanelExpanded($id, "Benachrichtigung"'));
+
+echo "\n== refreshHeimLandCode(): ohne konfigurierten Symcon-Systemstandort (IPS_GetInstanceListByModuleID liefert hier immer []) bleibt HeimLandCode unangetastet, kein Fehler ==\n";
+$hubNoLoc = new WarnHub();
+$hubNoLoc->Create();
+callPrivate($hubNoLoc, 'refreshHeimLandCode');
+check('HeimLandCode bleibt leer, kein Absturz ohne Systemstandort', $hubNoLoc->ReadAttributeString('HeimLandCode') === '');
+
+echo "\n== D-A-CH-Gruppierung: das Land-Panel des Symcon-Systemstandorts (HeimLandCode) ist beim ALLERERSTEN Öffnen automatisch aufgeklappt, die anderen beiden zugeklappt ==\n";
+$hubAt = new WarnHub();
+$hubAt->Create();
+$hubAt->WriteAttributeString('HeimLandCode', 'at'); // simuliert einen bereits erfolgten Poll() mit refreshHeimLandCode() -- kein echter Netzwerkaufruf im Test nötig
+$formAt = json_decode($hubAt->GetConfigurationForm(), true);
+$dqPanelAt = findItem($formAt['elements'], fn ($el) => ($el['caption'] ?? '') === '🌐  Datenquellen');
+$dePanelAt = findItem($dqPanelAt['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇩🇪  Deutschland');
+$atPanelAt = findItem($dqPanelAt['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇦🇹  Österreich');
+$chPanelAt = findItem($dqPanelAt['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇨🇭  Schweiz');
+check('Österreich-Panel ist aufgeklappt (HeimLandCode = at)', ($atPanelAt['expanded'] ?? null) === true);
+check('Deutschland-Panel bleibt zugeklappt', ($dePanelAt['expanded'] ?? null) === false);
+check('Schweiz-Panel bleibt zugeklappt', ($chPanelAt['expanded'] ?? null) === false);
+
+echo "\n== D-A-CH-Gruppierung: eine manuelle Nutzer-Wahl (PanelExpandedState) übersteuert den Land-Default ==\n";
+$hubOverride = new WarnHub();
+$hubOverride->Create();
+$hubOverride->WriteAttributeString('HeimLandCode', 'at'); // Heimatland Österreich -> würde AT normalerweise aufklappen
+$hubOverride->WriteAttributeString('PanelExpandedState', json_encode(['DatenquellenAt' => false, 'DatenquellenDe' => true])); // Nutzer hat es sich anders eingerichtet
+$formOverride = json_decode($hubOverride->GetConfigurationForm(), true);
+$dqPanelOv = findItem($formOverride['elements'], fn ($el) => ($el['caption'] ?? '') === '🌐  Datenquellen');
+$dePanelOv = findItem($dqPanelOv['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇩🇪  Deutschland');
+$atPanelOv = findItem($dqPanelOv['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇦🇹  Österreich');
+check('manuell zugeklapptes Österreich-Panel bleibt zugeklappt, obwohl es das Heimatland ist', ($atPanelOv['expanded'] ?? null) === false);
+check('manuell aufgeklapptes Deutschland-Panel bleibt aufgeklappt, obwohl NICHT das Heimatland', ($dePanelOv['expanded'] ?? null) === true);
+
+echo "\n== D-A-CH-Gruppierung: ohne bekannten HeimLandCode (z. B. noch kein Poll() gelaufen) sind alle drei Land-Panels zugeklappt, 'Allgemein' bleibt offen ==\n";
+$hubUnknown = new WarnHub();
+$hubUnknown->Create();
+$formUnknown = json_decode($hubUnknown->GetConfigurationForm(), true);
+$dqPanelUn = findItem($formUnknown['elements'], fn ($el) => ($el['caption'] ?? '') === '🌐  Datenquellen');
+$allgemeinPanelUn = findItem($dqPanelUn['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === 'Allgemein (grenzüberschreitend)');
+$dePanelUn = findItem($dqPanelUn['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇩🇪  Deutschland');
+$atPanelUn = findItem($dqPanelUn['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇦🇹  Österreich');
+$chPanelUn = findItem($dqPanelUn['items'] ?? [], fn ($el) => ($el['caption'] ?? '') === '🇨🇭  Schweiz');
+check('"Allgemein" ist per Default aufgeklappt', ($allgemeinPanelUn['expanded'] ?? null) === true);
+check('Deutschland-Panel ohne HeimLandCode zugeklappt', ($dePanelUn['expanded'] ?? null) === false);
+check('Österreich-Panel ohne HeimLandCode zugeklappt', ($atPanelUn['expanded'] ?? null) === false);
+check('Schweiz-Panel ohne HeimLandCode zugeklappt', ($chPanelUn['expanded'] ?? null) === false);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

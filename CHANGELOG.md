@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.13.0 (2026-09-09)
+
+- NEU: "Datenquellen" nach D-A-CH gruppiert. "Allgemein" (grenzüberschreitend:
+  Meteoalarm, eigene Wetterstation, Abfragetakt) bleibt immer offen, darunter
+  je ein zuklappbares Länder-Panel (🇩🇪 Deutschland: NINA/DWD/PEGELONLINE/
+  BfS-ODL/Waldbrand/Ozon; 🇦🇹 Österreich: GeoSphere Austria; 🇨🇭 Schweiz:
+  BAFU/SED-Erdbeben/Hagelschutz-CH-BETA, Letzteres jetzt darin verschachtelt
+  statt eigenes Top-Level-Panel). Dietmars Vorschlag 09.09.2026, angeregt
+  durch hfichtingers Rückmeldung, dass ihn als österreichischen Nutzer die
+  deutschen Quellen gar nicht interessieren.
+- NEU: das Länder-Panel des über den Symcon-Systemstandort erkannten
+  Heimatlands (reverseGeocodeStandort(), im Hintergrund über Poll()
+  aktualisiert -- KEIN Netzwerkaufruf beim Öffnen der Konsole) klappt beim
+  allerersten Öffnen automatisch auf. Eine spätere manuelle Wahl hat immer
+  Vorrang.
+- NEU: alle Panels merken sich jetzt selbst (PanelExpandedState), ob sie
+  zuletzt auf- oder zugeklappt waren, und stellen das nach jedem Speichern
+  wieder her -- kein "Formular scrollt sich von vorne auf" mehr. Der
+  Sicherheitshinweis zu Fenster/Kofferraum bleibt bewusst davon
+  ausgenommen (fest immer aufgeklappt). Dietmars Wunsch 09.09.2026.
+- Fix: `hasAnyActiveSource()` prüfte die eigene Wetterstation nur über
+  `WetterstationInstanceID`, nicht über die beiden manuellen Wind-/
+  Regen-Variablen -- eine Instanz, die NUR über die manuellen Variablen
+  (z. B. KNX/Netatmo/TFA) läuft, konnte bei abgeschalteten NINA/DWD
+  ebenfalls fälschlich lahmgelegt werden. Beim Bau der D-A-CH-Gruppierung
+  gefunden.
+
 ## 1.12.4 (2026-09-09)
 
 - Fix: die 256-Byte-Kürzung (`truncateBytes()`) galt bisher zentral für
