@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.13.0';
-    private const NEWS_VERSION = '1.13.0';
+    private const DOC_VERSION = '1.13.1';
+    private const NEWS_VERSION = '1.13.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1557,6 +1557,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix: die 256-Byte-Kürzung galt bisher für ALLE Push-Kanäle gleichermaßen -- dabei ist das nachweislich nur eine Grenze von WebFront/Kachel-Visualisierung. Telegram, Pushover und vor allem E-Mail (keine bekannte Längenbeschränkung) bekommen jetzt den vollen, unabgekürzten Text. Praxis-Fund hfichtinger, Symcon-Forum: "Mail kann auch mehr"'],
                 ['type' => 'Label', 'caption' => '• NEU: "Datenquellen" nach D-A-CH gruppiert -- "Allgemein" (Meteoalarm, eigene Wetterstation, Abfragetakt) bleibt immer offen, darunter je ein zuklappbares Länder-Panel (🇩🇪/🇦🇹/🇨🇭). Das Panel des über den Symcon-Systemstandort erkannten Heimatlands klappt beim allerersten Öffnen automatisch auf. Praxis-Wunsch Dietmar (angeregt durch hfichtingers Rückmeldung, dass ihn als Österreicher die deutschen Quellen gar nicht interessieren)'],
                 ['type' => 'Label', 'caption' => '• NEU: alle Panels merken sich jetzt selbst, ob sie zuletzt auf- oder zugeklappt waren -- kein "Formular scrollt sich nach jedem Speichern wieder von vorne auf" mehr. Dietmars Wunsch 09.09.2026'],
+                ['type' => 'Label', 'caption' => '• Fix "Kachel (Alle Warnungen)": der DWD reißt bei seinen "Vorabinformationen vor Unwetter" die CAP-Update-Kette faktisch ab und schickt für dieselbe andauernde Gefahr alle 15-30 Minuten eine neue Meldungs-ID -- das erschien bisher als mehrere fast identische, leicht unterschiedlich formulierte Karten für ein und dasselbe Ereignis (Push-Zustellung war seit 1.12.1 bereits korrekt, nur die Anzeige war betroffen). Es wird jetzt nur noch die jeweils aktuellste Fassung gezeigt. Praxis-Fund ruan, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4517,6 +4518,28 @@ class WarnHub extends IPSModule
         return $w['source'] . '|' . $w['event'] . '|' . $standortName;
     }
 
+    /**
+     * Wählt zwischen zwei $active-Einträgen DERSELBEN Episode (siehe
+     * warningEpisodeKey()) denjenigen, der in "Kachel (Alle Warnungen)"
+     * gezeigt werden soll -- der mit dem SPÄTEREN 'effective'/onset gilt als
+     * der aktuellere, weil ein Reissue des DWD normalerweise die Gültigkeit
+     * verlängert/aktualisiert. Bei gleichem oder nicht vergleichbarem
+     * Zeitpunkt entscheidet der höhere Schweregrad, sonst bleibt der erste
+     * (bereits vorhandene) Eintrag stehen -- stabil, kein zufälliges
+     * Umspringen zwischen Polls.
+     */
+    private function pickMoreCurrentActiveEntry(array $a, array $b): array
+    {
+        $aTs = !empty($a['effective']) ? strtotime((string) $a['effective']) : false;
+        $bTs = !empty($b['effective']) ? strtotime((string) $b['effective']) : false;
+        if ($aTs !== false && $bTs !== false && $aTs !== $bTs) {
+            return $bTs > $aTs ? $b : $a;
+        }
+        $aRank = self::SEVERITY_RANK[$a['severity'] ?? 'Unknown'] ?? 0;
+        $bRank = self::SEVERITY_RANK[$b['severity'] ?? 'Unknown'] ?? 0;
+        return $bRank > $aRank ? $b : $a;
+    }
+
     private function processWarnings(array $warnings): array
     {
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
@@ -4533,7 +4556,16 @@ class WarnHub extends IPSModule
         $pushAktiv = $this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed();
 
         $stillPresentEpisodes = [];
-        $active = [];
+        // Je Episode NUR der aktuellste Eintrag -- der DWD reißt bei seinen
+        // "Vorabinformationen vor Unwetter" die CAP-Update-Kette faktisch ab
+        // und schickt für dieselbe andauernde Gefahr alle 15-30 Minuten eine
+        // NEUE identifier statt eines Updates der alten (siehe
+        // warningEpisodeKey()); ohne Deduplizierung hier erschienen mehrere
+        // fast identische Karten für ein und dasselbe Ereignis in "Kachel
+        // (Alle Warnungen)" -- sowohl der offizielle DWD-Auftritt als auch
+        // ein zum Vergleich herangezogenes drittes Symcon-Modul zeigen dafür
+        // nur EINEN Eintrag. Praxis-Fund ruan, Symcon-Forum, 09.09.2026.
+        $activeByEpisode = [];
         $newlyPushed = 0;
         $escalated = 0;
         $cancelled = 0;
@@ -4633,7 +4665,7 @@ class WarnHub extends IPSModule
                     continue;
                 }
 
-                $active[] = [
+                $activeEntry = [
                     'identifier' => $w['identifier'],
                     'standort' => $standort['Name'],
                     'event' => $w['event'],
@@ -4648,6 +4680,9 @@ class WarnHub extends IPSModule
                     'effective' => $w['effective'],
                     'expires' => $w['expires'],
                 ];
+                $activeByEpisode[$episodeKey] = isset($activeByEpisode[$episodeKey])
+                    ? $this->pickMoreCurrentActiveEntry($activeByEpisode[$episodeKey], $activeEntry)
+                    : $activeEntry;
 
                 // Erneut pushen, wenn die Meldung NEU ist (auch: eine neue
                 // Episode nach einer ECHTEN Lücke -- die vorige ist
@@ -4840,6 +4875,8 @@ class WarnHub extends IPSModule
 
         $this->WriteAttributeString('SeenWarnings', json_encode($seen));
         $this->WriteAttributeString('FiredActions', json_encode($fired));
+
+        $active = array_values($activeByEpisode);
 
         return [
             'active' => $active,

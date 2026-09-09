@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.13.1 (2026-09-09)
+
+- Fix "Kachel (Alle Warnungen)": derselbe DWD-Reissue-Effekt, der bereits
+  in 1.12.1 zu Push-/Schutzaktions-Schwärmen führte (der DWD vergibt bei
+  seinen "Vorabinformationen vor Unwetter" für dieselbe andauernde Gefahr
+  alle 15-30 Minuten eine neue Meldungs-ID statt eines Updates der alten),
+  betraf bislang auch die Anzeige: mehrere, gleichzeitig im selben Poll
+  vorliegende Reissues erschienen als mehrere fast identische, leicht
+  unterschiedlich formulierte Karten für ein und dasselbe Ereignis --
+  sowohl der offizielle DWD-Auftritt als auch ein zum Vergleich
+  herangezogenes drittes Symcon-Modul zeigen dafür nur einen Eintrag.
+  `processWarnings()` dedupliziert die `active`-Liste jetzt je Episode
+  (Quelle+Ereignistyp+Standort) und behält nur die jeweils aktuellste
+  Fassung (spätestes `effective`, sonst höherer Schweregrad) -- betrifft
+  automatisch auch "Kachel (Übersicht)", "Kachel (Karte)" und
+  `WHUB_GetActiveWarnings()`, da alle dieselbe Liste konsumieren.
+  Push-Zustellung selbst war bereits seit 1.12.1 korrekt (nur ein Push je
+  Episode), nur die Anzeige war betroffen. Praxis-Fund ruan, Symcon-Forum,
+  09.09.2026.
+
 ## 1.13.0 (2026-09-09)
 
 - NEU: "Datenquellen" nach D-A-CH gruppiert. "Allgemein" (grenzüberschreitend:

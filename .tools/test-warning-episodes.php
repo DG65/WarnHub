@@ -313,5 +313,26 @@ $GLOBALS['whub_test_pushCalls'] = [];
 $rBeide = callPrivate($hub5, 'processWarnings', [[machReissue('dwd-pvw-multi', -60, 1800)]]);
 check('dieselbe Meldung an 2 Standorten: 2 separate Pushes (je Standort eine eigene Episode)', $rBeide['newlyPushed'] === 2 && count($GLOBALS['whub_test_pushCalls']) === 2);
 
+echo "\n== 'active'-Liste (Kachel 'Alle Warnungen'): mehrere GLEICHZEITIG im selben Poll vorliegende Reissues derselben Episode erscheinen NUR EINMAL, nicht als mehrere fast identische Karten (Praxis-Fund ruan, Symcon-Forum, 09.09.2026: DWD zeigt auf seiner eigenen Seite und ein drittes Symcon-Modul zeigen ebenfalls nur EINEN Eintrag) ==\n";
+$hub6 = new WarnHub();
+$hub6->Create();
+$hub6->SetProp('Standorte', json_encode([$standort]));
+$hub6->SetProp('WebFronts', json_encode($webfronts));
+$hub6->SetProp('PushAktiv', true);
+// Drei gleichzeitig im DWD-Feed vorliegende, sich überlappende Reissues
+// derselben Windböen-Episode -- genau wie im Live-Fund (Kohlekasten/
+// Schneeflocke/"Starkes Gewitter", 6 verschiedene Identifier binnen einer
+// Stunde, sowie ruans 3 "Windböen"-Karten mit leicht versetzten Zeiten).
+$dreiReissues = [
+    machReissue('dwd-pvw-r1', -600, 1200), // älteste, bereits laufende Fassung
+    machReissue('dwd-pvw-r2', -300, 2400), // dazwischen, verlängerte Gültigkeit
+    machReissue('dwd-pvw-r3', -60, 3600),  // jüngste, aktuellste Fassung -- soll gewinnen
+];
+$GLOBALS['whub_test_pushCalls'] = [];
+$rDrei = callPrivate($hub6, 'processWarnings', [$dreiReissues]);
+check('activeCount = 1 statt 3 -- nur EIN Eintrag für die dreifach vorliegende Episode', $rDrei['activeCount'] === 1);
+check('gezeigt wird die JÜNGSTE Fassung (identifier der zuletzt ausgestellten Reissue)', ($rDrei['active'][0]['identifier'] ?? null) === 'dwd-pvw-r3');
+check('weiterhin nur EIN Push (Push-Dedup war schon seit 1.12.1 korrekt, hier nur die Anzeige betroffen)', count($GLOBALS['whub_test_pushCalls']) === 1);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
