@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.12.4 (2026-09-09)
+
+- Fix: die 256-Byte-Kürzung (`truncateBytes()`) galt bisher zentral für
+  ALLE Push-Kanäle gleichermaßen, wurde in `buildPushText()`/
+  `buildPushTitle()` angewendet, bevor der Text überhaupt an den
+  jeweiligen Kanal ging. Diese Grenze ist aber nachweislich nur eine
+  Vorgabe von `WFC_PushNotification`/`VISU_PostNotificationEx`
+  (WebFront/Kachel-Visualisierung) laut offizieller Symcon-Doku. Telegram
+  (~4096 Zeichen erlaubt), Pushover (~1024 Zeichen) und vor allem E-Mail
+  (keine bekannte Längenbeschränkung) bekamen bisher denselben
+  künstlich gekappten Text. Die Kürzung passiert jetzt erst unmittelbar
+  vor den beiden betroffenen Aufrufen in `pushToAllWebfronts()`, alle
+  anderen Kanäle erhalten den vollen Text. Praxis-Fund hfichtinger,
+  Symcon-Forum, 09.09.2026: "Ist das auch den 256 Zeichen geschuldet?
+  [...] Mail kann auch mehr".
+
 ## 1.12.3 (2026-09-09)
 
 - Fix: schaltet man NINA-Aggregation UND die direkten DWD-Wetterwarnungen

@@ -289,6 +289,34 @@ callPrivate($hub4, 'pushToAllWebfronts', ['Titel', 'Text', 'alarm', [], 'Minor']
 $pushoverCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'pushover'))[0] ?? null;
 check('Pushover: Severity "Minor" (bzw. ohne Angabe) bleibt Priorität 0 (normal)', $pushoverCall !== null && $pushoverCall[4] === 0);
 
+echo "\n== pushToAllWebfronts(): die 256-Byte-Kürzung gilt NUR für WebFront/Kachel-Visualisierung, Telegram/Pushover/E-Mail bekommen den vollen Text (Praxis-Fund hfichtinger, Symcon-Forum, 09.09.2026: 'Mail kann auch mehr') ==\n";
+$hub4e = new WarnHub();
+$hub4e->Create();
+$hub4e->SetProp('WebFronts', json_encode([
+    ['InstanceID' => 210, 'Name' => 'WebFront Küche', 'Typ' => 'webfront', 'Aktiv' => true],
+    ['InstanceID' => 211, 'Name' => 'Kachel Wohnzimmer', 'Typ' => 'kachel', 'Aktiv' => true],
+    ['InstanceID' => 212, 'Name' => 'Telegram Familie', 'Typ' => 'telegram', 'Aktiv' => true],
+    ['InstanceID' => 213, 'Name' => 'Pushover Dietmar', 'Typ' => 'pushover', 'Aktiv' => true],
+    ['InstanceID' => 214, 'Name' => 'Mail Dietmar', 'Typ' => 'email', 'Aktiv' => true, 'Zieladresse' => 'dietmar@example.com'],
+]));
+$langerText = str_repeat('Sehr ausführliche amtliche Beschreibung mit vielen Details zur Wetterlage. ', 8); // deutlich > 256 Byte
+$langerTitel = str_repeat('Ä', 20); // deutlich > 32 Byte (Ä ist 2 Byte in UTF-8)
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub4e, 'pushToAllWebfronts', [$langerTitel, $langerText, 'alarm']);
+$webfrontCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'webfront'))[0] ?? null;
+$kachelCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'kachel'))[0] ?? null;
+$telegramCall2 = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'telegram'))[0] ?? null;
+$pushoverCall2 = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'pushover'))[0] ?? null;
+$emailCall2 = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'email'))[0] ?? null;
+check('WebFront: Titel auf 32 Byte gekürzt', $webfrontCall !== null && strlen($webfrontCall[2]) <= 32 && strlen($webfrontCall[2]) < strlen($langerTitel));
+check('WebFront: Text auf 256 Byte gekürzt', $webfrontCall !== null && strlen($webfrontCall[3]) <= 256 && strlen($webfrontCall[3]) < strlen($langerText));
+check('Kachel-Visualisierung: Titel auf 32 Byte gekürzt', $kachelCall !== null && strlen($kachelCall[2]) <= 32);
+check('Kachel-Visualisierung: Text auf 256 Byte gekürzt', $kachelCall !== null && strlen($kachelCall[3]) <= 256);
+check('Telegram bekommt den VOLLEN, unabgekürzten Text', $telegramCall2 !== null && str_contains($telegramCall2[2], $langerText));
+check('Pushover bekommt den VOLLEN, unabgekürzten Titel UND Text', $pushoverCall2 !== null && $pushoverCall2[2] === $langerTitel && $pushoverCall2[3] === $langerText);
+check('E-Mail bekommt den VOLLEN, unabgekürzten Text im HTML-Body', $emailCall2 !== null && str_contains($emailCall2[4], $langerText));
+check('E-Mail bekommt den VOLLEN, unabgekürzten Betreff', $emailCall2 !== null && $emailCall2[3] === $langerTitel);
+
 echo "\n== pushToAllWebfronts(): E-Mail-Ziel ohne Zieladresse wird übersprungen statt zu scheitern ==\n";
 $hub4b = new WarnHub();
 $hub4b->Create();

@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.12.3';
-    private const NEWS_VERSION = '1.12.3';
+    private const DOC_VERSION = '1.12.4';
+    private const NEWS_VERSION = '1.12.4';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1428,6 +1428,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• "Kachel (Alle Warnungen)": jede Karte lässt sich jetzt per Klick aufklappen und zeigt dann die volle Handlungsempfehlung, den genauen Gültigkeitszeitraum sowie die komplette amtliche Beschreibung -- unabgekürzt, anders als die Push-Benachrichtigung, die von WFC_PushNotification/VISU_PostNotificationEx hart auf 256 Byte begrenzt wird. Push-Texte nennen außerdem jetzt zuerst die Handlungsempfehlung und die Gültigkeit, erst danach (falls noch Platz ist) die ausführliche Beschreibung -- vorher konnte eine lange Beschreibung das ganze Byte-Budget aufbrauchen. Praxis-Wunsch kronos, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix: schaltet man NINA UND die direkten DWD-Wetterwarnungen bewusst ab (z. B. in Österreich/der Schweiz, andere Quellen decken das ab), legte das bisher die KOMPLETTE Instanz lahm, obwohl eine andere Datenquelle (z. B. GeoSphere Austria) aktiv war -- die "gibt es überhaupt eine aktive Quelle"-Prüfung kannte nur NINA/DWD und wurde bei keiner der seither dazugekommenen acht weiteren Quellen mitgezogen. Praxis-Fund hfichtinger, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• E-Mail-Push: eine Zieladresse kann jetzt mehrere Empfänger enthalten, mit Komma oder Semikolon getrennt -- jede Adresse bekommt einen eigenen Versand, unabhängig vom internen Verhalten des SMTP-Moduls bei mehreren Empfängern. Praxis-Wunsch hfichtinger, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix: die 256-Byte-Kürzung galt bisher für ALLE Push-Kanäle gleichermaßen -- dabei ist das nachweislich nur eine Grenze von WebFront/Kachel-Visualisierung. Telegram, Pushover und vor allem E-Mail (keine bekannte Längenbeschränkung) bekommen jetzt den vollen, unabgekürzten Text. Praxis-Fund hfichtinger, Symcon-Forum: "Mail kann auch mehr"'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4470,7 +4471,7 @@ class WarnHub extends IPSModule
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
                                 '✅ Entwarnung',
-                                $this->truncateBytes($standort['Name'] . ': ' . $w['headline'] . ' aufgehoben.', 256),
+                                $standort['Name'] . ': ' . $w['headline'] . ' aufgehoben.',
                                 $pushSound,
                                 $pushZiele
                             );
@@ -4635,7 +4636,7 @@ class WarnHub extends IPSModule
                     if ($pushAktiv) {
                         $this->pushToAllWebfronts(
                             '⚠️ Fenster/Tür offen',
-                            $this->truncateBytes($kontakt['Name'] . ' ist offen -- ' . $w['headline'] . '. Bitte schließen.', 256),
+                            $kontakt['Name'] . ' ist offen -- ' . $w['headline'] . '. Bitte schließen.',
                             $pushSound
                         );
                     }
@@ -4727,28 +4728,35 @@ class WarnHub extends IPSModule
         return $result;
     }
 
+    /** Voller, unabgekürzter Titel -- die 32-Byte-Kürzung gilt nur für WFC_PushNotification/VISU_PostNotificationEx, siehe buildPushText(). */
     private function buildPushTitle(string $severity, string $event): string
     {
         $icon = self::SEVERITY_ICON[$severity] ?? '⚠️';
         $label = mb_convert_case(mb_strtolower(trim($event) !== '' ? $event : 'Warnung'), MB_CASE_TITLE);
-        $title = $icon . ' ' . $label;
-        return $this->truncateBytes($title, 32);
+        return $icon . ' ' . $label;
     }
 
+    /**
+     * Liefert den VOLLSTÄNDIGEN, unabgekürzten Push-Text -- die Kürzung auf
+     * 256 Byte ist NUR eine Grenze von WFC_PushNotification/
+     * VISU_PostNotificationEx (WebFront/Kachel-Visualisierung) und wird
+     * deshalb erst in pushToAllWebfronts() unmittelbar vor genau diesen
+     * beiden Aufrufen angewendet, nicht mehr hier zentral. Telegram
+     * (~4096 Zeichen erlaubt), Pushover (~1024 Zeichen) und vor allem
+     * E-Mail (keine bekannte Längenbeschränkung) bekamen bis 1.12.3
+     * denselben künstlich gekappten Text, obwohl nur WebFront/Kachel-
+     * Visualisierung das überhaupt bräuchten -- Praxis-Fund hfichtinger,
+     * Symcon-Forum, 09.09.2026: "Ist das auch den 256 Zeichen geschuldet?
+     * [...] Mail kann auch mehr".
+     *
+     * Reihenfolge bewusst NICHT die Lesereihenfolge einer CAP-Meldung:
+     * Handlungsempfehlung + Gültigkeit stehen VOR der (oft langen)
+     * Beschreibung, damit sie bei den weiterhin gekappten Kanälen die
+     * Kürzung eher überleben (Praxis-Fund kronos, Symcon-Forum,
+     * 09.09.2026).
+     */
     private function buildPushText(string $standortName, array $w, bool $nameMatched = false): string
     {
-        // Reihenfolge bewusst NICHT die Lesereihenfolge einer CAP-Meldung:
-        // WFC_PushNotification/VISU_PostNotificationEx kappen hart bei
-        // 256 Byte (truncateBytes()) -- bei der bisherigen Reihenfolge fraß
-        // eine lange amtliche Beschreibung (bei DWD häufig) das ganze Budget
-        // auf, sodass die eigentlich handlungsrelevante Instruction ("Meiden
-        // Sie...") und "Gültig bis" praktisch nie im Push ankamen.
-        // Handlungsempfehlung + Gültigkeit stehen deshalb VOR der (oft
-        // langen) Beschreibung -- Praxis-Fund kronos, Symcon-Forum,
-        // 09.09.2026. Die volle Beschreibung bleibt trotzdem angehängt
-        // (überlebt die Kürzung bei kürzeren Meldungen) und ist bei Bedarf
-        // zusätzlich vollständig per Klick in "Kachel (Alle Warnungen)"
-        // abrufbar (siehe renderKachelAlleWarnungen()).
         $text = $standortName . ': ' . $w['headline'];
         // Handlungsempfehlung der Quelle (CAP <instruction>, z. B. "Meiden Sie
         // den Aufenthalt im Wald") -- echter, unmittelbar nutzbarer Inhalt,
@@ -4767,7 +4775,7 @@ class WarnHub extends IPSModule
         if ($w['description'] !== '') {
             $text .= ' ' . $w['description'];
         }
-        return $this->truncateBytes($text, 256);
+        return $text;
     }
 
     // ----------------------------------------------------------------
@@ -5483,6 +5491,12 @@ HTML;
      * Standort soll nur das zugehörige Handy benachrichtigen, nicht auch das
      * der anderen Person). $severity steuert nur die Pushover-Priorität
      * (Severe/Extreme -> hohe Priorität) und bleibt sonst ungenutzt.
+     *
+     * $title/$text kommen hier UNGEKÜRZT an -- die 32/256-Byte-Kürzung wird
+     * erst unmittelbar vor WFC_PushNotification/VISU_PostNotificationEx
+     * angewendet (siehe truncateBytes()), NICHT mehr zentral in
+     * buildPushText()/buildPushTitle(). Telegram/Pushover/E-Mail bekommen
+     * den vollen Text (Praxis-Fund hfichtinger, Symcon-Forum, 09.09.2026).
      */
     private function pushToAllWebfronts(string $title, string $text, string $sound, array $onlyNames = [], string $severity = ''): int
     {
@@ -5509,7 +5523,7 @@ HTML;
                     $this->LogError('pushToAllWebfronts', 'VISU_PostNotificationEx ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
                     continue;
                 }
-                $ok = @VISU_PostNotificationEx($w['InstanceID'], $title, $text, 'Alert', $sound, 0);
+                $ok = @VISU_PostNotificationEx($w['InstanceID'], $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), 'Alert', $sound, 0);
             } elseif ($w['Typ'] === 'telegram') {
                 // TB_SendMessage() (offizielles Symcon-Modul symcon/TelegramBot)
                 // kennt keinen separaten Titel -- Titel+Text deshalb zu einer
@@ -5576,7 +5590,7 @@ HTML;
                 // WebFront-Instanz kein gültiges/sichtbares Objekt, wodurch der
                 // Push dort scheitern konnte (Praxis-Fund chrschli, Symcon-
                 // Forum, 05.09.2026: ein Ziel schlug fehl, ein anderes ging).
-                $ok = @WFC_PushNotification($w['InstanceID'], $title, $text, $sound, 0);
+                $ok = @WFC_PushNotification($w['InstanceID'], $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), $sound, 0);
             }
             if ($ok) {
                 $sent++;
