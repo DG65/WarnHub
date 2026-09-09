@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.13.3';
-    private const NEWS_VERSION = '1.13.3';
+    private const DOC_VERSION = '1.14.0';
+    private const NEWS_VERSION = '1.14.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -334,6 +334,39 @@ class WarnHub extends IPSModule
     private const DWD_MAP_URL = 'https://www.dwd.de/DE/wetter/warnungen/warnWetter_node.html';
     private const METEOSWISS_MAP_URL = 'https://www.meteoswiss.admin.ch/weather/hazards/hazard-map.html';
     private const ZAMG_MAP_URL = 'https://warnungen.zamg.at/wsapp/de/alle/gesamterzeitraum/-62732,135250,865393,656783';
+
+    /**
+     * Amtliche Warn-Webseiten weiterer europäischer Länder, über den
+     * ISO-3166-1-alpha-2-Ländercode aus reverseGeocodeStandort() adressiert
+     * -- ergänzt D/A/CH um die Länder, für die eine offizielle amtliche
+     * Warnseite recherchiert wurde (Stand 09.09.2026). Bewusst NICHT einzeln
+     * live gegen jede Webseite verifiziert, anders als sonst in diesem Modul
+     * durchgehend praktiziert -- reine Informationslinks ohne eingebetteten/
+     * geparsten Inhalt, ein leicht ungenauer Link (z. B. Startseite statt
+     * Warnunterseite) bleibt folgenlos und ist leicht nachbesserbar.
+     * Dietmars Recherchewunsch 09.09.2026: "wenn man in Europa auf Reisen
+     * ist ... auch im Ausland" -- greift zusammen mit refreshStandortLaenderCodes()
+     * automatisch das Land jedes aktiven (auch mobilen) Standorts auf.
+     */
+    private const COUNTRY_MAP_LINKS = [
+        'de' => ['label' => '🇩🇪 DWD', 'url' => self::DWD_MAP_URL],
+        'at' => ['label' => '🇦🇹 ZAMG', 'url' => self::ZAMG_MAP_URL],
+        'ch' => ['label' => '🇨🇭 MeteoSchweiz', 'url' => self::METEOSWISS_MAP_URL],
+        'fr' => ['label' => '🇫🇷 Météo-France', 'url' => 'https://vigilance.meteofrance.fr/'],
+        'it' => ['label' => '🇮🇹 Protezione Civile', 'url' => 'https://allertameteo.protezionecivile.it/'],
+        'es' => ['label' => '🇪🇸 AEMET', 'url' => 'https://www.aemet.es/en/avisos'],
+        'nl' => ['label' => '🇳🇱 KNMI', 'url' => 'https://www.knmi.nl/waarschuwingen_en_verwachtingen/weerwaarschuwingen'],
+        'be' => ['label' => '🇧🇪 RMI/IRM', 'url' => 'https://www.meteo.be/en/weather/warnings/overview-belgium'],
+        'pl' => ['label' => '🇵🇱 IMGW', 'url' => 'https://meteo.imgw.pl/'],
+        'cz' => ['label' => '🇨🇿 ČHMÚ', 'url' => 'https://www.chmi.cz/'],
+        'dk' => ['label' => '🇩🇰 DMI', 'url' => 'https://www.dmi.dk/vejr/varsler'],
+        'no' => ['label' => '🇳🇴 Varsom', 'url' => 'https://www.varsom.no/en/'],
+        'se' => ['label' => '🇸🇪 SMHI', 'url' => 'https://www.smhi.se/vader/varningar-och-brandrisk'],
+        'fi' => ['label' => '🇫🇮 Ilmatieteen laitos', 'url' => 'https://en.ilmatieteenlaitos.fi/warnings'],
+        'gb' => ['label' => '🇬🇧 Met Office', 'url' => 'https://www.metoffice.gov.uk/weather/warnings-and-advice/uk-warnings'],
+        'ie' => ['label' => '🇮🇪 Met Éireann', 'url' => 'https://www.met.ie/warnings'],
+        'pt' => ['label' => '🇵🇹 IPMA', 'url' => 'https://www.ipma.pt/en/otempo/previsao.avisos/'],
+    ];
     private const GEOSPHERE_AT_WARNTYPE_EVENT = [
         1 => 'Sturm', 2 => 'Starkregen', 3 => 'Schnee', 4 => 'Glatteis',
         5 => 'Gewitter', 6 => 'Hitze', 7 => 'Kälte',
@@ -529,6 +562,13 @@ class WarnHub extends IPSModule
         // verlangsamen). Steuert, welches Land-Panel bei "Datenquellen"
         // beim allerersten Öffnen aufgeklappt ist. Dietmars Idee 09.09.2026.
         $this->RegisterAttributeString('HeimLandCode', '');
+        // Ländercodes ALLER aktiven Standorte (fest UND mobil), ebenfalls in
+        // Poll() im Hintergrund aktualisiert -- steuert, welche Links am
+        // Ende jeder Kachel erscheinen (siehe COUNTRY_MAP_LINKS/
+        // officialMapLinksHtml()): reist ein mobiler Standort ins Ausland,
+        // taucht dessen Land automatisch mit auf, sobald der nächste Poll
+        // gelaufen ist. Dietmars Recherchewunsch 09.09.2026.
+        $this->RegisterAttributeString('StandortLaenderCodes', '[]');
         // Merkt sich je Panel-Name, ob der Nutzer es zuletzt manuell auf-
         // oder zugeklappt hat (JSON-Map Panel-Name -> bool) -- übersteuert
         // den sonstigen Default (Land-Erkennung bzw. fest einprogrammiert).
@@ -1563,6 +1603,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix "Kachel (Alle Warnungen)": der DWD reißt bei seinen "Vorabinformationen vor Unwetter" die CAP-Update-Kette faktisch ab und schickt für dieselbe andauernde Gefahr alle 15-30 Minuten eine neue Meldungs-ID -- das erschien bisher als mehrere fast identische, leicht unterschiedlich formulierte Karten für ein und dasselbe Ereignis (Push-Zustellung war seit 1.12.1 bereits korrekt, nur die Anzeige war betroffen). Es wird jetzt nur noch die jeweils aktuellste Fassung gezeigt. Praxis-Fund ruan, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von vornherein aufgeklappt zeigen (Schalter "AlleWarnungenAufgeklappt" im Panel "Prüfung & Status"), statt jede einzeln anklicken zu müssen -- Ein-/Ausklappen per Klick bleibt trotzdem weiterhin je Karte möglich. Praxis-Wunsch ruan, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭 MeteoSchweiz) zeigten bisher immer alle drei, unabhängig davon, welche Länder-Quellen tatsächlich aktiviert waren. Jetzt erscheint nur noch der Link zu einem Land, dessen direkte Quelle aktiv ist (ist gar keine aktiv, sicherheitshalber weiterhin alle drei). Praxis-Wunsch hfichtinger, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• NEU: die Kartenlinks decken jetzt 17 europäische Länder ab (bisher nur D/A/CH) und richten sich automatisch nach dem Land JEDES aktiven Standorts -- auch mobiler. Reist ein mobiler Standort ins Ausland (z. B. Frankreich, Italien, Spanien, Niederlande, Belgien, Polen, Tschechien, Dänemark, Norwegen, Schweden, Finnland, UK, Irland, Portugal), erscheint dessen amtliche Warnseite automatisch mit, sobald der nächste Abgleich gelaufen ist -- ganz ohne eigenes Zutun. Dietmars Recherchewunsch 09.09.2026'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2224,6 +2265,36 @@ class WarnHub extends IPSModule
         $geo = $this->reverseGeocodeStandort($loc['lat'], $loc['lon']);
         if ($geo['countryCode'] !== '') {
             $this->WriteAttributeString('HeimLandCode', $geo['countryCode']);
+        }
+    }
+
+    /**
+     * Aktualisiert StandortLaenderCodes aus ALLEN aktiven Standorten (fest
+     * UND mobil, über resolveStandortCoords() -- ein mobiler Standort
+     * "wandert" also mit) -- ebenfalls bewusst NUR hier in Poll(), aus
+     * demselben Grund wie refreshHeimLandCode(). Bleibt der vorige, bereits
+     * bekannte Stand stehen, wenn gerade GAR KEIN Ländercode ermittelt
+     * werden konnte (z. B. Nominatim kurzzeitig nicht erreichbar) --
+     * besser ein leicht veralteter als ein plötzlich leerer Link-Bereich.
+     */
+    private function refreshStandortLaenderCodes(): void
+    {
+        $codes = [];
+        foreach ($this->decodeStandorte() as $standort) {
+            if (!$standort['Aktiv']) {
+                continue;
+            }
+            $coords = $this->resolveStandortCoords($standort);
+            if ($coords['lat'] === 0.0 && $coords['lon'] === 0.0) {
+                continue;
+            }
+            $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
+            if ($geo['countryCode'] !== '' && !in_array($geo['countryCode'], $codes, true)) {
+                $codes[] = $geo['countryCode'];
+            }
+        }
+        if (count($codes) > 0) {
+            $this->WriteAttributeString('StandortLaenderCodes', json_encode($codes));
         }
     }
 
@@ -4400,6 +4471,7 @@ class WarnHub extends IPSModule
             $this->checkWetterstationAutoRestore();
         }
         $this->refreshHeimLandCode();
+        $this->refreshStandortLaenderCodes();
 
         $this->WriteAttributeInteger('LastPollTs', time());
         $this->WriteAttributeString('LastActiveWarningsJson', json_encode($result['active']));
@@ -5078,44 +5150,51 @@ CSS;
     }
 
     /**
-     * Kompakte Link-Zeile zu den drei amtlichen Warnkarten (DWD/ZAMG/
-     * MeteoSchweiz) -- echte externe Links (kein iframe), deshalb unabhängig
-     * von der X-Frame-Options-Sperre, die DWD und MeteoSchweiz für eine
-     * Einbettung setzen (siehe Konstanten-Kommentar oben). Allgemeine,
-     * nicht personalisierte Landkarten -- immer alle drei gezeigt statt
-     * nach Standort zu filtern, kein Mehrwert durch Auswahl. Dietmars
-     * Wunsch 06.09.2026.
-     */
-    /**
-     * Zeigt nur die Links der Länder, deren direkte Datenquelle tatsächlich
-     * aktiv ist -- vorher standen immer alle drei fest da, unabhängig von
-     * der eigenen Konfiguration (z. B. der DWD-Link für einen Nutzer, der
-     * ausschließlich GeoSphere Austria aktiviert hat). Ist KEINE der drei
-     * Länder-Quellen aktiv (z. B. nur Meteoalarm/PEGELONLINE/eigene
-     * Wetterstation), werden sicherheitshalber trotzdem alle drei gezeigt --
-     * besser ein paar überflüssige Links als eine leer wirkende Kachel.
-     * Praxis-Wunsch hfichtinger, Symcon-Forum, 09.09.2026.
+     * Zeigt die Links der Länder, in denen tatsächlich mindestens ein aktiver
+     * Standort liegt (StandortLaenderCodes, siehe refreshStandortLaenderCodes()
+     * -- ein mobiler Standort im Ausland bringt sein Land automatisch mit
+     * rein, sobald der nächste Poll gelaufen ist), ergänzt um die Länder,
+     * deren direkte Datenquelle aktiviert ist (z. B. GeoSphere Austria auch
+     * ohne dort konfigurierten Standort). Echte externe Links (kein iframe),
+     * deshalb unabhängig von der X-Frame-Options-Sperre, die DWD und
+     * MeteoSchweiz für eine Einbettung setzen. Ist gar kein Land ermittelbar
+     * (z. B. direkt nach der Installation, vor dem ersten Poll), werden
+     * sicherheitshalber D/A/CH gezeigt statt eines leer wirkenden Bereichs.
+     * Praxis-Wünsche hfichtinger und Dietmar, Symcon-Forum, 09.09.2026.
      */
     private function officialMapLinksHtml(): string
     {
-        $zeigeDe = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
-        $zeigeAt = $this->ReadPropertyBoolean('QuelleGeosphereAt');
-        $zeigeCh = $this->ReadPropertyBoolean('QuelleBafuHydroCh')
-            || $this->ReadPropertyBoolean('QuelleSedErdbebenCh')
-            || trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '';
-        if (!$zeigeDe && !$zeigeAt && !$zeigeCh) {
-            $zeigeDe = $zeigeAt = $zeigeCh = true;
+        $codes = json_decode($this->ReadAttributeString('StandortLaenderCodes'), true) ?: [];
+        if ($this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd')) {
+            $codes[] = 'de';
         }
+        if ($this->ReadPropertyBoolean('QuelleGeosphereAt')) {
+            $codes[] = 'at';
+        }
+        if ($this->ReadPropertyBoolean('QuelleBafuHydroCh')
+            || $this->ReadPropertyBoolean('QuelleSedErdbebenCh')
+            || trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '') {
+            $codes[] = 'ch';
+        }
+        $codes = array_unique($codes);
 
         $links = '';
-        if ($zeigeDe) {
-            $links .= '<a href="' . htmlspecialchars(self::DWD_MAP_URL) . '" target="_blank" rel="noopener">🇩🇪 DWD</a>';
+        foreach ($codes as $code) {
+            $link = self::COUNTRY_MAP_LINKS[$code] ?? null;
+            if ($link === null) {
+                continue; // Land ermittelt, aber (noch) keine hinterlegte amtliche Warnseite dafür
+            }
+            $links .= '<a href="' . htmlspecialchars($link['url']) . '" target="_blank" rel="noopener">' . htmlspecialchars($link['label']) . '</a>';
         }
-        if ($zeigeAt) {
-            $links .= '<a href="' . htmlspecialchars(self::ZAMG_MAP_URL) . '" target="_blank" rel="noopener">🇦🇹 ZAMG</a>';
-        }
-        if ($zeigeCh) {
-            $links .= '<a href="' . htmlspecialchars(self::METEOSWISS_MAP_URL) . '" target="_blank" rel="noopener">🇨🇭 MeteoSchweiz</a>';
+        if ($links === '') {
+            // Weder ein bekanntes Land ermittelbar noch eine direkte
+            // Länder-Quelle aktiv (bzw. nur Länder ohne hinterlegte
+            // Warnseite) -- D/A/CH als sicherer Auffangwert statt eines
+            // leer wirkenden Bereichs.
+            foreach (['de', 'at', 'ch'] as $code) {
+                $link = self::COUNTRY_MAP_LINKS[$code];
+                $links .= '<a href="' . htmlspecialchars($link['url']) . '" target="_blank" rel="noopener">' . htmlspecialchars($link['label']) . '</a>';
+            }
         }
         return '<div class="whub-maplinks">' . $links . '</div>';
     }

@@ -288,6 +288,42 @@ check('KEINE Länder-Quelle aktiv (z. B. nur Meteoalarm/eigene Wetterstation) ->
 check('Kachel (kompakt) enthält die Kartenlinks', str_contains($statusOne, 'whub-maplinks') && str_contains($statusOne, 'dwd.de'));
 check('Kachel (Übersicht) enthält die Kartenlinks', str_contains($uebersichtEmpty, 'whub-maplinks') && str_contains($uebersichtEmpty, 'dwd.de'));
 
+echo "\n== officialMapLinksHtml(): dynamisch über StandortLaenderCodes -- ein Standort im Ausland bringt sein Land automatisch mit (Dietmars Recherchewunsch 09.09.2026: 'auch im Ausland') ==\n";
+$hubLinksFr = new WarnHub();
+$hubLinksFr->Create();
+$hubLinksFr->SetProp('QuelleNina', false);
+$hubLinksFr->SetProp('QuelleDwd', false);
+$hubLinksFr->WriteAttributeString('StandortLaenderCodes', json_encode(['fr'])); // simuliert einen bereits erfolgten Poll() mit refreshStandortLaenderCodes() -- kein echter Netzwerkaufruf im Test nötig
+$mapLinksFr = callPrivate($hubLinksFr, 'officialMapLinksHtml', []);
+check('Standort in Frankreich -> Météo-France-Link erscheint, KEIN Rückfall auf D/A/CH', str_contains($mapLinksFr, 'vigilance.meteofrance.fr') && !str_contains($mapLinksFr, 'dwd.de') && !str_contains($mapLinksFr, 'zamg.at') && !str_contains($mapLinksFr, 'meteoswiss.admin.ch'));
+
+$hubLinksUnion = new WarnHub();
+$hubLinksUnion->Create();
+$hubLinksUnion->SetProp('QuelleGeosphereAt', true); // direkte Quelle aktiv, unabhängig vom Standort
+$hubLinksUnion->WriteAttributeString('StandortLaenderCodes', json_encode(['it'])); // UND ein Standort in Italien
+$mapLinksUnion = callPrivate($hubLinksUnion, 'officialMapLinksHtml', []);
+check('Vereinigung: sowohl der Standort-Link (Italien) als auch der Quelle-Link (Österreich) erscheinen gemeinsam', str_contains($mapLinksUnion, 'allertameteo.protezionecivile.it') && str_contains($mapLinksUnion, 'zamg.at'));
+$hubLinksDup = new WarnHub();
+$hubLinksDup->Create();
+$hubLinksDup->SetProp('QuelleGeosphereAt', true);
+$hubLinksDup->WriteAttributeString('StandortLaenderCodes', json_encode(['at'])); // Standort-Land UND aktive Quelle zeigen auf dasselbe Land
+$mapLinksDup = callPrivate($hubLinksDup, 'officialMapLinksHtml', []);
+check('kein Duplikat, wenn Standort-Land UND aktive Quelle auf dasselbe Land zeigen', substr_count($mapLinksDup, 'zamg.at') === 1);
+
+$hubLinksUnbekannt = new WarnHub();
+$hubLinksUnbekannt->Create();
+$hubLinksUnbekannt->SetProp('QuelleNina', false);
+$hubLinksUnbekannt->SetProp('QuelleDwd', false);
+$hubLinksUnbekannt->WriteAttributeString('StandortLaenderCodes', json_encode(['xx'])); // Land ermittelt, aber keine hinterlegte amtliche Warnseite
+$mapLinksUnbekannt = callPrivate($hubLinksUnbekannt, 'officialMapLinksHtml', []);
+check('Standort in einem Land OHNE hinterlegte Warnseite -> Rückfall auf D/A/CH statt leerem Bereich', str_contains($mapLinksUnbekannt, 'dwd.de') && str_contains($mapLinksUnbekannt, 'zamg.at') && str_contains($mapLinksUnbekannt, 'meteoswiss.admin.ch'));
+
+echo "\n== refreshStandortLaenderCodes(): ohne aktive Standorte bleibt der zuletzt bekannte Stand unangetastet, kein Fehler ==\n";
+$hubNoStandort = new WarnHub();
+$hubNoStandort->Create();
+callPrivate($hubNoStandort, 'refreshStandortLaenderCodes');
+check('StandortLaenderCodes bleibt beim Standardwert (leeres Array), kein Absturz ohne Standorte', json_decode($hubNoStandort->ReadAttributeString('StandortLaenderCodes'), true) === []);
+
 echo "\n== renderKachelAlleWarnungen(): scrollbare Liste OHNE 8er-Deckel + Ausblenden/Filter (Dietmars Einwand 07.09.2026: 'die 100. Meldung noch ansehen können') ==\n";
 $alleLeer = callPrivate($hub, 'renderKachelAlleWarnungen', [[], 1700000000, false]);
 check('ohne aktive Warnung: Hinweistext statt Liste', str_contains($alleLeer, 'Keine aktive Warnung'));

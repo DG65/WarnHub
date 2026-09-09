@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.14.0 (2026-09-09)
+
+- NEU: die Kartenlinks am Ende jeder Kachel decken jetzt 17 europäische
+  Länder ab (bisher nur D/A/CH) und richten sich automatisch nach dem
+  Land JEDES aktiven Standorts -- auch mobiler. Neue Klassenkonstante
+  `COUNTRY_MAP_LINKS` (Frankreich, Italien, Spanien, Niederlande, Belgien,
+  Polen, Tschechien, Dänemark, Norwegen, Schweden, Finnland, UK, Irland,
+  Portugal, zusätzlich zu D/A/CH), neues Attribut `StandortLaenderCodes`
+  (JSON-Array der Ländercodes aller aktiven Standorte, in `Poll()` im
+  Hintergrund über `refreshStandortLaenderCodes()` aktualisiert -- exakt
+  dasselbe Cache-/Netzwerk-Muster wie schon `HeimLandCode` aus 1.13.0,
+  KEIN Netzwerkaufruf beim Öffnen der Konsole). Reist ein mobiler
+  Standort ins Ausland, taucht dessen Land automatisch mit auf, sobald
+  der nächste Abgleich gelaufen ist. `officialMapLinksHtml()` bildet die
+  Vereinigung aus Standort-Ländern und Ländern mit aktiver direkter
+  Quelle; ist gar kein bekanntes Land ermittelbar, bleiben sicherheitshalber
+  weiterhin D/A/CH als Auffangwert. Die 14 neuen Länder-URLs wurden
+  bewusst NICHT einzeln live gegen jede Webseite verifiziert (anders als
+  sonst in diesem Modul durchgehend praktiziert) -- reine
+  Informationslinks ohne eingebetteten/geparsten Inhalt, Rückmeldungen zu
+  falschen/veralteten Links willkommen. Dietmars Recherchewunsch
+  09.09.2026: "wenn man in Europa auf Reisen ist ... auch im Ausland".
+
 ## 1.13.3 (2026-09-09)
 
 - Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭
