@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.14.1 (2026-09-10)
+
+- Härtung: Text aus externen Quellen (`headline`/`description`/
+  `instruction`, gilt für alle Datenquellen gleichermaßen) wird jetzt
+  zentral am Eingang von `processWarnings()` von HTML-Resten bereinigt
+  (`sanitizeCapText()`) -- `<br>`-Varianten werden zu echten
+  Zeilenumbrüchen, übrige Tags entfernt, HTML-Entities aufgelöst. Kein
+  WarnHub-Bug: die amtliche NINA-Quelle lieferte beim bundesweiten
+  Warntag 2026 ein rohes `<br/>` mitten im Beschreibungstext, das z. B.
+  in `WFC_PushNotification` (kein HTML-Rendering) wörtlich sichtbar
+  wurde -- unabhängig über zwei verschiedene Push-Kanäle (Symcon-App,
+  Pushover) bestätigt. Praxis-Fund kronos/ralf, Symcon-Forum,
+  10.09.2026. Behebt NICHT fehlenden Leerraum zwischen aneinander-
+  gereihten Quelltextabschnitten (z. B. "...umfrage.deBeginn: ...") --
+  das ließe sich nicht sicher von echtem, gewolltem Text ohne
+  Leerzeichen unterscheiden.
+
 ## 1.14.0 (2026-09-09)
 
 - NEU: die Kartenlinks am Ende jeder Kachel decken jetzt 17 europäische

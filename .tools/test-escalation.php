@@ -319,5 +319,33 @@ $GLOBALS['whub_test_pushCalls'] = [];
 $rWieder = callPrivate($hub3, 'processWarnings', [[$w3]]);
 check('nach dem Ablauf erneut auftauchend -> wieder als NEUE Warnung erkannt und gepusht', $rWieder['newlyPushed'] === 1 && count($GLOBALS['whub_test_pushCalls']) === 1);
 
+echo "\n== sanitizeCapText(): entfernt HTML-Reste aus Text externer Quellen (Praxis-Fund kronos/ralf, Symcon-Forum, 10.09.2026: rohes '<br/>' im NINA-Warntag-2026-Text, unabhängig über Symcon-App UND Pushover bestätigt) ==\n";
+check('"<br/>" wird zu echtem Zeilenumbruch', callPrivate($hub, 'sanitizeCapText', ["Es besteht keine Gefahr.<br/>Berichten Sie über Ihre Erfahrungen."]) === "Es besteht keine Gefahr.\nBerichten Sie über Ihre Erfahrungen.");
+check('"<br>" (ohne Schrägstrich) wird ebenfalls erkannt', callPrivate($hub, 'sanitizeCapText', ["Zeile 1<br>Zeile 2"]) === "Zeile 1\nZeile 2");
+check('"<br />" (mit Leerzeichen) wird ebenfalls erkannt', callPrivate($hub, 'sanitizeCapText', ["Zeile 1<br />Zeile 2"]) === "Zeile 1\nZeile 2");
+check('Groß-/Kleinschreibung spielt keine Rolle ("<BR/>")', callPrivate($hub, 'sanitizeCapText', ["Zeile 1<BR/>Zeile 2"]) === "Zeile 1\nZeile 2");
+check('übrige HTML-Tags werden entfernt, nicht nur <br>', callPrivate($hub, 'sanitizeCapText', ["Text mit <b>fettem</b> Wort"]) === "Text mit fettem Wort");
+check('HTML-Entities werden aufgelöst (z. B. "&amp;")', callPrivate($hub, 'sanitizeCapText', ["Wind &amp; Regen"]) === "Wind & Regen");
+check('Text ohne jedes HTML bleibt unverändert', callPrivate($hub, 'sanitizeCapText', ["Ganz normaler Text."]) === "Ganz normaler Text.");
+check('leerer String bleibt leer, kein Fehler', callPrivate($hub, 'sanitizeCapText', ['']) === '');
+
+echo "\n== Ende-zu-Ende über processWarnings()/buildPushText(): ein rohes '<br/>' in der Beschreibung landet NICHT mehr wörtlich im Push-Text ==\n";
+$warntagWarnung = machWarnung('Extreme');
+$warntagWarnung['identifier'] = 'test-warntag-1';
+$warntagWarnung['headline'] = 'Gefahrendurchsage';
+$warntagWarnung['description'] = 'Es besteht keine Gefahr.<br/>Berichten Sie über Ihre Erfahrungen gerne unter https://warntag-umfrage.de';
+$hubWarntag = new WarnHub();
+$hubWarntag->Create();
+$hubWarntag->SetProp('Standorte', json_encode([$standort]));
+$hubWarntag->SetProp('WebFronts', json_encode($webfronts));
+$hubWarntag->SetProp('PushAktiv', true);
+$GLOBALS['whub_test_pushCalls'] = [];
+$rWarntag = callPrivate($hubWarntag, 'processWarnings', [[$warntagWarnung]]);
+check('Warnung wird wie gewohnt als aktiv erkannt und gepusht', $rWarntag['newlyPushed'] === 1);
+check('"active"-Eintrag enthält KEIN rohes "<br/>" mehr in der Beschreibung', !str_contains($rWarntag['active'][0]['description'] ?? '', '<br'));
+check('"active"-Eintrag enthält stattdessen einen echten Zeilenumbruch', str_contains($rWarntag['active'][0]['description'] ?? '', "Gefahr.\nBerichten"));
+$pushText = $GLOBALS['whub_test_pushCalls'][0][3] ?? '';
+check('der tatsächlich zugestellte Push-Text enthält KEIN wörtliches "<br/>" mehr', !str_contains($pushText, '<br'));
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

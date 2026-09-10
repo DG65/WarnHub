@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.14.0';
-    private const NEWS_VERSION = '1.14.0';
+    private const DOC_VERSION = '1.14.1';
+    private const NEWS_VERSION = '1.14.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1604,6 +1604,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von vornherein aufgeklappt zeigen (Schalter "AlleWarnungenAufgeklappt" im Panel "Prüfung & Status"), statt jede einzeln anklicken zu müssen -- Ein-/Ausklappen per Klick bleibt trotzdem weiterhin je Karte möglich. Praxis-Wunsch ruan, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭 MeteoSchweiz) zeigten bisher immer alle drei, unabhängig davon, welche Länder-Quellen tatsächlich aktiviert waren. Jetzt erscheint nur noch der Link zu einem Land, dessen direkte Quelle aktiv ist (ist gar keine aktiv, sicherheitshalber weiterhin alle drei). Praxis-Wunsch hfichtinger, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: die Kartenlinks decken jetzt 17 europäische Länder ab (bisher nur D/A/CH) und richten sich automatisch nach dem Land JEDES aktiven Standorts -- auch mobiler. Reist ein mobiler Standort ins Ausland (z. B. Frankreich, Italien, Spanien, Niederlande, Belgien, Polen, Tschechien, Dänemark, Norwegen, Schweden, Finnland, UK, Irland, Portugal), erscheint dessen amtliche Warnseite automatisch mit, sobald der nächste Abgleich gelaufen ist -- ganz ohne eigenes Zutun. Dietmars Recherchewunsch 09.09.2026'],
+                ['type' => 'Label', 'caption' => '• Härtung: Text aus externen Quellen (Beschreibung/Handlungsempfehlung) wird jetzt von HTML-Resten bereinigt, bevor er in Push/Kachel/Historie landet -- die amtliche NINA-Quelle lieferte beim bundesweiten Warntag 2026 ein rohes "<br/>" mitten im Text, das z. B. in WFC_PushNotification (kein HTML-Rendering) wörtlich sichtbar wurde. Kein WarnHub-Bug (unabhängig über zwei Push-Kanäle bestätigt), aber eine Absicherung gegen ähnliche künftige Quelldaten-Ausreißer. Praxis-Fund kronos/ralf, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4617,6 +4618,28 @@ class WarnHub extends IPSModule
         return $bRank > $aRank ? $b : $a;
     }
 
+    /**
+     * Entfernt HTML-Reste aus Text externer Quellen (headline/description/
+     * instruction) -- Praxis-Fund kronos/ralf, Symcon-Forum, 10.09.2026:
+     * die amtliche NINA-Quelle lieferte beim bundesweiten Warntag 2026 ein
+     * rohes "<br/>" mitten im Beschreibungstext, unabhängig bestätigt über
+     * zwei verschiedene Push-Kanäle (Symcon-App, Pushover) -- eindeutig ein
+     * Quelldaten-Fehler, kein WarnHub-Bug. Wandelt trotzdem <br>-Varianten
+     * in echte Zeilenumbrüche um und entfernt alle übrigen Tags als
+     * Härtung gegen künftige, ähnlich fehlerhafte Quellmeldungen. Behebt
+     * NICHT fehlenden Leerraum zwischen aneinandergereihten
+     * Quelltextabschnitten (z. B. "...umfrage.deBeginn: ...") -- das ließe
+     * sich nicht sicher von echtem, gewolltem Text ohne Leerzeichen
+     * unterscheiden.
+     */
+    private function sanitizeCapText(string $text): string
+    {
+        $text = preg_replace('/<br\s*\/?>/i', "\n", $text);
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5);
+        return trim($text);
+    }
+
     private function processWarnings(array $warnings): array
     {
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
@@ -4651,6 +4674,22 @@ class WarnHub extends IPSModule
         $standortGeoNamesCache = [];
 
         foreach ($warnings as $w) {
+            // Härtung gegen HTML-Reste in Texten externer Quellen -- kein
+            // WarnHub-Bug, aber die amtliche NINA-Quelle lieferte beim
+            // bundesweiten Warntag 2026 ein rohes "<br/>" mitten im
+            // Beschreibungstext, das dann unverändert (z. B. in
+            // WFC_PushNotification, die kein HTML rendert) als sichtbarer
+            // Text ankam -- unabhängig bestätigt über zwei verschiedene
+            // Push-Kanäle (Symcon-App, Pushover). Praxis-Fund kronos/ralf,
+            // Symcon-Forum, 10.09.2026. Einmal hier am Eingang der
+            // Standort-Schleife bereinigt, statt an jeder einzelnen
+            // Ausgabestelle einzeln (Push-Text, Kachel-Detailansicht,
+            // Historie, Cancel-/Fenster-Meldungstext) -- kein Ausgabepfad
+            // kann diese Härtung vergessen.
+            $w['headline'] = $this->sanitizeCapText($w['headline'] ?? '');
+            $w['description'] = $this->sanitizeCapText($w['description'] ?? '');
+            $w['instruction'] = $this->sanitizeCapText($w['instruction'] ?? '');
+
             // Bereits abgelaufene Warnung ignorieren, auch wenn die Quelle
             // sie (verzögert oder fehlerhaft) noch weiterliefert -- zählt
             // NICHT als "still present", damit ein zuvor gepushter Zustand
