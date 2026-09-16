@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.14.2 (2026-09-16)
+
+- Fix: eine Übungs-/Testmeldung einer Quelle kam bisher unverändert wie
+  eine echte Warnung durch ("ACHTUNG! TEST TEST ... Heute scheint der
+  Mond."). WarnHub prüfte das CAP-Standardfeld `status`
+  (Actual/Exercise/System/Test/Draft -- eigens für genau diese
+  Unterscheidung Teil der CAP-1.2-Spezifikation) bisher an keiner Stelle.
+  Neue `isCapStatusActual()` wird jetzt in `fetchNinaDetail()` (NINA),
+  `parseCapXml()` (direkte DWD-Anbindung) und `parseMeteoalarmAtom()`
+  (Meteoalarm) angewendet -- alles außer `Actual` wird verworfen, ein
+  fehlendes Feld (nicht jede Quelle liefert es) weiterhin wie bisher als
+  echte Meldung behandelt. Live gegen NINA (`"status":"Actual"` im JSON)
+  und Meteoalarm (`<cap:status>Actual</cap:status>` im Atom-Feed)
+  verifiziert, dass das Feld tatsächlich vorhanden ist. GeoSphere Austria
+  nutzt keine CAP-Struktur und liefert kein vergleichbares Feld, bleibt
+  deshalb unverändert. Praxis-Fund ralf, Symcon-Forum, 16.09.2026.
+
 ## 1.14.1 (2026-09-10)
 
 - Härtung: Text aus externen Quellen (`headline`/`description`/

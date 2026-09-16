@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.14.1';
-    private const NEWS_VERSION = '1.14.1';
+    private const DOC_VERSION = '1.14.2';
+    private const NEWS_VERSION = '1.14.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1605,6 +1605,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭 MeteoSchweiz) zeigten bisher immer alle drei, unabhängig davon, welche Länder-Quellen tatsächlich aktiviert waren. Jetzt erscheint nur noch der Link zu einem Land, dessen direkte Quelle aktiv ist (ist gar keine aktiv, sicherheitshalber weiterhin alle drei). Praxis-Wunsch hfichtinger, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: die Kartenlinks decken jetzt 17 europäische Länder ab (bisher nur D/A/CH) und richten sich automatisch nach dem Land JEDES aktiven Standorts -- auch mobiler. Reist ein mobiler Standort ins Ausland (z. B. Frankreich, Italien, Spanien, Niederlande, Belgien, Polen, Tschechien, Dänemark, Norwegen, Schweden, Finnland, UK, Irland, Portugal), erscheint dessen amtliche Warnseite automatisch mit, sobald der nächste Abgleich gelaufen ist -- ganz ohne eigenes Zutun. Dietmars Recherchewunsch 09.09.2026'],
                 ['type' => 'Label', 'caption' => '• Härtung: Text aus externen Quellen (Beschreibung/Handlungsempfehlung) wird jetzt von HTML-Resten bereinigt, bevor er in Push/Kachel/Historie landet -- die amtliche NINA-Quelle lieferte beim bundesweiten Warntag 2026 ein rohes "<br/>" mitten im Text, das z. B. in WFC_PushNotification (kein HTML-Rendering) wörtlich sichtbar wurde. Kein WarnHub-Bug (unabhängig über zwei Push-Kanäle bestätigt), aber eine Absicherung gegen ähnliche künftige Quelldaten-Ausreißer. Praxis-Fund kronos/ralf, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix: eine Übungs-/Testmeldung einer Quelle kam bisher wie eine echte Warnung durch -- WarnHub prüfte das CAP-Standardfeld "status" (Actual/Exercise/System/Test/Draft, eigens für genau diese Unterscheidung vorgesehen) bisher an keiner Stelle. Betrifft NINA, die direkte DWD-Anbindung und Meteoalarm; wird jetzt geprüft, alles außer "Actual" (bzw. fehlendem Feld, nicht jede Quelle liefert es) wird verworfen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2805,6 +2806,27 @@ class WarnHub extends IPSModule
      * @param array<int,array<string,mixed>> $infoList
      * @return array<string,mixed>|null
      */
+    /**
+     * true, wenn das CAP-Standardfeld `status` FEHLT oder explizit "Actual"
+     * ist -- eine fehlende Angabe wird wie bisher als echte Meldung
+     * behandelt (nicht jede angebundene Quelle liefert dieses Feld
+     * überhaupt), alles andere (Exercise/System/Test/Draft, laut CAP-1.2-
+     * Spezifikation die vorgesehenen Werte für Übungen/Tests) wird
+     * verworfen. Praxis-Fund ralf, Symcon-Forum, 16.09.2026: eine
+     * Test-/Übungsmeldung ("ACHTUNG! TEST TEST ... Heute scheint der
+     * Mond.") kam unverändert als echte Warnung durch, weil WarnHub dieses
+     * CAP-Feld bisher an keiner Stelle prüfte -- live gegen NINA
+     * ("status":"Actual" im JSON) und Meteoalarm (<cap:status>Actual</cap:status>
+     * im Atom-Feed) verifiziert, dass das Feld tatsächlich vorhanden ist.
+     */
+    private function isCapStatusActual(?string $status): bool
+    {
+        if ($status === null || trim($status) === '') {
+            return true;
+        }
+        return strcasecmp(trim($status), 'Actual') === 0;
+    }
+
     private function selectGermanCapInfo(array $infoList): ?array
     {
         foreach ($infoList as $info) {
@@ -2821,6 +2843,9 @@ class WarnHub extends IPSModule
         $meta = $this->httpGetJson('https://warnung.bund.de/api31/warnings/' . rawurlencode($id) . '.json');
         if ($meta === null || !isset($meta['info'][0])) {
             return null;
+        }
+        if (!$this->isCapStatusActual($meta['status'] ?? null)) {
+            return null; // Übung/Test (siehe isCapStatusActual()), keine echte Warnung
         }
         $infoDe = $this->selectGermanCapInfo($meta['info']);
 
@@ -2991,6 +3016,9 @@ class WarnHub extends IPSModule
         $msgType = (string) $sxml->msgType;
         if ($identifier === '') {
             return null;
+        }
+        if (!$this->isCapStatusActual((string) $sxml->status)) {
+            return null; // Übung/Test (siehe isCapStatusActual()), keine echte Warnung
         }
 
         $infoDe = null;
@@ -3728,6 +3756,9 @@ class WarnHub extends IPSModule
             $areaDesc = (string) $capNs->areaDesc;
             if ($identifier === '' || $areaDesc === '') {
                 continue;
+            }
+            if (!$this->isCapStatusActual((string) $capNs->status)) {
+                continue; // Übung/Test (siehe isCapStatusActual()), keine echte Warnung
             }
             $msgType = (string) $capNs->message_type;
             $out[] = [

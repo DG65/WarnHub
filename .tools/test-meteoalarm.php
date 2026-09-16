@@ -207,6 +207,54 @@ echo "\n== parseMeteoalarmAtom(): kaputtes XML führt zu leerem Ergebnis statt F
 $broken = callPrivate($hub, 'parseMeteoalarmAtom', ['<feed><entry>', 'germany']);
 check('liefert eine leere Liste statt eines Fehlers/Absturzes', $broken === []);
 
+echo "\n== parseMeteoalarmAtom(): Übungs-/Testmeldungen (cap:status != Actual) werden verworfen (Praxis-Fund ralf, Symcon-Forum, 16.09.2026: 'ACHTUNG! TEST TEST ... Heute scheint der Mond.' kam unverändert als echte Warnung durch) ==\n";
+$statusFixture = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+  <entry>
+    <cap:areaDesc>Echt-Gebiet</cap:areaDesc>
+    <cap:event>storm-force gusts</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:status>Actual</cap:status>
+    <cap:identifier>test-status-actual</cap:identifier>
+    <title>Echte Warnung</title>
+  </entry>
+  <entry>
+    <cap:areaDesc>Kein-Status-Gebiet</cap:areaDesc>
+    <cap:event>storm-force gusts</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:identifier>test-status-fehlt</cap:identifier>
+    <title>Warnung ohne status-Feld (ältere/andere Quelle)</title>
+  </entry>
+  <entry>
+    <cap:areaDesc>Übungs-Gebiet</cap:areaDesc>
+    <cap:event>storm-force gusts</cap:event>
+    <cap:severity>Extreme</cap:severity>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:status>Exercise</cap:status>
+    <cap:identifier>test-status-exercise</cap:identifier>
+    <title>ACHTUNG! TEST TEST</title>
+  </entry>
+  <entry>
+    <cap:areaDesc>Test-Gebiet</cap:areaDesc>
+    <cap:event>storm-force gusts</cap:event>
+    <cap:severity>Extreme</cap:severity>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:status>Test</cap:status>
+    <cap:identifier>test-status-test</cap:identifier>
+    <title>Testmeldung</title>
+  </entry>
+</feed>
+XML;
+$statusParsed = callPrivate($hub, 'parseMeteoalarmAtom', [$statusFixture, 'germany']);
+check('genau 2 Einträge bleiben übrig (status=Actual und ganz ohne status-Feld), Exercise UND Test werden verworfen', count($statusParsed) === 2);
+check('der Eintrag mit status=Actual ist dabei', in_array('test-status-actual|Echt-Gebiet', array_column($statusParsed, 'identifier'), true));
+check('der Eintrag ganz ohne status-Feld ist dabei (Rückwärtskompatibilität -- nicht jede Quelle liefert das Feld)', in_array('test-status-fehlt|Kein-Status-Gebiet', array_column($statusParsed, 'identifier'), true));
+check('der Eintrag mit status=Exercise fehlt', !in_array('test-status-exercise|Übungs-Gebiet', array_column($statusParsed, 'identifier'), true));
+check('der Eintrag mit status=Test fehlt', !in_array('test-status-test|Test-Gebiet', array_column($statusParsed, 'identifier'), true));
+
 echo "\n== namesOverlap(): Namensabgleich-Ersatz für die fehlende Geometrie ==\n";
 check('identischer Name matcht', callPrivate($hub, 'namesOverlap', [['Berlin'], ['Berlin']]) === true);
 check('Groß-/Kleinschreibung ist egal', callPrivate($hub, 'namesOverlap', [['BERLIN'], ['berlin']]) === true);
