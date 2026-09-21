@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.15.1 (2026-09-21)
+
+- Die Verbindungs-Statuszeilen aus 1.15.0 folgen jetzt der Farbregel des
+  Verbunds (SUITE.md 21.09.2026): eine automatisch übernommene,
+  funktionierende Verbindung (✅ mit 🔗) ist grün (`0x2E8B3D`), ⛔ rot
+  (`0xFF0000`), alles andere (✏️ von Hand, ℹ️, ⚠️) Standardfarbe (`-1`).
+  Ein ⚠️ mit 🔗-Teil bleibt bewusst ungefärbt. Caption UND Farbe kommen aus
+  einer Stelle (`statusLineColor()`/`statusLabelItem()`/`setStatusLabel()`),
+  im Formular wie bei jedem `UpdateFormField()` -- die Farbe wechselt also
+  beim Umwählen im `onChange` der Wetterstation mit. Die Systemstandort-Zeile
+  ist als automatische Übernahme (🔗) gekennzeichnet und damit grün.
+- Test: `.tools/test-verbindungs-status.php` auf 79 Prüfungen erweitert
+  (Farbe je Zustand, im Formular und beim Aktualisieren).
+
 ## 1.15.0 (2026-09-21)
 
 - Neu: **Verbindungs-Statuszeilen** nach der neuen Verbund-Formularregel

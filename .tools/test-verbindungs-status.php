@@ -501,18 +501,56 @@ foreach (['WetterstationInstanceID', 'WetterstationWindVariableID', 'Wetterstati
 }
 check('onChange-Zielmethode OnChangeWetterstation existiert öffentlich (WHUB_-Funktion)', (new ReflectionMethod('WarnHub', 'OnChangeWetterstation'))->isPublic());
 
-echo "\n== Regel 2: kein UpdateFormField('value') auf Eingabefeldern durch die Statuszeilen ==\n";
+echo "\n== Farbregel (SUITE.md: 🔗 grün, ⛔ rot, sonst Standardfarbe) ==\n";
+$farbe = fn (string $caption) => callPrivate(neuerHub(), 'statusLineColor', [$caption]);
+check('✅ mit 🔗 -> grün 0x2E8B3D', $farbe('✅ Foo 🔗 automatisch') === 0x2E8B3D);
+check('✅ nur mit ✏️ (von Hand) -> Standardfarbe -1', $farbe('✅ Foo ✏️ von Hand gewählt') === -1);
+check('⛔ -> rot 0xFF0000', $farbe('⛔ Pflicht fehlt') === 0xFF0000);
+check('⛔ bleibt rot, auch wenn 🔗 im Text vorkommt', $farbe('⛔ Foo 🔗 bar') === 0xFF0000);
+check('⚠️ mit 🔗-Teil -> Standardfarbe (grün hieße "in Ordnung")', $farbe('⚠️ teilweise 🔗 automatisch') === -1);
+check('ℹ️ -> Standardfarbe', $farbe('ℹ️ nichts eingerichtet') === -1);
+
+$GLOBALS['whub_test_locationInstances'] = [LOCATION_INSTANCE_ID];
+$ffarbe = fn (array $props, string $name) => (findeName(json_decode(neuerHub($props, ['HeimLandCode' => 'de'])->GetConfigurationForm(), true)['elements'], $name)['color'] ?? 'FEHLT');
+check('Formular: Wetterstation aus Instanz (🔗) -> grün', $ffarbe(['WetterstationInstanceID' => 10], 'WetterstationStatusLabel') === 0x2E8B3D);
+check('Formular: Wetterstation nur von Hand (✏️) -> Standardfarbe', $ffarbe(['WetterstationWindVariableID' => 501, 'WetterstationRegenVariableID' => 102], 'WetterstationStatusLabel') === -1);
+check('Formular: Wetterstation nur teilweise (⚠️) -> Standardfarbe', $ffarbe(['WetterstationInstanceID' => 50], 'WetterstationStatusLabel') === -1);
+check('Formular: Wetterstation nicht eingerichtet (ℹ️) -> Standardfarbe', $ffarbe([], 'WetterstationStatusLabel') === -1);
+check('Formular: Systemstandort automatisch übernommen (🔗) -> grün', $ffarbe([], 'SystemLocationStatusLabel') === 0x2E8B3D);
+$GLOBALS['whub_test_locationInstances'] = [];
+check('Formular: Systemstandort fehlt, Wetterstation braucht ihn (⛔) -> rot', $ffarbe(['WetterstationInstanceID' => 10], 'SystemLocationStatusLabel') === 0xFF0000);
+check('Formular: Systemstandort fehlt, nichts nötig (ℹ️) -> Standardfarbe', $ffarbe([], 'SystemLocationStatusLabel') === -1);
+$GLOBALS['whub_test_locationInstances'] = [LOCATION_INSTANCE_ID];
+$mobilZeile = [['Name' => 'Auto', 'Lat' => 48.0, 'Lon' => 8.0, 'Aktiv' => true, 'QuellVarLat' => 701, 'QuellVarLon' => 702]];
+check('Formular: Live-Standort verbunden (🔗) -> grün', $ffarbe(['Standorte' => json_encode($mobilZeile)], 'MobileStandorteStatusLabel') === 0x2E8B3D);
+$mobilKaputt = [['Name' => 'Auto', 'Lat' => 48.0, 'Lon' => 8.0, 'Aktiv' => true, 'QuellVarLat' => 9701, 'QuellVarLon' => 9702]];
+check('Formular: Live-Variable gelöscht (⚠️) -> Standardfarbe', $ffarbe(['Standorte' => json_encode($mobilKaputt)], 'MobileStandorteStatusLabel') === -1);
+check('Formular: kein mobiler Standort (ℹ️) -> Standardfarbe', $ffarbe([], 'MobileStandorteStatusLabel') === -1);
+check('Formular: Push-Ziele mit aktivem E-Mail ohne Adresse (⛔) -> rot', $ffarbe(['WebFronts' => json_encode([['InstanceID' => 62, 'Name' => 'Mail', 'Typ' => 'email', 'Aktiv' => true, 'Zieladresse' => '']])], 'WebFrontStatusLabel') === 0xFF0000);
+check('Formular: Push-Ziele funktionsfähig (✅, kein 🔗) -> Standardfarbe', $ffarbe(['WebFronts' => json_encode([['InstanceID' => 60, 'Name' => 'WF', 'Typ' => 'webfront', 'Aktiv' => true]])], 'WebFrontStatusLabel') === -1);
+
+echo "\n== Regel 2 + Farbe beim Aktualisieren: nur caption/color von Labels, nie value ==\n";
 $GLOBALS['whub_test_formFieldSets'] = [];
 $hub = neuerHub(['WetterstationInstanceID' => 10, 'Standorte' => '[]', 'WebFronts' => '[]']);
 $hub->OnChangeWetterstation(10, 0, 0);
+$sets = $GLOBALS['whub_test_formFieldSets'];
+check('OnChange setzt genau caption + color des Labels WetterstationStatusLabel', count($sets) === 2 && $sets[0][0] === 'WetterstationStatusLabel' && $sets[0][1] === 'caption' && $sets[1][0] === 'WetterstationStatusLabel' && $sets[1][1] === 'color');
+check('... Auswahl mit Instanz -> Farbe grün', ($sets[1][2] ?? null) === 0x2E8B3D);
+$GLOBALS['whub_test_formFieldSets'] = [];
+$hub->OnChangeWetterstation(50, 0, 0);
+check('... Wechsel auf teilweise verbundene Instanz -> Farbe zurück auf -1', ($GLOBALS['whub_test_formFieldSets'][1][2] ?? null) === -1);
+$GLOBALS['whub_test_formFieldSets'] = [];
+$hub->OnChangeWetterstation(0, 0, 0);
+check('... Auswahl geleert -> Farbe -1', ($GLOBALS['whub_test_formFieldSets'][1][2] ?? null) === -1);
+$GLOBALS['whub_test_formFieldSets'] = [];
 callPrivate($hub, 'refreshWetterstationStatus');
-$nurCaption = true;
-foreach ($GLOBALS['whub_test_formFieldSets'] as $s) {
-    if ($s[1] !== 'caption') {
-        $nurCaption = false;
+$alleErlaubt = count($GLOBALS['whub_test_formFieldSets']) === 2;
+foreach ($GLOBALS['whub_test_formFieldSets'] as $sf) {
+    if (!in_array($sf[1], ['caption', 'color'], true)) {
+        $alleErlaubt = false;
     }
 }
-check('OnChange/refresh schreiben ausschließlich "caption" von Labels, nie "value" eines Eingabefelds', $nurCaption && count($GLOBALS['whub_test_formFieldSets']) === 2);
+check('refreshWetterstationStatus schreibt ausschließlich caption/color, nie "value" eines Eingabefelds', $alleErlaubt);
 
 echo "\n" . ($failures === 0 ? "Alle $checks Prüfungen bestanden." : "$failures von $checks Prüfungen FEHLGESCHLAGEN.") . "\n";
 exit($failures === 0 ? 0 : 1);

@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.15.0';
-    private const NEWS_VERSION = '1.15.0';
+    private const DOC_VERSION = '1.15.1';
+    private const NEWS_VERSION = '1.15.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -773,7 +773,7 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_AddStandortFromSystemLocation($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Übernimmt Breiten-/Längengrad aus der Symcon-Kerninstanz "Standort" (Kern-Instanzen) als neue Zeile -- fügt sie nur der offenen Tabelle hinzu, "Übernehmen" bleibt trotzdem nötig.'],
-                ['type' => 'Label', 'name' => 'SystemLocationStatusLabel', 'caption' => $this->systemLocationStatusLine()],
+                $this->statusLabelItem('SystemLocationStatusLabel', $this->systemLocationStatusLine()),
                 [
                     'type' => 'Button',
                     'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
@@ -783,7 +783,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeug): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
                 ['type' => 'Label', 'caption' => 'Welche Module genau: "Tessie" (DG65-eigenes Modul für Tesla), "Geofency" (Bridge für die gleichnamige Geofencing-App), sowie vier über den Symcon Module Store bzw. GitHub installierbare Community-Module -- im Store nach dem jeweiligen Namen suchen: "Stellantis Vehicles" (Opel u. a. ehemalige PSA-Marken, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ Fahrzeugmarken über die Smartcar-Plattform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, aktuell Beta), "OVMS native" (für OVMS-Boxen mit der älteren API V2, github.com/lorbetzki/net.lorbetzki.native.ovms).'],
                 ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
-                ['type' => 'Label', 'name' => 'MobileStandorteStatusLabel', 'caption' => $this->mobileStandorteStatusLine()],
+                $this->statusLabelItem('MobileStandorteStatusLabel', $this->mobileStandorteStatusLine()),
                 [
                     'type' => 'List',
                     'name' => 'Standorte',
@@ -857,11 +857,11 @@ class WarnHub extends IPSModule
                         ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
                         ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung unten bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
                         ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
-                        ['type' => 'Label', 'name' => 'WetterstationStatusLabel', 'caption' => $this->wetterstationStatusLine(
+                        $this->statusLabelItem('WetterstationStatusLabel', $this->wetterstationStatusLine(
                             $this->ReadPropertyInteger('WetterstationInstanceID'),
                             $this->ReadPropertyInteger('WetterstationWindVariableID'),
                             $this->ReadPropertyInteger('WetterstationRegenVariableID')
-                        )],
+                        )),
                         [
                             'type' => 'SelectInstance',
                             'name' => 'WetterstationInstanceID',
@@ -999,7 +999,7 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Push-Ziele suchen',
                     'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
                 ],
-                ['type' => 'Label', 'name' => 'WebFrontStatusLabel', 'caption' => $this->webfrontStatusLine()],
+                $this->statusLabelItem('WebFrontStatusLabel', $this->webfrontStatusLine()),
                 ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul), Pushover- (Community-Modul) und SMTP-Instanzen (offizielles Symcon-Modul, für E-Mail). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
                 ['type' => 'Label', 'caption' => 'Telegram/Pushover/E-Mail: Anbindung anhand des echten Quellcodes bzw. der echten Funktionssignatur der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot-/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
                 ['type' => 'Label', 'caption' => 'E-Mail (SMTP): eine gefundene SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger -- deshalb zunächst INAKTIV angelegt. Erst in der Spalte "Zieladresse" die gewünschte E-Mail-Adresse eintragen, dann in der Spalte "Aktiv" aktivieren. Mehrere Adressen: einfach mit Komma oder Semikolon getrennt in dasselbe Feld eintragen.'],
@@ -1430,7 +1430,7 @@ class WarnHub extends IPSModule
         }
         $this->UpdateFormField('WebFronts', 'values', json_encode($rows));
         $this->UpdateFormField('WebFronts', 'rowCount', $this->listRowCount(count($rows), 3));
-        @$this->UpdateFormField('WebFrontStatusLabel', 'caption', $this->webfrontStatusLine($rows));
+        $this->setStatusLabel('WebFrontStatusLabel', $this->webfrontStatusLine($rows));
         if ($added === 0 && count($rows) > 0) {
             return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
@@ -1441,6 +1441,37 @@ class WarnHub extends IPSModule
             return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden (insgesamt %d) -- bitte unten „Übernehmen" klicken. %d E-Mail-Ziel(e) sind noch INAKTIV: erst Zieladresse eintragen und aktivieren.', $added, count($rows), $addedEmail);
         }
         return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
+    }
+
+    /**
+     * Farbe einer Verbindungs-Statuszeile nach der Verbund-Regel (SUITE.md
+     * 21.09.2026): eine automatisch übernommene, funktionierende Verbindung
+     * (✅ mit 🔗) ist GRÜN (0x2E8B3D), ⛔ ROT (0xFF0000), alles andere
+     * (✏️ von Hand, ℹ️, ⚠️) Standardfarbe (-1). Ein ⚠️ mit einem 🔗-Teil
+     * bleibt bewusst ungefärbt -- grün hieße "in Ordnung".
+     */
+    private function statusLineColor(string $caption): int
+    {
+        if (str_starts_with($caption, '⛔')) {
+            return 0xFF0000;
+        }
+        if (str_starts_with($caption, '✅') && str_contains($caption, '🔗')) {
+            return 0x2E8B3D;
+        }
+        return -1;
+    }
+
+    /** Label-Element einer Statuszeile: Caption UND Farbe aus einer Quelle, damit Formular und UpdateFormField nie auseinanderlaufen. */
+    private function statusLabelItem(string $name, string $caption): array
+    {
+        return ['type' => 'Label', 'name' => $name, 'caption' => $caption, 'color' => $this->statusLineColor($caption)];
+    }
+
+    /** Aktualisiert eine Statuszeile im offenen Formular (Caption + Farbe). */
+    private function setStatusLabel(string $name, string $caption): void
+    {
+        @$this->UpdateFormField($name, 'caption', $caption);
+        @$this->UpdateFormField($name, 'color', $this->statusLineColor($caption));
     }
 
     /**
@@ -1543,7 +1574,7 @@ class WarnHub extends IPSModule
         }
         $heim = $this->ReadAttributeString('HeimLandCode');
         return sprintf(
-            '✅ Systemstandort aus der Symcon-Kerninstanz „Standort“ #%d übernommen: Breite %s, Länge %s, Land: %s. Genutzt für den Knopf „Standort aus Symcon-Systemeinstellungen übernehmen“, den Kartenstart und die Länder-Vorauswahl bei „Datenquellen“%s.',
+            '✅ Systemstandort 🔗 automatisch aus der Symcon-Kerninstanz „Standort“ #%d übernommen: Breite %s, Länge %s, Land: %s. Genutzt für den Knopf „Standort aus Symcon-Systemeinstellungen übernehmen“, den Kartenstart und die Länder-Vorauswahl bei „Datenquellen“%s.',
             (int) ($loc['instanceID'] ?? 0),
             number_format($loc['lat'], 5, ',', '.'),
             number_format($loc['lon'], 5, ',', '.'),
@@ -1605,13 +1636,13 @@ class WarnHub extends IPSModule
      */
     public function OnChangeWetterstation(int $instanceID, int $windVar, int $regenVar): void
     {
-        $this->UpdateFormField('WetterstationStatusLabel', 'caption', $this->wetterstationStatusLine($instanceID, $windVar, $regenVar));
+        $this->setStatusLabel('WetterstationStatusLabel', $this->wetterstationStatusLine($instanceID, $windVar, $regenVar));
     }
 
     /** Frischt die Wetterstations-Statuszeile auf -- fehlende Werte kommen aus dem gespeicherten Stand (siehe Discover-Knopf). */
     private function refreshWetterstationStatus(?int $instanceID = null, ?int $windVar = null, ?int $regenVar = null): void
     {
-        @$this->UpdateFormField('WetterstationStatusLabel', 'caption', $this->wetterstationStatusLine(
+        $this->setStatusLabel('WetterstationStatusLabel', $this->wetterstationStatusLine(
             $instanceID ?? $this->ReadPropertyInteger('WetterstationInstanceID'),
             $windVar ?? $this->ReadPropertyInteger('WetterstationWindVariableID'),
             $regenVar ?? $this->ReadPropertyInteger('WetterstationRegenVariableID')
@@ -1837,6 +1868,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Härtung: Text aus externen Quellen (Beschreibung/Handlungsempfehlung) wird jetzt von HTML-Resten bereinigt, bevor er in Push/Kachel/Historie landet -- die amtliche NINA-Quelle lieferte beim bundesweiten Warntag 2026 ein rohes "<br/>" mitten im Text, das z. B. in WFC_PushNotification (kein HTML-Rendering) wörtlich sichtbar wurde. Kein WarnHub-Bug (unabhängig über zwei Push-Kanäle bestätigt), aber eine Absicherung gegen ähnliche künftige Quelldaten-Ausreißer. Praxis-Fund kronos/ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix: eine Übungs-/Testmeldung einer Quelle kam bisher wie eine echte Warnung durch -- WarnHub prüfte das CAP-Standardfeld "status" (Actual/Exercise/System/Test/Draft, eigens für genau diese Unterscheidung vorgesehen) bisher an keiner Stelle. Betrifft NINA, die direkte DWD-Anbindung und Meteoalarm; wird jetzt geprüft, alles außer "Actual" (bzw. fehlendem Feld, nicht jede Quelle liefert es) wird verworfen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: automatische Verbindungen zeigen jetzt live, ob sie stehen -- eine Statuszeile (✅ / ⚠️ / ℹ️ / ⛔) bei den Push-Zielen, beim Symcon-Systemstandort, bei der eigenen Wetterstation und bei den mobilen Live-Standorten. Sie nennt, WAS verbunden ist (Instanz, Variable, aktueller Wert) und ob es automatisch (🔗) oder von Hand (✏️) gewählt wurde. Das schließt Lücken, die vorher still blieben: ein aktives E-Mail-Ziel ohne Zieladresse, eine gelöschte Push-Instanz oder Live-Variable (WarnHub fiel dann unbemerkt auf feste Koordinaten zurück) und eine Wetterstation, die nur Wind oder nur Regen liefert. Die Wetterstation-Zeile folgt schon beim Auswählen der Auswahl, nicht erst nach dem Speichern'],
+                ['type' => 'Label', 'caption' => '• Verbindungs-Statuszeilen jetzt farbig: eine automatisch übernommene, funktionierende Verbindung (🔗) steht in Grün, ein fehlender Pflichtwert (⛔) in Rot, alles andere in der Standardfarbe -- auf einen Blick erkennbar, was von selbst läuft und wo etwas fehlt'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2676,7 +2708,7 @@ class WarnHub extends IPSModule
 
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
-        @$this->UpdateFormField('MobileStandorteStatusLabel', 'caption', $this->mobileStandorteStatusLine($rows));
+        $this->setStatusLabel('MobileStandorteStatusLabel', $this->mobileStandorteStatusLine($rows));
         if ($added === 0) {
             return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink, OVMS native).';
         }
@@ -4746,8 +4778,8 @@ class WarnHub extends IPSModule
         // Verbindungs-Statuszeilen (SUITE.md 21.09.2026) nach jeder Prüfung
         // mit auffrischen: Land, Live-Positionen und Wetterstations-Werte
         // ändern sich von selbst, ohne dass im Formular etwas angeklickt wird.
-        @$this->UpdateFormField('SystemLocationStatusLabel', 'caption', $this->systemLocationStatusLine());
-        @$this->UpdateFormField('MobileStandorteStatusLabel', 'caption', $this->mobileStandorteStatusLine());
+        $this->setStatusLabel('SystemLocationStatusLabel', $this->systemLocationStatusLine());
+        $this->setStatusLabel('MobileStandorteStatusLabel', $this->mobileStandorteStatusLine());
         $this->refreshWetterstationStatus();
         $restoreLine = $this->wetterstationRestoreStatusLine();
         if ($restoreLine !== null) {
