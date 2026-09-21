@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.14.2';
-    private const NEWS_VERSION = '1.14.2';
+    private const DOC_VERSION = '1.15.0';
+    private const NEWS_VERSION = '1.15.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -168,6 +168,15 @@ class WarnHub extends IPSModule
         // nicht die Live-Position) -- live an Dietmars System geprüft.
         ['label' => 'Geofency', 'prefix' => 'current', 'lat' => 'latitude', 'lon' => 'longitude'],
     ];
+
+    /**
+     * Idents, unter denen die unterstützten Wetterstations-Module Windböe
+     * bzw. Regenrate ablegen (Froggit, Sainlogic/ELV, Meteobridge) -- EINE
+     * Stelle für Abruf, Auto-Rückstellung UND die Statuszeile im Formular,
+     * damit die Anzeige nie etwas anderes erkennt als der Abruf.
+     */
+    private const WETTERSTATION_WIND_IDENTS = ['windgustmph', 'Windgust', 'Wind_Gust_KmH'];
+    private const WETTERSTATION_REGEN_IDENTS = ['rainratein', 'rrain_piezo', 'rainin', 'Rain_Rate'];
 
     private const SEVERITY_RANK = ['Unknown' => 0, 'Minor' => 1, 'Moderate' => 2, 'Severe' => 3, 'Extreme' => 4];
     private const SEVERITY_ICON = ['Unknown' => 'ℹ️', 'Minor' => 'ℹ️', 'Moderate' => '⚠️', 'Severe' => '🚨', 'Extreme' => '🆘'];
@@ -639,12 +648,7 @@ class WarnHub extends IPSModule
         // dieselbe Instanz-Lahmlegung wie bei den fehlenden Quellen (siehe
         // Klassenkonstante) für GENAU diese eine Konfiguration erneut
         // ermöglicht.
-        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0
-            || $this->ReadPropertyInteger('WetterstationWindVariableID') > 0
-            || $this->ReadPropertyInteger('WetterstationRegenVariableID') > 0) {
-            return true;
-        }
-        return false;
+        return $this->hasWetterstationConfigured();
     }
 
     /**
@@ -769,6 +773,7 @@ class WarnHub extends IPSModule
                     'onClick' => 'echo WHUB_AddStandortFromSystemLocation($id);',
                 ],
                 ['type' => 'Label', 'caption' => 'Übernimmt Breiten-/Längengrad aus der Symcon-Kerninstanz "Standort" (Kern-Instanzen) als neue Zeile -- fügt sie nur der offenen Tabelle hinzu, "Übernehmen" bleibt trotzdem nötig.'],
+                ['type' => 'Label', 'name' => 'SystemLocationStatusLabel', 'caption' => $this->systemLocationStatusLine()],
                 [
                     'type' => 'Button',
                     'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
@@ -778,6 +783,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeug): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
                 ['type' => 'Label', 'caption' => 'Welche Module genau: "Tessie" (DG65-eigenes Modul für Tesla), "Geofency" (Bridge für die gleichnamige Geofencing-App), sowie vier über den Symcon Module Store bzw. GitHub installierbare Community-Module -- im Store nach dem jeweiligen Namen suchen: "Stellantis Vehicles" (Opel u. a. ehemalige PSA-Marken, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ Fahrzeugmarken über die Smartcar-Plattform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, aktuell Beta), "OVMS native" (für OVMS-Boxen mit der älteren API V2, github.com/lorbetzki/net.lorbetzki.native.ovms).'],
                 ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
+                ['type' => 'Label', 'name' => 'MobileStandorteStatusLabel', 'caption' => $this->mobileStandorteStatusLine()],
                 [
                     'type' => 'List',
                     'name' => 'Standorte',
@@ -851,10 +857,16 @@ class WarnHub extends IPSModule
                         ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
                         ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung unten bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
                         ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
+                        ['type' => 'Label', 'name' => 'WetterstationStatusLabel', 'caption' => $this->wetterstationStatusLine(
+                            $this->ReadPropertyInteger('WetterstationInstanceID'),
+                            $this->ReadPropertyInteger('WetterstationWindVariableID'),
+                            $this->ReadPropertyInteger('WetterstationRegenVariableID')
+                        )],
                         [
                             'type' => 'SelectInstance',
                             'name' => 'WetterstationInstanceID',
                             'caption' => 'Instanz der Wetterstation',
+                            'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);',
                         ],
                         [
                             'type' => 'Button',
@@ -863,8 +875,8 @@ class WarnHub extends IPSModule
                         ],
                         ['type' => 'Label', 'caption' => 'Findet Froggit (auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware), Sainlogic/ELV (Wunderground-Protokoll) sowie Meteobridge/Meteohub (deckt als Datenlogger-Aggregator zusätzlich weitere Marken wie DAVIS ab). Findet sich keines davon, wird zuletzt systemweit nach Variablen mit dem passenden Symcon-Standardprofil gesucht (z. B. eine bereits profilierte KNX-Wetterstation) -- nur bei einem eindeutigen Treffer übernommen.'],
                         ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation ohne zugewiesenes Profil, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
-                        ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)'],
-                        ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)'],
+                        ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)', 'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);'],
+                        ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)', 'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);'],
                         ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
                         ['type' => 'Label', 'caption' => 'Windböe -- drei Schwellwerte statt einem: eine Markise ist deutlich windempfindlicher als ein robustes Raffstore. Jede Schutzaktions-Zeile wählt über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert.'],
                         [
@@ -987,7 +999,7 @@ class WarnHub extends IPSModule
                     'caption' => '🔎 Push-Ziele suchen',
                     'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
                 ],
-                ['type' => 'Label', 'caption' => $this->webfrontStatusLine()],
+                ['type' => 'Label', 'name' => 'WebFrontStatusLabel', 'caption' => $this->webfrontStatusLine()],
                 ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul), Pushover- (Community-Modul) und SMTP-Instanzen (offizielles Symcon-Modul, für E-Mail). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
                 ['type' => 'Label', 'caption' => 'Telegram/Pushover/E-Mail: Anbindung anhand des echten Quellcodes bzw. der echten Funktionssignatur der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot-/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
                 ['type' => 'Label', 'caption' => 'E-Mail (SMTP): eine gefundene SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger -- deshalb zunächst INAKTIV angelegt. Erst in der Spalte "Zieladresse" die gewünschte E-Mail-Adresse eintragen, dann in der Spalte "Aktiv" aktivieren. Mehrere Adressen: einfach mit Komma oder Semikolon getrennt in dasselbe Feld eintragen.'],
@@ -1418,6 +1430,7 @@ class WarnHub extends IPSModule
         }
         $this->UpdateFormField('WebFronts', 'values', json_encode($rows));
         $this->UpdateFormField('WebFronts', 'rowCount', $this->listRowCount(count($rows), 3));
+        @$this->UpdateFormField('WebFrontStatusLabel', 'caption', $this->webfrontStatusLine($rows));
         if ($added === 0 && count($rows) > 0) {
             return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
@@ -1430,17 +1443,234 @@ class WarnHub extends IPSModule
         return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
     }
 
-    private function webfrontStatusLine(): string
+    /**
+     * Live berechnete Statuszeile zu den Push-Zielen (Verbund-Regel
+     * "Verbindungen im Formular sichtbar machen", SUITE.md 21.09.2026):
+     * nennt, WELCHE Ziele tatsächlich funktionieren, und schlägt nicht nur
+     * anhand der Aktiv-Häkchen Alarm -- ein aktiviertes E-Mail-Ziel ohne
+     * Zieladresse oder eine inzwischen gelöschte Instanz zeigte bisher
+     * trotzdem "✅", obwohl dort nichts ankommt. $rows nur beim Auffrischen
+     * direkt nach der Suche (dann der noch ungespeicherte Stand der
+     * offenen Tabelle), sonst der gespeicherte.
+     *
+     * @param array<int,array<string,mixed>>|null $rows
+     */
+    private function webfrontStatusLine(?array $rows = null): string
     {
-        $rows = $this->decodeWebFronts();
-        $active = count(array_filter($rows, fn ($w) => $w['Aktiv']));
+        $ungespeichert = $rows !== null ? ' (Stand der offenen Tabelle, noch nicht gespeichert -- „Übernehmen“ klicken)' : '';
+        $rows ??= $this->decodeWebFronts();
         if (count($rows) === 0) {
-            return 'ℹ️ Noch keine Push-Ziele gesucht -- oben "🔎 Push-Ziele suchen" klicken.';
+            return 'ℹ️ Noch keine Push-Ziele gesucht -- oben "🔎 Push-Ziele suchen" klicken. Ohne Push-Ziel kommt keine Benachrichtigung an (Erkennung, Kacheln und Schutzaktionen laufen trotzdem).';
         }
-        if ($active === 0) {
-            return sprintf('⚠️ %d Push-Ziel(e) gefunden, aber keines aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.', count($rows));
+        $aktive = array_values(array_filter($rows, fn ($w) => !empty($w['Aktiv'])));
+        if (count($aktive) === 0) {
+            return sprintf('⚠️ %d Push-Ziel(e) gefunden, aber keines aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.%s', count($rows), $ungespeichert);
         }
-        return sprintf('✅ %d von %d gefundenen Push-Ziel(en) aktiv -- Push-Benachrichtigungen gehen dorthin.', $active, count($rows));
+
+        $typNamen = ['webfront' => 'WebFront', 'kachel' => 'Kachel-Visualisierung', 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => 'E-Mail'];
+        $laufen = [];
+        $ohneAdresse = [];
+        $verwaist = [];
+        foreach ($aktive as $w) {
+            $name = trim((string) ($w['Name'] ?? '')) !== '' ? (string) $w['Name'] : ('#' . (int) $w['InstanceID']);
+            $typ = (string) ($w['Typ'] ?? '');
+            if (!@IPS_InstanceExists((int) $w['InstanceID'])) {
+                $verwaist[] = sprintf('„%s“ (Instanz #%d)', $name, (int) $w['InstanceID']);
+                continue;
+            }
+            if ($typ === 'email') {
+                $adressen = array_filter(array_map('trim', preg_split('/[,;]+/', (string) ($w['Zieladresse'] ?? ''))));
+                if (count($adressen) === 0) {
+                    $ohneAdresse[] = '„' . $name . '“';
+                    continue;
+                }
+                $laufen[] = sprintf('%s (E-Mail an %d Adresse%s)', $name, count($adressen), count($adressen) === 1 ? '' : 'n');
+                continue;
+            }
+            $laufen[] = sprintf('%s (%s)', $name, $typNamen[$typ] ?? $typ);
+        }
+
+        $funktioniert = count($laufen) > 0
+            ? ' Funktionsfähig: ' . implode(', ', $laufen) . '.'
+            : ' Aktuell kommt deshalb nirgends eine Benachrichtigung an.';
+        if ($ohneAdresse !== []) {
+            return sprintf('⛔ E-Mail-Ziel %s ist aktiv, aber ohne Zieladresse -- dorthin geht nichts, unten in der Spalte „Zieladresse“ eintragen.%s%s', implode(', ', $ohneAdresse), $funktioniert, $ungespeichert);
+        }
+        if ($verwaist !== []) {
+            return sprintf('⚠️ Push-Ziel %s existiert nicht mehr im Objektbaum -- dorthin geht nichts, Zeile löschen oder „🔎 Push-Ziele suchen“ erneut klicken.%s%s', implode(', ', $verwaist), $funktioniert, $ungespeichert);
+        }
+        return sprintf('✅ %d von %d Push-Zielen aktiv und erreichbar: %s -- Push-Benachrichtigungen gehen dorthin.%s', count($aktive), count($rows), implode(', ', $laufen), $ungespeichert);
+    }
+
+    /** Anzeigename zu einem ISO-3166-Ländercode (nur D-A-CH als Klartext, sonst der Code) -- für die Statuszeilen. */
+    private function landName(string $code): string
+    {
+        return ['de' => 'Deutschland', 'at' => 'Österreich', 'ch' => 'Schweiz'][$code] ?? strtoupper($code);
+    }
+
+    /** Ist irgendeine eigene Wetterstation eingetragen (Instanz ODER manuelle Wind-/Regen-Variable)? Wie in Poll(). */
+    private function hasWetterstationConfigured(): bool
+    {
+        return $this->ReadPropertyInteger('WetterstationInstanceID') > 0
+            || $this->ReadPropertyInteger('WetterstationWindVariableID') > 0
+            || $this->ReadPropertyInteger('WetterstationRegenVariableID') > 0;
+    }
+
+    /**
+     * Statuszeile zur Verbindung mit dem Symcon-Systemstandort (Kerninstanz
+     * "Standort") -- SUITE.md 21.09.2026: eine automatisch übernommene
+     * Quelle muss live zeigen, OB die Verbindung steht und welcher Wert
+     * tatsächlich gilt, statt nur statisch zu erklären, was der Knopf tut.
+     * ⛔ nur, wenn eine aktivierte Quelle den Systemstandort WIRKLICH
+     * braucht (eigene Wetterstation, Hagelschutz Schweiz -- beide melden
+     * ohne ihn nichts).
+     */
+    private function systemLocationStatusLine(): string
+    {
+        $loc = $this->getSystemLocation();
+        $braucht = [];
+        if ($this->hasWetterstationConfigured()) {
+            $braucht[] = 'die eigene Wetterstation';
+        }
+        if (trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '') {
+            $braucht[] = 'Hagelschutz Schweiz';
+        }
+        if ($loc === null) {
+            if ($braucht !== []) {
+                return sprintf('⛔ Kein Systemstandort in der Symcon-Kerninstanz „Standort“ eingetragen -- %s braucht ihn und meldet ohne ihn nichts. Breiten-/Längengrad dort eintragen.', implode(' und ', $braucht));
+            }
+            return 'ℹ️ Kein Systemstandort in der Symcon-Kerninstanz „Standort“ eingetragen -- der Knopf oben bleibt wirkungslos, die Karte startet in der Mitte Deutschlands, das Länder-Panel bei „Datenquellen“ hat keine Vorauswahl. Standorte lassen sich trotzdem per Adresse, Karte oder Koordinaten anlegen.';
+        }
+        $heim = $this->ReadAttributeString('HeimLandCode');
+        return sprintf(
+            '✅ Systemstandort aus der Symcon-Kerninstanz „Standort“ #%d übernommen: Breite %s, Länge %s, Land: %s. Genutzt für den Knopf „Standort aus Symcon-Systemeinstellungen übernehmen“, den Kartenstart und die Länder-Vorauswahl bei „Datenquellen“%s.',
+            (int) ($loc['instanceID'] ?? 0),
+            number_format($loc['lat'], 5, ',', '.'),
+            number_format($loc['lon'], 5, ',', '.'),
+            $heim !== '' ? $this->landName($heim) : 'wird beim nächsten Abgleich ermittelt',
+            $braucht !== [] ? ' sowie als Platzierung für ' . implode(' und ', $braucht) : ''
+        );
+    }
+
+    /**
+     * Statuszeile zur eigenen Wetterstation -- nimmt die (ggf. noch
+     * ungespeicherten) Formularwerte als Parameter, damit sie per
+     * 'onChange' der drei Auswahlfelder der AUSWAHL folgt und nicht dem
+     * Speicherstand (SUITE.md 21.09.2026, MeterHub-Erfahrung). Nutzt
+     * dieselbe resolveWetterstationSource()-Logik wie der Abruf, zeigt also
+     * genau das, was auch wirklich gelesen wird.
+     */
+    private function wetterstationStatusLine(int $instanceID, int $windVar, int $regenVar): string
+    {
+        if ($instanceID <= 0 && $windVar <= 0 && $regenVar <= 0) {
+            return 'ℹ️ Eigene Wetterstation nicht eingerichtet -- diese Quelle ist aus, amtliche Warnungen laufen davon unabhängig. „🔎 Wetterstation suchen“ klicken oder Wind-/Regen-Variable von Hand wählen.';
+        }
+        [$windID] = $this->resolveWetterstationSource($windVar, $instanceID, 'Windböe', self::WETTERSTATION_WIND_IDENTS);
+        [$regenID] = $this->resolveWetterstationSource($regenVar, $instanceID, 'Regenrate', self::WETTERSTATION_REGEN_IDENTS);
+        $instanzVorhanden = $instanceID > 0 && @IPS_InstanceExists($instanceID);
+        $instanzName = $instanzVorhanden ? (string) (@IPS_GetName($instanceID) ?: '') : '';
+
+        $beschreibe = function (?int $id, int $manuell, string $label, bool $istWind) use ($instanceID, $instanzName): string {
+            if ($id === null) {
+                return $label . ': nichts gefunden';
+            }
+            $wert = $istWind ? $this->readWindSpeedKmh($id) : (float) @GetValue($id);
+            $quelle = ($manuell > 0 && $id === $manuell)
+                ? '✏️ von Hand gewählt'
+                : sprintf('🔗 automatisch aus Instanz „%s“ #%d', $instanzName, $instanceID);
+            return sprintf('%s %s %s (Variable „%s“ #%d, %s)', $label, number_format($wert, 1, ',', '.'), $istWind ? 'km/h' : 'mm/h', (string) (@IPS_GetName($id) ?: ''), $id, $quelle);
+        };
+        $wind = $beschreibe($windID, $windVar, 'Windböe', true);
+        $regen = $beschreibe($regenID, $regenVar, 'Regenrate', false);
+
+        if ($windID !== null && $regenID !== null) {
+            return '✅ Eigene Wetterstation verbunden: ' . $wind . '; ' . $regen . '.';
+        }
+        $grund = ($instanceID > 0 && !$instanzVorhanden) ? sprintf(' Die eingetragene Instanz #%d existiert nicht mehr.', $instanceID) : '';
+        if ($windID === null && $regenID === null) {
+            return '⚠️ Eigene Wetterstation eingetragen, aber weder Windböe noch Regenrate auffindbar.' . $grund . ' „🔎 Wetterstation suchen“ erneut klicken oder die Variablen unten von Hand wählen -- solange gilt diese Quelle als aus.';
+        }
+        return sprintf(
+            '⚠️ Eigene Wetterstation nur teilweise verbunden: %s; %s: keine Variable gefunden -- diese Größe löst nichts aus.%s Fehlende Variable unten von Hand wählen.',
+            $windID !== null ? $wind : $regen,
+            $windID === null ? 'Windböe' : 'Regenrate',
+            $grund
+        );
+    }
+
+    /**
+     * Wird von den drei Wetterstations-Auswahlfeldern per 'onChange'
+     * aufgerufen und führt die Statuszeile der aktuellen AUSWAHL nach
+     * (nicht dem Speicherstand).
+     */
+    public function OnChangeWetterstation(int $instanceID, int $windVar, int $regenVar): void
+    {
+        $this->UpdateFormField('WetterstationStatusLabel', 'caption', $this->wetterstationStatusLine($instanceID, $windVar, $regenVar));
+    }
+
+    /** Frischt die Wetterstations-Statuszeile auf -- fehlende Werte kommen aus dem gespeicherten Stand (siehe Discover-Knopf). */
+    private function refreshWetterstationStatus(?int $instanceID = null, ?int $windVar = null, ?int $regenVar = null): void
+    {
+        @$this->UpdateFormField('WetterstationStatusLabel', 'caption', $this->wetterstationStatusLine(
+            $instanceID ?? $this->ReadPropertyInteger('WetterstationInstanceID'),
+            $windVar ?? $this->ReadPropertyInteger('WetterstationWindVariableID'),
+            $regenVar ?? $this->ReadPropertyInteger('WetterstationRegenVariableID')
+        ));
+    }
+
+    /**
+     * Statuszeile zu den mobilen (Live-)Standorten -- die Live-Position
+     * liefert ein FREMDMODUL (Tessie, Geofency, Fahrzeug-Module), ob die
+     * Verbindung tatsächlich steht, sah man bisher nirgends: eine
+     * gelöschte oder umbenannte Variable ließ WarnHub STILL auf die festen
+     * Koordinaten der Tabelle zurückfallen (siehe resolveStandortCoords()).
+     * $standorte nur beim Auffrischen direkt nach der Suche (offene,
+     * ungespeicherte Tabelle), sonst der gespeicherte Stand.
+     *
+     * @param array<int,array<string,mixed>>|null $standorte
+     */
+    private function mobileStandorteStatusLine(?array $standorte = null): string
+    {
+        $ungespeichert = $standorte !== null ? ' (Stand der offenen Tabelle, noch nicht gespeichert -- „Übernehmen“ klicken)' : '';
+        $rows = $standorte ?? $this->decodeStandorte();
+        $mobil = array_values(array_filter($rows, fn ($s) => (int) ($s['QuellVarLat'] ?? 0) > 0 || (int) ($s['QuellVarLon'] ?? 0) > 0));
+        if (count($mobil) === 0) {
+            return 'ℹ️ Kein mobiler Standort eingerichtet -- alle Standorte nutzen feste Koordinaten. „🔎 Fahrzeug-/Standort-Variablen suchen“ legt einen an, sobald Tessie, Geofency oder ein Fahrzeug-Modul im System vorhanden ist.';
+        }
+        $teile = [];
+        $alleOk = true;
+        foreach ($mobil as $s) {
+            $latVar = (int) ($s['QuellVarLat'] ?? 0);
+            $lonVar = (int) ($s['QuellVarLon'] ?? 0);
+            $name = trim((string) ($s['Name'] ?? '')) !== '' ? (string) $s['Name'] : '(ohne Namen)';
+            $inaktiv = !empty($s['Aktiv']) ? '' : ' [inaktiv]';
+            $latOk = $latVar > 0 && @IPS_VariableExists($latVar);
+            $lonOk = $lonVar > 0 && @IPS_VariableExists($lonVar);
+            if ($latOk && $lonOk) {
+                $quelle = (string) (@IPS_GetName((int) @IPS_GetParent($latVar)) ?: '');
+                $teile[] = sprintf(
+                    '%s%s: %s / %s (🔗 automatisch aus „%s“, Variablen #%d/#%d)',
+                    $name,
+                    $inaktiv,
+                    number_format((float) @GetValue($latVar), 4, ',', '.'),
+                    number_format((float) @GetValue($lonVar), 4, ',', '.'),
+                    $quelle,
+                    $latVar,
+                    $lonVar
+                );
+                continue;
+            }
+            $alleOk = false;
+            $teile[] = sprintf(
+                '%s%s: Live-Variable %s -- WarnHub nutzt stattdessen die festen Koordinaten %s / %s aus der Tabelle',
+                $name,
+                $inaktiv,
+                ($latVar > 0 xor $lonVar > 0) ? 'nur für eine Achse gesetzt' : 'fehlt oder existiert nicht mehr',
+                number_format((float) ($s['Lat'] ?? 0), 4, ',', '.'),
+                number_format((float) ($s['Lon'] ?? 0), 4, ',', '.')
+            );
+        }
+        return ($alleOk ? '✅ ' : '⚠️ ') . 'Mobile Standorte: ' . implode(' · ', $teile) . '.' . $ungespeichert;
     }
 
     private function isPushSnoozed(): bool
@@ -1606,6 +1836,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: die Kartenlinks decken jetzt 17 europäische Länder ab (bisher nur D/A/CH) und richten sich automatisch nach dem Land JEDES aktiven Standorts -- auch mobiler. Reist ein mobiler Standort ins Ausland (z. B. Frankreich, Italien, Spanien, Niederlande, Belgien, Polen, Tschechien, Dänemark, Norwegen, Schweden, Finnland, UK, Irland, Portugal), erscheint dessen amtliche Warnseite automatisch mit, sobald der nächste Abgleich gelaufen ist -- ganz ohne eigenes Zutun. Dietmars Recherchewunsch 09.09.2026'],
                 ['type' => 'Label', 'caption' => '• Härtung: Text aus externen Quellen (Beschreibung/Handlungsempfehlung) wird jetzt von HTML-Resten bereinigt, bevor er in Push/Kachel/Historie landet -- die amtliche NINA-Quelle lieferte beim bundesweiten Warntag 2026 ein rohes "<br/>" mitten im Text, das z. B. in WFC_PushNotification (kein HTML-Rendering) wörtlich sichtbar wurde. Kein WarnHub-Bug (unabhängig über zwei Push-Kanäle bestätigt), aber eine Absicherung gegen ähnliche künftige Quelldaten-Ausreißer. Praxis-Fund kronos/ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix: eine Übungs-/Testmeldung einer Quelle kam bisher wie eine echte Warnung durch -- WarnHub prüfte das CAP-Standardfeld "status" (Actual/Exercise/System/Test/Draft, eigens für genau diese Unterscheidung vorgesehen) bisher an keiner Stelle. Betrifft NINA, die direkte DWD-Anbindung und Meteoalarm; wird jetzt geprüft, alles außer "Actual" (bzw. fehlendem Feld, nicht jede Quelle liefert es) wird verworfen. Praxis-Fund ralf, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• NEU: automatische Verbindungen zeigen jetzt live, ob sie stehen -- eine Statuszeile (✅ / ⚠️ / ℹ️ / ⛔) bei den Push-Zielen, beim Symcon-Systemstandort, bei der eigenen Wetterstation und bei den mobilen Live-Standorten. Sie nennt, WAS verbunden ist (Instanz, Variable, aktueller Wert) und ob es automatisch (🔗) oder von Hand (✏️) gewählt wurde. Das schließt Lücken, die vorher still blieben: ein aktives E-Mail-Ziel ohne Zieladresse, eine gelöschte Push-Instanz oder Live-Variable (WarnHub fiel dann unbemerkt auf feste Koordinaten zurück) und eine Wetterstation, die nur Wind oder nur Regen liefert. Die Wetterstation-Zeile folgt schon beim Auswählen der Auswahl, nicht erst nach dem Speichern'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2244,7 +2475,7 @@ class WarnHub extends IPSModule
         if ($lat === 0.0 && $lon === 0.0) {
             return null; // Standort-Instanz existiert, ist aber nicht konfiguriert
         }
-        return ['lat' => $lat, 'lon' => $lon];
+        return ['lat' => $lat, 'lon' => $lon, 'instanceID' => (int) $id];
     }
 
     /**
@@ -2445,6 +2676,7 @@ class WarnHub extends IPSModule
 
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
+        @$this->UpdateFormField('MobileStandorteStatusLabel', 'caption', $this->mobileStandorteStatusLine($rows));
         if ($added === 0) {
             return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink, OVMS native).';
         }
@@ -2519,6 +2751,7 @@ class WarnHub extends IPSModule
                 continue; // Ident passt, aber die entscheidenden Felder fehlen -- kein Treffer
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
+            $this->refreshWetterstationStatus($instanceID);
             return sprintf('✅ Wetterstation "%s" gefunden (Froggit, Windböe/Regenrate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
@@ -2531,6 +2764,7 @@ class WarnHub extends IPSModule
                 continue;
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
+            $this->refreshWetterstationStatus($instanceID);
             return sprintf('✅ Wetterstation "%s" gefunden (Sainlogic/ELV, Windgust/rainin vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
@@ -2543,6 +2777,7 @@ class WarnHub extends IPSModule
                 continue;
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
+            $this->refreshWetterstationStatus($instanceID);
             return sprintf('✅ Wetterstation "%s" gefunden (Meteobridge/Meteohub, Wind_Gust_KmH/Rain_Rate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
@@ -2564,6 +2799,7 @@ class WarnHub extends IPSModule
             $this->UpdateFormField('WetterstationRegenVariableID', 'value', $byProfile['regen']);
         }
         if ($foundWind || $foundRegen) {
+            $this->refreshWetterstationStatus(null, $foundWind ? $byProfile['wind'] : null, $foundRegen ? $byProfile['regen'] : null);
             return sprintf(
                 '✅ Kein bekanntes Wetterstations-Modul, aber %s über das Standard-Profil im System gefunden und in die manuelle Auswahl übernommen -- bitte prüfen und unten „Übernehmen" klicken.',
                 $foundWind && $foundRegen ? 'Wind- UND Regen-Variable' : ($foundWind ? 'eine Wind-Variable' : 'eine Regen-Variable')
@@ -3421,13 +3657,13 @@ class WarnHub extends IPSModule
             $this->ReadPropertyInteger('WetterstationWindVariableID'),
             $instanceID,
             'Windböe',
-            ['windgustmph', 'Windgust', 'Wind_Gust_KmH']
+            self::WETTERSTATION_WIND_IDENTS
         );
         [$regenrateID] = $this->resolveWetterstationSource(
             $this->ReadPropertyInteger('WetterstationRegenVariableID'),
             $instanceID,
             'Regenrate',
-            ['rainratein', 'rrain_piezo', 'rainin', 'Rain_Rate']
+            self::WETTERSTATION_REGEN_IDENTS
         );
         $windCalm = $windboeID === null || $this->windSeverityForSpeed($this->readWindSpeedKmh($windboeID)) === null;
         $regenCalm = $regenrateID === null || $this->regenSeverityForRate((float) @GetValue($regenrateID)) === null;
@@ -3496,13 +3732,13 @@ class WarnHub extends IPSModule
             $this->ReadPropertyInteger('WetterstationWindVariableID'),
             $instanceID,
             'Windböe',
-            ['windgustmph', 'Windgust', 'Wind_Gust_KmH']
+            self::WETTERSTATION_WIND_IDENTS
         );
         [$regenrateID, $regenIdentSuffix] = $this->resolveWetterstationSource(
             $this->ReadPropertyInteger('WetterstationRegenVariableID'),
             $instanceID,
             'Regenrate',
-            ['rainratein', 'rrain_piezo', 'rainin', 'Rain_Rate']
+            self::WETTERSTATION_REGEN_IDENTS
         );
         if ($windboeID === null && $regenrateID === null) {
             return [];
@@ -4492,9 +4728,7 @@ class WarnHub extends IPSModule
         if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
             $warnings = array_merge($warnings, $this->fetchHagelschutzCh());
         }
-        if ($this->ReadPropertyInteger('WetterstationInstanceID') > 0
-            || $this->ReadPropertyInteger('WetterstationWindVariableID') > 0
-            || $this->ReadPropertyInteger('WetterstationRegenVariableID') > 0) {
+        if ($this->hasWetterstationConfigured()) {
             $warnings = array_merge($warnings, $this->fetchWetterstation());
         }
 
@@ -4509,6 +4743,12 @@ class WarnHub extends IPSModule
         $this->WriteAttributeString('LastActiveWarningsJson', json_encode($result['active']));
         $this->refreshStatusVariables();
         @$this->UpdateFormField('PollStatusLabel', 'caption', $this->getPollStatusLine());
+        // Verbindungs-Statuszeilen (SUITE.md 21.09.2026) nach jeder Prüfung
+        // mit auffrischen: Land, Live-Positionen und Wetterstations-Werte
+        // ändern sich von selbst, ohne dass im Formular etwas angeklickt wird.
+        @$this->UpdateFormField('SystemLocationStatusLabel', 'caption', $this->systemLocationStatusLine());
+        @$this->UpdateFormField('MobileStandorteStatusLabel', 'caption', $this->mobileStandorteStatusLine());
+        $this->refreshWetterstationStatus();
         $restoreLine = $this->wetterstationRestoreStatusLine();
         if ($restoreLine !== null) {
             @$this->UpdateFormField('WetterstationRestoreStatusLabel', 'caption', $restoreLine);

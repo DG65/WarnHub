@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.15.0 (2026-09-21)
+
+- Neu: **Verbindungs-Statuszeilen** nach der neuen Verbund-Formularregel
+  (SUITE.md 21.09.2026: eine automatisch aufgebaute Verbindung zeigt live,
+  ob sie steht). Vier Zeilen im Konfigurationsformular, alle mit den
+  Zuständen ✅ / ⚠️ / ℹ️ / ⛔ und dem Hinweis, ob ein Wert automatisch
+  (🔗) oder von Hand (✏️) gewählt wurde:
+  - **Push-Ziele** (`WebFrontStatusLabel`): nennt die tatsächlich
+    funktionierenden Ziele. ⛔ bei aktivem E-Mail-Ziel ohne Zieladresse,
+    ⚠️ bei aktivem Ziel, dessen Instanz nicht mehr existiert, oder wenn
+    keines aktiviert ist -- bisher zeigte die Zeile in all diesen Fällen
+    ein "✅", obwohl dort nichts ankam.
+  - **Systemstandort** (`SystemLocationStatusLabel`): Instanz, Koordinaten
+    und Land der Symcon-Kerninstanz "Standort"; ⛔, wenn eine Quelle ihn
+    braucht (eigene Wetterstation, Hagelschutz Schweiz), aber keiner
+    eingetragen ist.
+  - **Eigene Wetterstation** (`WetterstationStatusLabel`): Variablenname,
+    -ID, aktueller Wert und Herkunft je Größe (Wind/Regen), über dieselbe
+    `resolveWetterstationSource()`-Logik wie der Abruf. ⚠️ bei nur einer
+    gefundenen Größe oder gelöschter Instanz. Die drei Auswahlfelder
+    führen die Zeile per `onChange` (`WHUB_OnChangeWetterstation()`) der
+    AUSWAHL nach, nicht erst dem Speicherstand.
+  - **Mobile Live-Standorte** (`MobileStandorteStatusLabel`): aktuelle
+    Live-Position und Quelle je mobilem Standort; ⚠️, wenn eine
+    Live-Variable fehlt oder nur eine Achse gesetzt ist (WarnHub fiel
+    dann bisher stumm auf die festen Koordinaten zurück).
+  Alle vier werden im Hintergrund-Abruf (`Poll()`) und nach den
+  jeweiligen Such-Knöpfen aufgefrischt.
+- Intern: die Wind-/Regen-Idents der Wetterstation stehen jetzt einmal in
+  den Konstanten `WETTERSTATION_WIND_IDENTS`/`WETTERSTATION_REGEN_IDENTS`
+  (vorher doppelt in Abruf und Auto-Rückstellung); `getSystemLocation()`
+  liefert zusätzlich die Instanz-ID; `hasWetterstationConfigured()` ersetzt
+  die dreifach kopierte Bedingung in `Poll()`/`hasAnyActiveSource()`.
+- Unverändert bewusst: die Wetterstations-Suche schreibt ihr Ergebnis
+  weiterhin per `UpdateFormField('value')` in die Auswahlfelder -- eine
+  ausdrücklich ausgelöste, sicherheitsrelevante Vorbelegung, die erst mit
+  "Übernehmen" wirksam wird, kein still ersetzter Eingabewert.
+- Test: neuer Prüfstand `.tools/test-verbindungs-status.php` (57
+  Prüfungen, alle Zustände je Zeile plus Formular-Verdrahtung); ältere
+  Prüfstände um die nötigen Symcon-Attrappen ergänzt.
+
 ## 1.14.2 (2026-09-16)
 
 - Fix: eine Übungs-/Testmeldung einer Quelle kam bisher unverändert wie

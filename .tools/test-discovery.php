@@ -188,6 +188,16 @@ function IPS_GetInstanceListByModuleID(string $guid): array
 {
     return $GLOBALS['whub_test_instancesByModule'][$guid] ?? [];
 }
+/** Für die Push-Ziele-Statuszeile (webfrontStatusLine()): eine Instanz "existiert", wenn sie in einer der Modul-Listen steht. */
+function IPS_InstanceExists(int $id): bool
+{
+    foreach ($GLOBALS['whub_test_instancesByModule'] as $ids) {
+        if (in_array($id, $ids, true)) {
+            return true;
+        }
+    }
+    return false;
+}
 function IPS_GetModuleList(): array
 {
     return array_keys($GLOBALS['whub_test_moduleNames']);

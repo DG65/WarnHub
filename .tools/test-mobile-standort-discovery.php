@@ -139,6 +139,15 @@ function GetValue(int $id)
 {
     return $GLOBALS['whub_test_values'][$id] ?? 0;
 }
+/** Für die Live-Standort-Statuszeile (mobileStandorteStatusLine()) nach der Suche. */
+function IPS_VariableExists(int $id): bool
+{
+    return (int) ($GLOBALS['whub_test_objects'][$id]['ObjectType'] ?? 0) === 2;
+}
+function IPS_GetParent(int $id): int
+{
+    return (int) ($GLOBALS['whub_test_objects'][$id]['ParentID'] ?? 0);
+}
 
 class IPSModule
 {
