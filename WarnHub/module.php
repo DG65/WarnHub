@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.15.1';
-    private const NEWS_VERSION = '1.15.1';
+    private const DOC_VERSION = '1.16.0';
+    private const NEWS_VERSION = '1.16.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -198,7 +198,7 @@ class WarnHub extends IPSModule
      */
     private const SOURCE_TOGGLE_PROPERTIES = [
         'QuelleNina', 'QuelleDwd', 'QuellePegelonline', 'QuelleBfsOdl', 'QuelleMeteoalarm',
-        'QuelleGeosphereAt', 'QuelleBafuHydroCh', 'QuelleSedErdbebenCh', 'QuelleWaldbrandDe', 'QuelleOzonDe',
+        'QuelleGeosphereAt', 'QuelleBafuHydroCh', 'QuelleSedErdbebenCh', 'QuelleAlertSwissCh', 'QuelleWaldbrandDe', 'QuelleOzonDe',
     ];
 
     // Kachel-Visualisierung -- Symcons zweite, neuere Push-fähige Oberfläche
@@ -382,6 +382,27 @@ class WarnHub extends IPSModule
     ];
     private const GEOSPHERE_AT_WARNLEVEL_SEVERITY = [1 => 'Moderate', 2 => 'Severe', 3 => 'Extreme'];
 
+    // Alertswiss (alert.swiss, Bundesamt für Bevölkerungsschutz BABS) --
+    // Schweizer Pendant zu NINA: kantonale Feuerverbote, Waldbrand,
+    // Trockenheit, Fels-/Bergsturz, Sturm u. a. Zivilschutz-Meldungen,
+    // NICHT nur Wetter. Live geprüft 22.09.2026 (15 aktive Meldungen,
+    // echte Polygon-/Kreis-Geometrie je Meldung -- anders als Meteoalarm
+    // also koordinatengenau statt Namensabgleich), kein Zugangsschlüssel
+    // nötig. Endpunkt aus dem quelloffenen Community-Adapter
+    // github.com/forseti1982/HA-AlertSwiss (custom_components/alertswiss/
+    // const.py) übernommen und live gegen die echte Antwort verifiziert,
+    // nicht nur aus dessen Doku geglaubt -- der dortige Adapter selbst
+    // wertet nur Kantonsnamen aus, WarnHub nutzt die tatsächlich
+    // enthaltene Geometrie. Anfrage baslerleckerli, Symcon-Forum,
+    // 22.09.2026. Feld "technicalTestAlert" (im Live-Feed real beobachtet:
+    // ein dauerhafter "Cap Test Event") entspricht CAP status=Test/Exercise
+    // -- wird von Anfang an gefiltert (siehe isCapStatusActual()-Fund
+    // 1.14.2, hier gleich mitgebaut statt erst nach einem Praxis-Fund).
+    // Die Quelle liefert KEIN Gültig-bis-Datum (anders als CAP) -- expires
+    // bleibt null, das bestehende "still present"-Verfahren räumt eine aus
+    // dem Feed verschwundene Meldung wie bei BAFU/SED automatisch auf.
+    private const ALERTSWISS_URL = 'https://www.alert.swiss/content/alertswiss-internet/de/home/_jcr_content/polyalert.alertswiss_alerts.actual.json';
+
     // BAFU-Hochwasserdaten über LINDAS (lindas.admin.ch, Schweizer Linked-
     // Data-Infrastruktur des Bundes) -- live geprüft 04.09.2026 (182 Stationen
     // mit numerischem dangerLevel, Query-Antwortzeit < 1s). Anders als
@@ -522,6 +543,7 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyBoolean('QuelleBafuHydroCh', false);
         $this->RegisterPropertyInteger('BafuHydroSchwelle', 3);
         $this->RegisterPropertyBoolean('QuelleSedErdbebenCh', false);
+        $this->RegisterPropertyBoolean('QuelleAlertSwissCh', false);
         $this->RegisterPropertyBoolean('QuelleWaldbrandDe', false);
         $this->RegisterPropertyInteger('WaldbrandDeSchwelle', 3);
         $this->RegisterPropertyBoolean('QuelleOzonDe', false);
@@ -749,7 +771,7 @@ class WarnHub extends IPSModule
             'items' => [
                 ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
                 ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG), optional amtliche Hochwasser-Gefahrenstufen für die Schweiz (BAFU/LINDAS), optional die eigene Wetterstation als unabhängiges Sicherheitsnetz sowie -- BETA, ungetestet -- optional die eigene VKF-Hagelschutz-Signalbox (Schweiz).'],
+                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG), optional koordinatengenaue kantonale Zivilschutz-Meldungen für die Schweiz (Alertswiss/BABS), optional amtliche Hochwasser-Gefahrenstufen für die Schweiz (BAFU/LINDAS), optional die eigene Wetterstation als unabhängiges Sicherheitsnetz sowie -- BETA, ungetestet -- optional die eigene VKF-Hagelschutz-Signalbox (Schweiz).'],
                 ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
                 ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
                 ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
@@ -962,6 +984,8 @@ class WarnHub extends IPSModule
                     'expanded' => $expDqCh,
                     'onClick' => $this->rememberPanelOnClick('DatenquellenCh', $expDqCh),
                     'items' => [
+                        ['type' => 'CheckBox', 'name' => 'QuelleAlertSwissCh', 'caption' => 'Zusätzlich Alertswiss (alert.swiss/BABS) -- Schweizer Pendant zu NINA: kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, koordinatengenau'],
+                        ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für Schweizer Standorte automatisch von Meteoalarm (echte Warnfläche statt Namensabgleich) -- analog zur direkten DWD- bzw. GeoSphere-Austria-Anbindung. Amtliche Quelle des Bundesamts für Bevölkerungsschutz (BABS), kein Zugangsschlüssel nötig. Deckt mehr als Wetter ab, ergänzt also auch die spezialisierten Quellen unten (BAFU-Hochwasser, Erdbeben).'],
                         ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
                         ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
                         ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar.'],
@@ -1869,6 +1893,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix: eine Übungs-/Testmeldung einer Quelle kam bisher wie eine echte Warnung durch -- WarnHub prüfte das CAP-Standardfeld "status" (Actual/Exercise/System/Test/Draft, eigens für genau diese Unterscheidung vorgesehen) bisher an keiner Stelle. Betrifft NINA, die direkte DWD-Anbindung und Meteoalarm; wird jetzt geprüft, alles außer "Actual" (bzw. fehlendem Feld, nicht jede Quelle liefert es) wird verworfen. Praxis-Fund ralf, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: automatische Verbindungen zeigen jetzt live, ob sie stehen -- eine Statuszeile (✅ / ⚠️ / ℹ️ / ⛔) bei den Push-Zielen, beim Symcon-Systemstandort, bei der eigenen Wetterstation und bei den mobilen Live-Standorten. Sie nennt, WAS verbunden ist (Instanz, Variable, aktueller Wert) und ob es automatisch (🔗) oder von Hand (✏️) gewählt wurde. Das schließt Lücken, die vorher still blieben: ein aktives E-Mail-Ziel ohne Zieladresse, eine gelöschte Push-Instanz oder Live-Variable (WarnHub fiel dann unbemerkt auf feste Koordinaten zurück) und eine Wetterstation, die nur Wind oder nur Regen liefert. Die Wetterstation-Zeile folgt schon beim Auswählen der Auswahl, nicht erst nach dem Speichern'],
                 ['type' => 'Label', 'caption' => '• Verbindungs-Statuszeilen jetzt farbig: eine automatisch übernommene, funktionierende Verbindung (🔗) steht in Grün, ein fehlender Pflichtwert (⛔) in Rot, alles andere in der Standardfarbe -- auf einen Blick erkennbar, was von selbst läuft und wo etwas fehlt'],
+                ['type' => 'Label', 'caption' => '• NEU: Alertswiss (alert.swiss/BABS) als weitere Schweizer Datenquelle -- das Schweizer Pendant zu NINA, kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, nicht nur Wetter. Koordinatengenau (echte Polygone/Kreise je Meldung, kein Namensabgleich), übernimmt Schweizer Standorte automatisch von Meteoalarm, sobald aktiviert -- analog zur direkten DWD-/GeoSphere-Austria-Anbindung. Anfrage baslerleckerli, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -3969,11 +3994,13 @@ class WarnHub extends IPSModule
      */
     private function fetchMeteoalarm(): array
     {
-        // Ist die direkte GeoSphere-Austria-Anbindung aktiv, übernimmt SIE
-        // Österreich (koordinatengenau, siehe fetchGeosphereAt()) -- Meteoalarm
-        // liefert für AT nur einen ungenaueren Namensabgleich. Gleiches Prinzip
-        // wie "DWD direkt ersetzt den NINA-'dwd'-Kanal" oben in Poll().
+        // Ist die direkte GeoSphere-Austria- bzw. Alertswiss-Anbindung aktiv,
+        // übernimmt SIE Österreich bzw. die Schweiz (koordinatengenau, siehe
+        // fetchGeosphereAt()/fetchAlertSwissCh()) -- Meteoalarm liefert dort
+        // nur einen ungenaueren Namensabgleich. Gleiches Prinzip wie "DWD
+        // direkt ersetzt den NINA-'dwd'-Kanal" oben in Poll().
         $geosphereAtActive = $this->ReadPropertyBoolean('QuelleGeosphereAt');
+        $alertSwissActive = $this->ReadPropertyBoolean('QuelleAlertSwissCh');
 
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
         $slugs = [];
@@ -3981,7 +4008,10 @@ class WarnHub extends IPSModule
             $coords = $this->resolveStandortCoords($s);
             $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
             $slug = self::METEOALARM_COUNTRY_SLUGS[$geo['countryCode']] ?? null;
-            if ($slug === null || ($slug === 'austria' && $geosphereAtActive)) {
+            if ($slug === null
+                || ($slug === 'austria' && $geosphereAtActive)
+                || ($slug === 'switzerland' && $alertSwissActive)
+            ) {
                 continue;
             }
             $slugs[$slug] = true;
@@ -4337,6 +4367,144 @@ class WarnHub extends IPSModule
             return ['severity' => 'Moderate', 'radiusKm' => 30.0];
         }
         return ['severity' => 'Minor', 'radiusKm' => 15.0];
+    }
+
+    // ----------------------------------------------------------------
+    //  Alertswiss (alert.swiss/BABS) -- siehe Konstanten-Kommentar oben.
+    //  EIN globaler Abruf für alle kantonalen Meldungen (wie Meteoalarm/
+    //  BAFU/SED), das geometrische Matching in processWarnings() übernimmt
+    //  danach die Zuordnung zu den einzelnen Standorten.
+    // ----------------------------------------------------------------
+
+    private function fetchAlertSwissCh(): array
+    {
+        $body = $this->httpGet(self::ALERTSWISS_URL, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        if ($body === null) {
+            $this->LogError('fetchAlertSwissCh', 'Alertswiss-Abfrage (alert.swiss) nicht erreichbar.');
+            return [];
+        }
+        $json = json_decode($body, true);
+        if (!is_array($json)) {
+            $this->LogError('fetchAlertSwissCh', 'Alertswiss-Antwort ließ sich nicht als JSON lesen.');
+            return [];
+        }
+        return $this->parseAlertSwissJson($json);
+    }
+
+    /** Vom HTTP-Abruf getrennt (wie parseCapXml()/parseMeteoalarmAtom()), damit sich die Auswertung ohne Netzzugriff testen lässt. */
+    private function parseAlertSwissJson(array $json): array
+    {
+        $alerts = $json['alerts'] ?? null;
+        if (!is_array($alerts)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($alerts as $a) {
+            $identifier = trim((string) ($a['identifier'] ?? ''));
+            if ($identifier === '') {
+                continue;
+            }
+            // "technicalTestAlert"/"testAlert" entsprechen CAP status=Test/
+            // Exercise (siehe isCapStatusActual()) -- im Live-Feed real
+            // beobachtet als dauerhafter Eintrag "Cap Test Event".
+            if (!empty($a['technicalTestAlert']) || !empty($a['testAlert'])) {
+                continue;
+            }
+
+            $areas = is_array($a['areas'] ?? null) ? $a['areas'] : [];
+            $rings = [];
+            $circles = [];
+            $areaNames = [];
+            foreach ($areas as $area) {
+                $areaName = trim((string) ($area['description']['description'] ?? ''));
+                if ($areaName !== '') {
+                    $areaNames[] = $areaName;
+                }
+                foreach ((is_array($area['polygons'] ?? null) ? $area['polygons'] : []) as $polygon) {
+                    $ring = [];
+                    foreach ((is_array($polygon['coordinates'] ?? null) ? $polygon['coordinates'] : []) as $pair) {
+                        if (is_array($pair) && count($pair) === 2) {
+                            $ring[] = [(float) $pair[0], (float) $pair[1]];
+                        }
+                    }
+                    if (count($ring) >= 3) {
+                        $rings[] = $ring;
+                    }
+                }
+                foreach ((is_array($area['circles'] ?? null) ? $area['circles'] : []) as $circle) {
+                    $center = is_array($circle['centerPosition'] ?? null) ? $circle['centerPosition'] : null;
+                    if ($center !== null && count($center) === 2 && isset($circle['radius'])) {
+                        $circles[] = ['lat' => (float) $center[0], 'lon' => (float) $center[1], 'radiusKm' => (float) $circle['radius']];
+                    }
+                }
+            }
+            // Landesweite Meldung OHNE eigene Geometrie (im Live-Feed noch
+            // nie beobachtet, "nationWide" war durchgehend false) -- grobe
+            // Näherung durch einen Kreis über ganz Schweiz, statt sie
+            // mangels Fläche stillschweigend zu verwerfen. Ausdrücklich
+            // UNGETESTET gegen einen echten Live-Fall, wie die BETA-
+            // Hagelschutz-Anbindung -- Rückmeldung willkommen.
+            if (count($rings) === 0 && count($circles) === 0 && !empty($a['nationWide'])) {
+                $circles[] = ['lat' => 46.8, 'lon' => 8.2, 'radiusKm' => 150.0];
+            }
+
+            $title = trim((string) ($a['title']['title'] ?? ''));
+            $event = trim((string) ($a['event'] ?? ''));
+            $description = trim((string) ($a['description']['description'] ?? ''));
+            $publisher = trim((string) ($a['publisherName'] ?? ''));
+            if ($publisher !== '') {
+                $description = $description !== '' ? $description . ' (Quelle: ' . $publisher . ')' : 'Quelle: ' . $publisher;
+            }
+            $instructions = [];
+            foreach ((is_array($a['instructions'] ?? null) ? $a['instructions'] : []) as $instr) {
+                $text = trim((string) ($instr['text'] ?? ''));
+                if ($text !== '') {
+                    $instructions[] = $text;
+                }
+            }
+
+            $ts = $this->parseAlertSwissReferenceTimestamp((string) ($a['reference'] ?? ''));
+            $severity = ucfirst(strtolower(trim((string) ($a['severity'] ?? ''))));
+            if (!isset(self::SEVERITY_RANK[$severity])) {
+                $severity = 'Unknown';
+            }
+
+            $out[] = [
+                'identifier' => 'alertswiss-' . $identifier,
+                'source' => 'alertswiss_ch',
+                'msgType' => !empty($a['allClear']) ? 'Cancel' : 'Alert',
+                'event' => $event !== '' ? $event : 'Warnung',
+                'headline' => $title !== '' ? $title : ($event !== '' ? $event : 'Warnung'),
+                'description' => $description,
+                'instruction' => implode("\n", $instructions),
+                'severity' => $severity,
+                'effective' => $ts,
+                'onset' => $ts,
+                'expires' => null,
+                'areaDesc' => count($areaNames) > 0 ? implode('; ', $areaNames) : 'Schweiz',
+                'rings' => $rings,
+                'circles' => $circles,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Alertswiss liefert KEIN eigenes Zeitfeld im ISO-8601-Format direkt --
+     * "sent"/"publishDate" stehen als deutsch formatierter Text ("Mo.,
+     * 14.09.2026, 14:53"), unzuverlässig zu parsen. Das Feld "reference"
+     * (Format "<sender>,<identifier>,<ISO-8601-Zeitstempel>") enthält
+     * denselben Zeitpunkt bereits maschinenlesbar -- live im Feed bestätigt
+     * 22.09.2026, auch im Testeintrag ("...,2026-09-22T09:23:01+02:00").
+     */
+    private function parseAlertSwissReferenceTimestamp(string $reference): ?string
+    {
+        if (preg_match('/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})$/', $reference, $m) !== 1) {
+            return null;
+        }
+        $ts = strtotime($m[1]);
+        return $ts !== false ? date('c', $ts) : null;
     }
 
     // ----------------------------------------------------------------
@@ -4750,6 +4918,9 @@ class WarnHub extends IPSModule
         }
         if ($this->ReadPropertyBoolean('QuelleSedErdbebenCh')) {
             $warnings = array_merge($warnings, $this->fetchSedErdbebenCh());
+        }
+        if ($this->ReadPropertyBoolean('QuelleAlertSwissCh')) {
+            $warnings = array_merge($warnings, $this->fetchAlertSwissCh());
         }
         if ($this->ReadPropertyBoolean('QuelleWaldbrandDe')) {
             $warnings = array_merge($warnings, $this->fetchWaldbrandDe());

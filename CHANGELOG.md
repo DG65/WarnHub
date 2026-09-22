@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.16.0 (2026-09-22)
+
+- Neu: **Alertswiss** (alert.swiss, Bundesamt für Bevölkerungsschutz BABS)
+  als weitere Schweizer Datenquelle -- das Schweizer Pendant zu NINA:
+  kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und
+  weitere Zivilschutz-Meldungen, nicht nur Wetter. Anders als Meteoalarm
+  liefert der Feed echte Polygon-/Kreis-Geometrie je Meldung -- Abgleich
+  läuft koordinatengenau über das bestehende Umkreis-Matching, kein
+  Namensabgleich. Ist die Quelle aktiv, übernimmt sie Schweizer Standorte
+  automatisch von Meteoalarm (analog zur direkten DWD-/GeoSphere-Austria-
+  Anbindung). Endpunkt live geprüft 22.09.2026 (15 aktive Meldungen);
+  `technicalTestAlert`/`testAlert` (CAP status=Test/Exercise-Äquivalent,
+  im Feed real als dauerhafter "Cap Test Event" vorhanden) wird von Anfang
+  an gefiltert. Die Quelle liefert kein Gültig-bis-Datum -- eine aus dem
+  Feed verschwundene Meldung räumt sich wie bei BAFU/SED über das
+  bestehende Verfahren automatisch auf. Landesweite Meldungen ohne eigene
+  Geometrie (Feld `nationWide`) bekommen einen groben Kreis über die ganze
+  Schweiz statt verworfen zu werden -- dieser Zweig ist mangels
+  Live-Beispiel ausdrücklich ungetestet, Rückmeldungen willkommen.
+  Anfrage baslerleckerli, Symcon-Forum, 22.09.2026.
+- Test: neuer Prüfstand `.tools/test-alertswiss-ch.php` (echte Feed-Struktur
+  als Fixture, inkl. Testalarm-Filterung, Polygon-/Kreis-Parsing,
+  Meteoalarm-Ausschluss).
+
 ## 1.15.1 (2026-09-21)
 
 - Die Verbindungs-Statuszeilen aus 1.15.0 folgen jetzt der Farbregel des
