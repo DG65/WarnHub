@@ -2,6 +2,37 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.17.0 (2026-10-01)
+
+- Neu: **Notification Control als sechster Push-Kanal.** Praxis-Fund
+  tomfes (Symcon-Forum, 01.10.2026): ein Gerät, das nur über die
+  IPSView-App eingeloggt ist, kann bei KEINER WebFront- oder Kachel-
+  Visualisierung-Instanz als Konfigurator eingetragen sein --
+  `WFC_PushNotification`/`VISU_PostNotificationEx` (WarnHubs bisherige
+  Push-Kanäle) erreichen so ein Gerät strukturell nie, unabhängig davon,
+  welche WebFront-Zeile aktiviert ist. Notification Control verwaltet
+  Geräte dagegen unabhängig vom Konfigurator-Typ.
+  "🔎 Push-Ziele suchen" findet eine vorhandene Notification-Control-
+  Instanz jetzt automatisch (Typ "Notification Control" in der
+  Push-Ziele-Tabelle). Push geht an jedes Gerät mit mindestens einem
+  aktiven Konfigurator -- bei mehreren aktiven Konfiguratoren je Gerät
+  (WebFront UND Kachel-Visualisierung UND IPSView gleichzeitig möglich)
+  bewusst einmal je Konfigurator, da Notification Control keine
+  geräteweite Sammeladresse kennt.
+  `NC_GetDevices()`/`NC_PushNotification()` sind offiziell UNDOKUMENTIERT
+  (kein Eintrag in der Symcon-Modulreferenz) -- live gegen eine echte
+  Instanz getestet (01.10.2026, 12 echte Geräte, echter Testpush).
+  Wichtiger Live-Fund dabei: der zweite Parameter von
+  `NC_PushNotification()` ist die Konfigurator-Instanz-ID aus der
+  Geräte-eigenen `Visualizations`-Zuordnung, NICHT die geräteeigene `ID`
+  (Letztere lieferte im Test `false`); die Rückgabe ist außerdem keine
+  Bool, sondern eine Benachrichtigungs-ID bei Erfolg -- Erfolgsprüfung
+  deshalb `!== false`, nie `=== true`.
+- Test: neuer Prüfstand `.tools/test-notification-control-push.php` (20
+  Prüfungen, u. a. mit der wörtlichen, anonymisierten Geräteliste aus dem
+  Live-Test); `.tools/test-discovery.php` um die neue Discovery-Erkennung
+  erweitert.
+
 ## 1.16.0 (2026-09-22)
 
 - Neu: **Alertswiss** (alert.swiss, Bundesamt für Bevölkerungsschutz BABS)

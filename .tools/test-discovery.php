@@ -25,6 +25,10 @@ const PUSHOVER_GUID_ACTUAL = '{22222222-2222-2222-2222-222222222222}';
 // Ebenfalls bewusst über eine Fake-GUID + Namenssuche aufgelöst -- prüft den
 // Rückfallpfad auch für den dritten, neu hinzugekommenen Push-Kanal (E-Mail).
 const SMTP_GUID_ACTUAL = '{33333333-3333-3333-3333-333333333333}';
+// Ebenfalls bewusst über eine Fake-GUID + Namenssuche aufgelöst -- prüft den
+// Rückfallpfad auch für den vierten, neu hinzugekommenen Push-Kanal
+// (Notification Control, 01.10.2026, Praxis-Fund tomfes).
+const NOTIFICATION_CONTROL_GUID_ACTUAL = '{44444444-4444-4444-4444-444444444444}';
 // Echte, live gegen Dietmars System verifizierte Symcon-Konstante (07.09.2026) --
 // nicht selbst erfunden.
 const VARIABLE_PRESENTATION_SHUTTER = '{6075FC22-69AF-B110-3749-C24138883082}';
@@ -68,7 +72,7 @@ const VARIABLE_PRESENTATION_SHUTTER = '{6075FC22-69AF-B110-3749-C24138883082}';
 //              aber KEINE Zustands-Variable auffindbar -> Zeile bleibt
 //              inaktiv, Sicherheitssperre statt Raten)
 $GLOBALS['whub_test_tree'] = [
-    0 => [10, 20, 21, 22, 26, 27, 28, 23, 25],
+    0 => [10, 20, 21, 22, 26, 27, 28, 29, 23, 25],
     10 => [11, 12, 13, 14, 15, 16, 17, 18, 19],
     11 => [111],
     12 => [121],
@@ -86,6 +90,7 @@ $GLOBALS['whub_test_tree'] = [
     26 => [],
     27 => [],
     28 => [],
+    29 => [],
     23 => [231, 232, 233, 234],
     25 => [251],
 ];
@@ -107,6 +112,7 @@ $GLOBALS['whub_test_objects'] = [
     26 => ['ObjectType' => 1, 'ObjectName' => 'Familie Bot'],
     27 => ['ObjectType' => 1, 'ObjectName' => 'Dietmar Pushover'],
     28 => ['ObjectType' => 1, 'ObjectName' => 'Mail Versand'],
+    29 => ['ObjectType' => 1, 'ObjectName' => 'Notifications'],
     23 => ['ObjectType' => 1, 'ObjectName' => 'Blitz'],
     25 => ['ObjectType' => 1, 'ObjectName' => 'Schneemobil'],
     111 => ['ObjectType' => 2, 'ObjectName' => 'Position'],
@@ -150,12 +156,14 @@ $GLOBALS['whub_test_instancesByModule'] = [
     TELEGRAM_BOT_GUID => [26],
     PUSHOVER_GUID_ACTUAL => [27],
     SMTP_GUID_ACTUAL => [28],
+    NOTIFICATION_CONTROL_GUID_ACTUAL => [29],
 ];
 $GLOBALS['whub_test_moduleNames'] = [
     WEBFRONT_GUID => 'WebFront',
     KACHEL_VISU_GUID_ACTUAL => 'Kachel Visualisierung',
     PUSHOVER_GUID_ACTUAL => 'Pushover',
     SMTP_GUID_ACTUAL => 'SMTP',
+    NOTIFICATION_CONTROL_GUID_ACTUAL => 'Notification Control',
     OTHER_MODULE_GUID => 'Irgendwas',
 ];
 
@@ -364,21 +372,23 @@ function check(string $label, bool $ok): void
 $hub = new WarnHub();
 $hub->Create();
 
-echo "== WebFront-/Kachel-Visualisierung-/Telegram-/Pushover-/SMTP-Discovery ==\n";
+echo "== WebFront-/Kachel-Visualisierung-/Telegram-/Pushover-/SMTP-/Notification-Control-Discovery ==\n";
 $msg = $hub->DiscoverWebFronts();
-check('meldet 6 neue Ziele (2× WebFront + 1× Kachel-Visu + 1× Telegram exakte GUID + 1× Pushover + 1× SMTP nur über Namenssuche)', str_contains($msg, '6 neue'));
+check('meldet 7 neue Ziele (2× WebFront + 1× Kachel-Visu + 1× Telegram exakte GUID + 1× Pushover + 1× SMTP + 1× Notification Control nur über Namenssuche)', str_contains($msg, '7 neue'));
 check('weist auf das noch inaktive E-Mail-Ziel hin', str_contains($msg, '1 E-Mail-Ziel(e) sind noch INAKTIV'));
 [$field, $key, $valuesJson] = $hub->lastValuesUpdate('WebFronts');
 check('schreibt in das Feld "WebFronts"', $field === 'WebFronts');
 $rows = json_decode($valuesJson, true);
-check('6 Zeilen gefunden', count($rows) === 6);
-check('fünf der sechs standardmäßig aktiv (E-Mail bewusst nicht)', count(array_filter($rows, fn ($r) => $r['Aktiv'] === true)) === 5);
+check('7 Zeilen gefunden', count($rows) === 7);
+check('sechs der sieben standardmäßig aktiv (E-Mail bewusst nicht)', count(array_filter($rows, fn ($r) => $r['Aktiv'] === true)) === 6);
 $byId = array_column($rows, null, 'InstanceID');
 check('Instanz 20/21 als Typ "webfront" erkannt (exakte GUID)', ($byId[20]['Typ'] ?? null) === 'webfront' && ($byId[21]['Typ'] ?? null) === 'webfront');
 check('Instanz 22 ("Dietmar") als Typ "kachel" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer)', ($byId[22]['Typ'] ?? null) === 'kachel');
 check('Instanz 26 ("Familie Bot") als Typ "telegram" erkannt (exakte GUID)', ($byId[26]['Typ'] ?? null) === 'telegram');
 check('Instanz 27 ("Dietmar Pushover") als Typ "pushover" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer)', ($byId[27]['Typ'] ?? null) === 'pushover');
 check('Instanz 28 ("Mail Versand") als Typ "email" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer)', ($byId[28]['Typ'] ?? null) === 'email');
+check('Instanz 29 ("Notifications") als Typ "notification" erkannt, obwohl nur über Namenssuche auffindbar (exakte GUID lieferte 0 Treffer, Praxis-Fund tomfes 01.10.2026)', ($byId[29]['Typ'] ?? null) === 'notification');
+check('Notification-Control-Ziel startet aktiv (anders als E-Mail kein Zusatzfeld nötig)', ($byId[29]['Aktiv'] ?? null) === true);
 check('E-Mail-Ziel startet INAKTIV (SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger)', ($byId[28]['Aktiv'] ?? null) === false);
 check('E-Mail-Ziel startet mit leerer Zieladresse (muss von Hand eingetragen werden)', ($byId[28]['Zieladresse'] ?? null) === '');
 

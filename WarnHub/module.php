@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.16.0';
-    private const NEWS_VERSION = '1.16.0';
+    private const DOC_VERSION = '1.17.0';
+    private const NEWS_VERSION = '1.17.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -225,6 +225,42 @@ class WarnHub extends IPSModule
     // SMTP_SendMailEx($InstanzID, $Empfänger, $Betreff, $Inhalt) erkennt HTML
     // automatisch am <html>...</html>-Wrapper (seit Symcon 7.0, offizielle Doku).
     private const SMTP_GUID = '{375EAF21-35EF-4BC4-83B3-C780FD8BD88A}';
+
+    // Notification Control (Symcon-Kernmodul, Prefix "NC") -- live gegen
+    // Dietmars eigene IP-Symcon-Instanz verifiziert (01.10.2026, Instanz
+    // #34698 "Notifications"), da kein öffentliches GitHub-Repo existiert
+    // (Kernmodul, kein Community-/Store-Modul). Anders als WebFront/Kachel-
+    // Visualisierung (WFC_PushNotification/VISU_PostNotificationEx, je EIN
+    // Push an EINEN Konfigurator) verwaltet Notification Control die
+    // einzelnen GERÄTE (Handy/Tablet) geräteübergreifend -- ein Gerät kann
+    // bei mehreren Konfiguratoren (WebFront UND/ODER Kachel-Visualisierung
+    // UND/ODER IPSView) gleichzeitig registriert sein. Genau DESHALB deckt
+    // sie den Fall ab, den WebFront/Kachel-Visualisierung strukturell nie
+    // erreichen: ein Gerät, das nur über die IPSView-App eingeloggt ist und
+    // bei KEINER WebFront-/Kachel-Instanz als Konfigurator eingetragen ist
+    // (Praxis-Fund tomfes, Symcon-Forum, 01.10.2026). `NC_GetDevices($InstanzID)`
+    // liefert je Gerät `ID`/`Name`/`Visualizations` (Map Konfigurator-
+    // Instanz-ID -> aktiv/inaktiv, live an Dietmars System geprüft: 12
+    // Geräte, auch mehrere Konfiguratoren je Gerät). WICHTIG, per echtem
+    // Testpush an Dietmars eigenes Gerät verifiziert (01.10.2026): der
+    // ZWEITE Parameter von `NC_PushNotification($InstanzID,
+    // $VisualisierungsID, $Titel, $Text, $Sound)` ist die
+    // KONFIGURATOR-Instanz-ID aus `Visualizations` (ein Schlüssel dieser
+    // Map), NICHT die geräteeigene `ID` aus `NC_GetDevices()` -- Letztere
+    // lieferte live `false`, Erstere eine echte Benachrichtigungs-ID.
+    // Rückgabe ist KEIN Bool (Benachrichtigungs-ID bei Erfolg, `false` bei
+    // Fehlschlag) -- Erfolgsprüfung deshalb immer `!== false`, nie
+    // `=== true`. Beide Funktionen sind offiziell UNDOKUMENTIERT (kein
+    // Eintrag in der Symcon-Modulreferenz), aber live bestätigt real und
+    // funktionsfähig (`get_defined_functions()` listet
+    // `nc_pushnotification`/`nc_getdevices`) sowie durch mehrere
+    // unabhängige Community-Referenzimplementierungen mit vergleichbarer
+    // Signatur gedeckt (u. a. Tommi2Day/ipsymcon-phpmodule-by-Tommi,
+    // JohannesMaennel/IPS-Module -- deren Rückgabetyp wich allerdings vom
+    // live beobachteten Verhalten ab, siehe oben). Da undokumentiert, kein
+    // Vertrauen in die Rückgabestruktur -- jede Ebene wird defensiv mit
+    // `is_array()` geprüft.
+    private const NOTIFICATION_CONTROL_GUID = '{D4B231D6-8141-4B9E-9B32-82DA3AEEAB78}';
 
     // Froggit-Wetterstation (Modul "Froggit", Vendor HS) -- GUID live an
     // Dietmars System verifiziert (04.09.2026, Instanz #32052 "Wetterstation").
@@ -1041,6 +1077,7 @@ class WarnHub extends IPSModule
                             ['caption' => 'Telegram', 'value' => 'telegram'],
                             ['caption' => 'Pushover', 'value' => 'pushover'],
                             ['caption' => 'E-Mail (SMTP)', 'value' => 'email'],
+                            ['caption' => 'Notification Control (IPSView & Co.)', 'value' => 'notification'],
                         ]]],
                         ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '90px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
                         ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
@@ -1399,6 +1436,9 @@ class WarnHub extends IPSModule
         foreach ($this->findInstancesByModuleNameSubstring(self::SMTP_GUID, 'smtp') as $instanceID => $moduleName) {
             $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'email'];
         }
+        foreach ($this->findInstancesByModuleNameSubstring(self::NOTIFICATION_CONTROL_GUID, 'notification') as $instanceID => $moduleName) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'notification'];
+        }
         return $out;
     }
 
@@ -1522,7 +1562,7 @@ class WarnHub extends IPSModule
             return sprintf('⚠️ %d Push-Ziel(e) gefunden, aber keines aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.%s', count($rows), $ungespeichert);
         }
 
-        $typNamen = ['webfront' => 'WebFront', 'kachel' => 'Kachel-Visualisierung', 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => 'E-Mail'];
+        $typNamen = ['webfront' => 'WebFront', 'kachel' => 'Kachel-Visualisierung', 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => 'E-Mail', 'notification' => 'Notification Control'];
         $laufen = [];
         $ohneAdresse = [];
         $verwaist = [];
@@ -1894,6 +1934,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: automatische Verbindungen zeigen jetzt live, ob sie stehen -- eine Statuszeile (✅ / ⚠️ / ℹ️ / ⛔) bei den Push-Zielen, beim Symcon-Systemstandort, bei der eigenen Wetterstation und bei den mobilen Live-Standorten. Sie nennt, WAS verbunden ist (Instanz, Variable, aktueller Wert) und ob es automatisch (🔗) oder von Hand (✏️) gewählt wurde. Das schließt Lücken, die vorher still blieben: ein aktives E-Mail-Ziel ohne Zieladresse, eine gelöschte Push-Instanz oder Live-Variable (WarnHub fiel dann unbemerkt auf feste Koordinaten zurück) und eine Wetterstation, die nur Wind oder nur Regen liefert. Die Wetterstation-Zeile folgt schon beim Auswählen der Auswahl, nicht erst nach dem Speichern'],
                 ['type' => 'Label', 'caption' => '• Verbindungs-Statuszeilen jetzt farbig: eine automatisch übernommene, funktionierende Verbindung (🔗) steht in Grün, ein fehlender Pflichtwert (⛔) in Rot, alles andere in der Standardfarbe -- auf einen Blick erkennbar, was von selbst läuft und wo etwas fehlt'],
                 ['type' => 'Label', 'caption' => '• NEU: Alertswiss (alert.swiss/BABS) als weitere Schweizer Datenquelle -- das Schweizer Pendant zu NINA, kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, nicht nur Wetter. Koordinatengenau (echte Polygone/Kreise je Meldung, kein Namensabgleich), übernimmt Schweizer Standorte automatisch von Meteoalarm, sobald aktiviert -- analog zur direkten DWD-/GeoSphere-Austria-Anbindung. Anfrage baslerleckerli, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• NEU: Notification Control als sechster Push-Kanal -- erreicht Geräte, die NUR über die IPSView-App registriert sind und bei KEINER WebFront- oder Kachel-Visualisierung-Instanz als Konfigurator eingetragen sind (WFC_PushNotification/VISU_PostNotificationEx erreichen so ein Gerät strukturell nie, unabhängig davon, welche WebFront-Zeile aktiviert ist). Einfach "🔎 Push-Ziele suchen" erneut klicken, eine vorhandene Notification-Control-Instanz wird automatisch gefunden. Praxis-Fund tomfes, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -6393,6 +6434,56 @@ HTML;
                         $ok = true;
                     } else {
                         $this->LogError('pushToAllWebfronts', 'E-Mail an "' . $adresse . '" (Ziel "' . $w['Name'] . '") fehlgeschlagen.');
+                    }
+                }
+            } elseif ($w['Typ'] === 'notification') {
+                // Notification Control kennt keinen eigenen Push-Adressaten --
+                // NC_PushNotification() pusht an eine VISUALISIERUNG
+                // (Konfigurator-Instanz-ID, der zweite Parameter), NICHT an
+                // die Geräte-ID aus NC_GetDevices() selbst (Live-Test
+                // 01.10.2026 an Dietmars System: die Geräte-ID lieferte
+                // `false`, die Visualisierungs-ID aus `Visualizations`
+                // lieferte eine echte Benachrichtigungs-ID). Erfolg = NICHT
+                // false (eine Benachrichtigungs-ID, kein Bool -- offiziell
+                // undokumentierte Funktion, kein `=== true` möglich). Deckt
+                // damit u. a. IPSView-only-Geräte ab, die bei keiner
+                // WebFront-/Kachel-Instanz als Konfigurator eingetragen sind
+                // (Praxis-Fund tomfes, Symcon-Forum, 01.10.2026) -- über GENAU
+                // die Visualisierungs-ID, unter der sich das Gerät zuletzt
+                // angemeldet hat. $ok zählt diese EINE Zeile als
+                // "funktioniert", sobald mindestens EIN Gerät/Konfigurator-
+                // Paar erreicht wurde (konsistent mit den übrigen Typen:
+                // 1 Zeile = 1 Ziel in "X von Y gesendet"), auch wenn
+                // dahinter mehrere Geräte/Konfiguratoren liegen können. Ein
+                // Gerät mit mehreren aktiven Konfiguratoren bekommt die
+                // Benachrichtigung bewusst MEHRFACH (einmal je aktivem
+                // Konfigurator) -- Notification Control selbst kennt keine
+                // geräteweite Sammeladresse.
+                if (!function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')) {
+                    $this->LogError('pushToAllWebfronts', 'NC_GetDevices/NC_PushNotification sind nicht verfügbar (keine Notification-Control-Instanz installiert).');
+                    continue;
+                }
+                $devices = @NC_GetDevices($w['InstanceID']);
+                if (!is_array($devices)) {
+                    $this->LogError('pushToAllWebfronts', 'NC_GetDevices lieferte keine Geräteliste für Instanz ' . $w['InstanceID'] . '.');
+                    continue;
+                }
+                $ok = false;
+                foreach ($devices as $device) {
+                    if (!is_array($device)) {
+                        continue;
+                    }
+                    $visualizations = is_array($device['Visualizations'] ?? null) ? $device['Visualizations'] : [];
+                    foreach ($visualizations as $visualizationID => $aktiv) {
+                        if ($aktiv !== true) {
+                            continue; // für diesen Konfigurator abgeschaltet
+                        }
+                        $result = @NC_PushNotification($w['InstanceID'], (int) $visualizationID, $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), $sound);
+                        if ($result !== false) {
+                            $ok = true;
+                        } else {
+                            $this->LogError('pushToAllWebfronts', 'NC_PushNotification an Gerät "' . (string) ($device['Name'] ?? ($device['ID'] ?? '?')) . '" / Konfigurator ' . $visualizationID . ' (Notification-Control-Instanz ' . $w['InstanceID'] . ') fehlgeschlagen.');
+                        }
                     }
                 }
             } else {
