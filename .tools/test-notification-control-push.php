@@ -67,6 +67,24 @@ function IPS_GetModuleList(): array
 {
     return [];
 }
+$GLOBALS['whub_test_instanceList'] = [];   // [instanceID => ['ModuleID' => guid]]
+$GLOBALS['whub_test_modules'] = [];        // [guid => ['ModuleName' => ..., 'Prefix' => ...]]
+function IPS_GetInstanceList(): array
+{
+    return array_keys($GLOBALS['whub_test_instanceList']);
+}
+function IPS_GetInstance(int $id)
+{
+    return isset($GLOBALS['whub_test_instanceList'][$id]) ? ['ModuleInfo' => ['ModuleID' => $GLOBALS['whub_test_instanceList'][$id]]] : false;
+}
+function IPS_GetModule(string $guid)
+{
+    return $GLOBALS['whub_test_modules'][$guid] ?? false;
+}
+function IPS_GetName(int $id): string
+{
+    return 'Instanz ' . $id;
+}
 
 class IPSModule
 {
@@ -274,6 +292,29 @@ check('Nicht-Array-Antwort -> kein Fehler, Zeile zählt nicht als gesendet', $se
 echo "\n== Funktionen auf dem System nicht verfügbar (kein Notification-Control-Modul installiert) ==\n";
 check('pushToAllWebfronts() prüft function_exists für NC_GetDevices/NC_PushNotification im Quellcode', str_contains(file_get_contents(__DIR__ . '/../WarnHub/module.php'), "function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')"));
 check('Erfolgsprüfung ist !== false, nicht === true (Rückgabe ist eine Benachrichtigungs-ID, kein Bool)', str_contains(file_get_contents(__DIR__ . '/../WarnHub/module.php'), '$result !== false'));
+
+echo "\n== Erkennung: GUID UND Modulliste liefern nichts (Praxis-Fund tomfes 02.10.2026, Instanz #25900) ==\n";
+$GLOBALS['whub_test_instanceList'] = [
+    100 => '{AAAAAAAA-0000-0000-0000-000000000001}', // irgendein anderes Modul
+    25900 => '{FFFFFFFF-0000-0000-0000-00000000NC01}', // fremde GUID -- exakter Treffer UND Modulliste (leer) scheitern
+    300 => '{AAAAAAAA-0000-0000-0000-000000000002}', // Store-Modul "Notification" -- darf NICHT mitgenommen werden
+];
+$GLOBALS['whub_test_modules'] = [
+    '{AAAAAAAA-0000-0000-0000-000000000001}' => ['ModuleName' => 'WebFront Configurator', 'Prefix' => 'WFC'],
+    '{FFFFFFFF-0000-0000-0000-00000000NC01}' => ['ModuleName' => 'Notification Control', 'Prefix' => 'NC'],
+    '{AAAAAAAA-0000-0000-0000-000000000002}' => ['ModuleName' => 'Notification', 'Prefix' => 'NOTIF'],
+];
+$ids = callPrivate(neuerHub([]), 'findNotificationControlInstances');
+check('Instanz #25900 wird über Modulname/Präfix gefunden, obwohl GUID und Modulliste leer sind', in_array(25900, $ids, true));
+check('das Store-Modul "Notification" (anderer Name, anderes Präfix) wird NICHT fälschlich mitgenommen', !in_array(300, $ids, true) && count($ids) === 1);
+
+$GLOBALS['whub_test_modules']['{FFFFFFFF-0000-0000-0000-00000000NC01}'] = ['ModuleName' => 'Benachrichtigungssteuerung', 'Prefix' => 'NC']; // lokalisierter Name, Präfix bleibt
+$ids = callPrivate(neuerHub([]), 'findNotificationControlInstances');
+check('auch bei lokalisiertem Modulnamen reicht das Präfix "NC"', in_array(25900, $ids, true));
+
+$GLOBALS['whub_test_instanceList'] = [];
+$GLOBALS['whub_test_modules'] = [];
+check('keine Notification-Control-Instanz vorhanden -> leere Liste, kein Fehler', callPrivate(neuerHub([]), 'findNotificationControlInstances') === []);
 
 echo "\n== Formular: neue Option im Typ-Select ==\n";
 $hub = neuerHub([]);

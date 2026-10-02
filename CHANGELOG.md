@@ -2,6 +2,21 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.17.1 (2026-10-02)
+
+- Fix: die Suche nach der Notification-Control-Instanz (neu in 1.17.0)
+  fand sie bei einem Anwender nicht, obwohl die Kerninstanz vorhanden war
+  (Praxis-Fund tomfes, Symcon-Forum, 02.10.2026, Instanz #25900). Welcher
+  der beiden bisherigen Wege dort scheiterte (exakte GUID bzw. Modulliste),
+  ließ sich nicht klären -- die Suche prüft deshalb jetzt zusätzlich alle
+  Instanzen nach Modulname "Notification Control" bzw. Präfix "NC",
+  unabhängig von GUID und Modulliste. Dabei behoben: der Namens-Rückfall
+  suchte nur nach "notification" und hätte damit auch das Store-Modul
+  "Notification/Benachrichtigung" mit der Kerninstanz verwechseln können.
+  Die Meldung "keine Push-Ziele gefunden" nennt Notification Control jetzt
+  ebenfalls. Test: `.tools/test-notification-control-push.php` auf 24
+  Prüfungen erweitert.
+
 ## 1.17.0 (2026-10-01)
 
 - Neu: **Notification Control als sechster Push-Kanal.** Praxis-Fund

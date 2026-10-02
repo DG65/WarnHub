@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.17.0';
-    private const NEWS_VERSION = '1.17.0';
+    private const DOC_VERSION = '1.17.1';
+    private const NEWS_VERSION = '1.17.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1376,6 +1376,43 @@ class WarnHub extends IPSModule
     }
 
     /**
+     * Notification-Control-Instanzen (Kerninstanz) -- DREI Wege hintereinander,
+     * weil die Erkennung bei Praxis-Fund tomfes (Symcon-Forum, 02.10.2026)
+     * trotz vorhandener Instanz (#25900 unter "Kern-Instanzen") nichts fand,
+     * obwohl dieselbe Suche an Dietmars Instanz (#34698) funktionierte; welcher
+     * der beiden ersten Wege dort scheiterte, ließ sich nicht klären. 1) exakte
+     * GUID, 2) Modulliste nach dem VOLLEN Namen "Notification Control" (nicht
+     * nur "notification" -- das träfe auch das Store-Modul "Benachrichtigung/
+     * Notification"), 3) alle Instanzen durchgehen und Modulname bzw. Präfix
+     * "NC" prüfen -- unabhängig von GUID UND Modulliste (an Dietmars System
+     * live bestätigt: ModuleName "Notification Control", Prefix "NC").
+     *
+     * @return int[]
+     */
+    private function findNotificationControlInstances(): array
+    {
+        $found = array_keys($this->findInstancesByModuleNameSubstring(self::NOTIFICATION_CONTROL_GUID, 'notification control'));
+        if (count($found) > 0) {
+            return $found;
+        }
+        foreach (@IPS_GetInstanceList() ?: [] as $instanceID) {
+            $instance = @IPS_GetInstance($instanceID);
+            $moduleID = is_array($instance) ? (string) ($instance['ModuleInfo']['ModuleID'] ?? '') : '';
+            if ($moduleID === '') {
+                continue;
+            }
+            $module = @IPS_GetModule($moduleID);
+            if (!is_array($module)) {
+                continue;
+            }
+            if ((string) ($module['Prefix'] ?? '') === 'NC' || strcasecmp((string) ($module['ModuleName'] ?? ''), 'Notification Control') === 0) {
+                $found[] = (int) $instanceID;
+            }
+        }
+        return $found;
+    }
+
+    /**
      * Findet alle Instanzen eines per Namens-Teilstring gesuchten Modultyps --
      * robuster als eine fest hinterlegte GUID (siehe unten). $exactGuid wird
      * zuerst versucht (schnell, keine volle Modulliste nötig), die
@@ -1436,7 +1473,7 @@ class WarnHub extends IPSModule
         foreach ($this->findInstancesByModuleNameSubstring(self::SMTP_GUID, 'smtp') as $instanceID => $moduleName) {
             $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'email'];
         }
-        foreach ($this->findInstancesByModuleNameSubstring(self::NOTIFICATION_CONTROL_GUID, 'notification') as $instanceID => $moduleName) {
+        foreach ($this->findNotificationControlInstances() as $instanceID) {
             $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'notification'];
         }
         return $out;
@@ -1499,7 +1536,7 @@ class WarnHub extends IPSModule
             return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
         }
         if ($added === 0) {
-            return '⚠️ Weder WebFront-, Kachel-Visualisierung-, Telegram-Bot-, Pushover- noch SMTP-Instanzen im Objektbaum gefunden.';
+            return '⚠️ Weder WebFront-, Kachel-Visualisierung-, Telegram-Bot-, Pushover-, SMTP- noch Notification-Control-Instanzen im Objektbaum gefunden.';
         }
         if ($addedEmail > 0) {
             return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden (insgesamt %d) -- bitte unten „Übernehmen" klicken. %d E-Mail-Ziel(e) sind noch INAKTIV: erst Zieladresse eintragen und aktivieren.', $added, count($rows), $addedEmail);
@@ -1935,6 +1972,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Verbindungs-Statuszeilen jetzt farbig: eine automatisch übernommene, funktionierende Verbindung (🔗) steht in Grün, ein fehlender Pflichtwert (⛔) in Rot, alles andere in der Standardfarbe -- auf einen Blick erkennbar, was von selbst läuft und wo etwas fehlt'],
                 ['type' => 'Label', 'caption' => '• NEU: Alertswiss (alert.swiss/BABS) als weitere Schweizer Datenquelle -- das Schweizer Pendant zu NINA, kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, nicht nur Wetter. Koordinatengenau (echte Polygone/Kreise je Meldung, kein Namensabgleich), übernimmt Schweizer Standorte automatisch von Meteoalarm, sobald aktiviert -- analog zur direkten DWD-/GeoSphere-Austria-Anbindung. Anfrage baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: Notification Control als sechster Push-Kanal -- erreicht Geräte, die NUR über die IPSView-App registriert sind und bei KEINER WebFront- oder Kachel-Visualisierung-Instanz als Konfigurator eingetragen sind (WFC_PushNotification/VISU_PostNotificationEx erreichen so ein Gerät strukturell nie, unabhängig davon, welche WebFront-Zeile aktiviert ist). Einfach "🔎 Push-Ziele suchen" erneut klicken, eine vorhandene Notification-Control-Instanz wird automatisch gefunden. Praxis-Fund tomfes, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix Notification Control: die Suche fand die Instanz bei manchen Systemen nicht, obwohl sie unter "Kern-Instanzen" vorhanden ist. Sie prüft jetzt zusätzlich über Modulname/Präfix "NC" und verwechselt das Store-Modul "Notification" nicht mehr mit der Kerninstanz. Praxis-Fund tomfes, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
