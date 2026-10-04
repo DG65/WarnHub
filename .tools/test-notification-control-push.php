@@ -289,6 +289,18 @@ $GLOBALS['whub_test_ncDevices'][34698] = false;
 $sentFalse = callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
 check('Nicht-Array-Antwort -> kein Fehler, Zeile zählt nicht als gesendet', $sentFalse === 0 && count($GLOBALS['whub_test_pushCalls']) === 0);
 
+echo "\n== Mehrere Geräte teilen einen Konfigurator -- EIN Push je eindeutigem Konfigurator (Rückmeldung baslerleckerli 04.10.2026) ==\n";
+$GLOBALS['whub_test_pushCalls'] = [];
+$GLOBALS['whub_test_ncPushResults'] = [];
+$GLOBALS['whub_test_ncDevices'][34698] = [
+    ['ID' => 5, 'Name' => 'iPhone', 'Modified' => 1, 'Visualizations' => [54409 => true, 42569 => true]],
+    ['ID' => 11, 'Name' => 'iPad', 'Modified' => 1, 'Visualizations' => [54409 => true]],
+    ['ID' => 12, 'Name' => 'iPad 2', 'Modified' => 1, 'Visualizations' => [54409 => true, 43734 => false]],
+];
+$sent = callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
+check('Konfigurator 54409 (bei DREI Geräten aktiv) wird nur EINMAL angestoßen, nicht dreimal', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[2] === 54409)) === 1);
+check('insgesamt genau 2 Aufrufe (54409 und 42569), kein Aufruf für den inaktiven 43734', count($GLOBALS['whub_test_pushCalls']) === 2 && $sent === 1);
+
 echo "\n== Funktionen auf dem System nicht verfügbar (kein Notification-Control-Modul installiert) ==\n";
 check('pushToAllWebfronts() prüft function_exists für NC_GetDevices/NC_PushNotification im Quellcode', str_contains(file_get_contents(__DIR__ . '/../WarnHub/module.php'), "function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')"));
 check('Erfolgsprüfung ist !== false, nicht === true (Rückgabe ist eine Benachrichtigungs-ID, kein Bool)', str_contains(file_get_contents(__DIR__ . '/../WarnHub/module.php'), '$result !== false'));

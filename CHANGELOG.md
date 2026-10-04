@@ -2,6 +2,37 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.17.2 (2026-10-04)
+
+- Alertswiss: **flächige Meldungen gelten nur noch für Standorte IN der
+  Fläche.** Alertswiss liefert zwei Meldungsarten ohne eigenes Kennzeichen:
+  flächige (kantonal/regional, z. B. "Gesamter Kanton Solothurn",
+  Waldbrandgefahr, Feuerverbot, Trockenheit) und örtliche (Fels-/
+  Bergsturz, Strassensperrung, Grossveranstaltung). Live-Feed 04.10.2026
+  (14 Meldungen): flächige Meldungen haben 14-114 km Diagonale, örtliche
+  0,5-6 km. Ab 10 km Diagonale (`ALERTSWISS_FLAECHIG_AB_KM`) zählt jetzt nur
+  noch "Standort liegt in der Fläche"; der Umkreis des Standorts gilt dort
+  nicht mehr. Vorher bekam ein Standort in Basel auch die Solothurner
+  Kantonsmeldung, nur weil der Kanton in Umkreisnähe beginnt -- bei mehreren
+  Standorten in Grenznähe wiederholte sich dieselbe Meldung je Standort.
+  Örtliche Meldungen behalten den Umkreis. Keine neue Einstellung und keine
+  Kantonseingabe nötig. Gegen den echten Feed geprüft (Umkreis 15 km): Basel,
+  Liestal und Aesch (BL) bekommen je eine Meldung weniger, Solothurn und
+  Chur ihre eigene weiterhin. Der Landesweit-Näherungskreis zählt nicht als
+  flächig. Anfrage baslerleckerli, Symcon-Forum, 04.10.2026.
+- Fix Notification Control: `NC_PushNotification` gilt wie
+  `WFC_PushNotification` allen Geräten eines Konfigurators gleichzeitig.
+  1.17.0/1.17.1 riefen es aber je Gerät UND Konfigurator auf -- jedes Gerät
+  bekam so viele Kopien, wie Geräte denselben Konfigurator teilen. Jetzt
+  genau EIN Aufruf je eindeutigem aktivem Konfigurator. Die Annahme "ein
+  Push gilt allen Geräten des Konfigurators" stützt sich auf das Verhalten
+  von `WFC_PushNotification` und den Befund, dass die Geräte-ID als
+  Zieladresse `false` lieferte; die Zustellzahl je Gerät ist nicht gemessen.
+  Rückmeldung baslerleckerli.
+- Test: `.tools/test-alertswiss-ch.php` auf 42 Prüfungen erweitert (flächig
+  vs. örtlich, Abgleich im `processWarnings()`),
+  `.tools/test-notification-control-push.php` auf 26.
+
 ## 1.17.1 (2026-10-02)
 
 - Fix: die Suche nach der Notification-Control-Instanz (neu in 1.17.0)

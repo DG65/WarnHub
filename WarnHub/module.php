@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.17.1';
-    private const NEWS_VERSION = '1.17.1';
+    private const DOC_VERSION = '1.17.2';
+    private const NEWS_VERSION = '1.17.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -437,6 +437,17 @@ class WarnHub extends IPSModule
     // Die Quelle liefert KEIN Gültig-bis-Datum (anders als CAP) -- expires
     // bleibt null, das bestehende "still present"-Verfahren räumt eine aus
     // dem Feed verschwundene Meldung wie bei BAFU/SED automatisch auf.
+    // Alertswiss liefert zwei Meldungsarten ohne eigenes Kennzeichen: flächige
+    // (kantonal/regional, "Gesamter Kanton Solothurn", Waldbrandgefahr,
+    // Feuerverbot, Trockenheit) und örtliche (Fels-/Bergsturz, Strassensperrung,
+    // Grossveranstaltung). Live-Feed 04.10.2026 (14 Meldungen): flächige
+    // Meldungen haben 14-114 km Diagonale, örtliche 0,5-6 km -- sauber getrennt.
+    // Flächige Meldungen zählen nur, wenn der Standort IN der Fläche liegt,
+    // sonst bekäme ein Standort in Basel auch die Solothurner Kantonsmeldung,
+    // nur weil der Kanton in Umkreisnähe beginnt (Praxis-Wunsch
+    // baslerleckerli, Symcon-Forum, 04.10.2026). Örtliche Meldungen behalten
+    // den Umkreis.
+    private const ALERTSWISS_FLAECHIG_AB_KM = 10.0;
     private const ALERTSWISS_URL = 'https://www.alert.swiss/content/alertswiss-internet/de/home/_jcr_content/polyalert.alertswiss_alerts.actual.json';
 
     // BAFU-Hochwasserdaten über LINDAS (lindas.admin.ch, Schweizer Linked-
@@ -1973,6 +1984,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: Alertswiss (alert.swiss/BABS) als weitere Schweizer Datenquelle -- das Schweizer Pendant zu NINA, kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, nicht nur Wetter. Koordinatengenau (echte Polygone/Kreise je Meldung, kein Namensabgleich), übernimmt Schweizer Standorte automatisch von Meteoalarm, sobald aktiviert -- analog zur direkten DWD-/GeoSphere-Austria-Anbindung. Anfrage baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: Notification Control als sechster Push-Kanal -- erreicht Geräte, die NUR über die IPSView-App registriert sind und bei KEINER WebFront- oder Kachel-Visualisierung-Instanz als Konfigurator eingetragen sind (WFC_PushNotification/VISU_PostNotificationEx erreichen so ein Gerät strukturell nie, unabhängig davon, welche WebFront-Zeile aktiviert ist). Einfach "🔎 Push-Ziele suchen" erneut klicken, eine vorhandene Notification-Control-Instanz wird automatisch gefunden. Praxis-Fund tomfes, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix Notification Control: die Suche fand die Instanz bei manchen Systemen nicht, obwohl sie unter "Kern-Instanzen" vorhanden ist. Sie prüft jetzt zusätzlich über Modulname/Präfix "NC" und verwechselt das Store-Modul "Notification" nicht mehr mit der Kerninstanz. Praxis-Fund tomfes, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Alertswiss: flächige Meldungen (kantonal/regional, z. B. "Gesamter Kanton Solothurn", Waldbrandgefahr, Feuerverbot) gelten jetzt nur noch für Standorte, die IN der Fläche liegen -- vorher bekam ein Standort in Basel auch die Solothurner Kantonsmeldung, nur weil der Kanton in Umkreisnähe beginnt. Örtliche Meldungen (Fels-/Bergsturz, Strassensperrung, Grossveranstaltung) gelten weiterhin im eingestellten Umkreis. Anfrage baslerleckerli, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix Notification Control: jedes Gerät bekam die Benachrichtigung so oft, wie Geräte denselben Konfigurator teilen -- jetzt genau einmal je Konfigurator. Rückmeldung baslerleckerli, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4518,6 +4531,10 @@ class WarnHub extends IPSModule
                     }
                 }
             }
+            // Ausdehnung der ECHTEN Geometrie (vor dem Landesweit-Näherungskreis
+            // unten, der bewusst nicht zählt): Diagonale der Hüllbox in km.
+            $insideOnly = $this->geometryDiagonalKm($rings, $circles) >= self::ALERTSWISS_FLAECHIG_AB_KM;
+
             // Landesweite Meldung OHNE eigene Geometrie (im Live-Feed noch
             // nie beobachtet, "nationWide" war durchgehend false) -- grobe
             // Näherung durch einen Kreis über ganz Schweiz, statt sie
@@ -4564,9 +4581,39 @@ class WarnHub extends IPSModule
                 'areaDesc' => count($areaNames) > 0 ? implode('; ', $areaNames) : 'Schweiz',
                 'rings' => $rings,
                 'circles' => $circles,
+                'insideOnly' => $insideOnly,
             ];
         }
         return $out;
+    }
+
+    /**
+     * Diagonale der Hüllbox aller Ringe/Kreise in km (0, wenn keine Geometrie).
+     * Kreise tragen mit ihrem Radius zur Hüllbox bei.
+     *
+     * @param array<array<array{0:float,1:float}>> $rings
+     * @param array<array{lat:float,lon:float,radiusKm:float}> $circles
+     */
+    private function geometryDiagonalKm(array $rings, array $circles): float
+    {
+        $lats = [];
+        $lons = [];
+        foreach ($rings as $ring) {
+            foreach ($ring as $pt) {
+                $lats[] = $pt[0];
+                $lons[] = $pt[1];
+            }
+        }
+        foreach ($circles as $c) {
+            $dLat = $c['radiusKm'] / 111.32;
+            $dLon = $c['radiusKm'] / (111.32 * max(0.01, cos(deg2rad($c['lat']))));
+            array_push($lats, $c['lat'] - $dLat, $c['lat'] + $dLat);
+            array_push($lons, $c['lon'] - $dLon, $c['lon'] + $dLon);
+        }
+        if (count($lats) === 0) {
+            return 0.0;
+        }
+        return WHUB_Geo::haversineKm(min($lats), min($lons), max($lats), max($lons));
     }
 
     /**
@@ -5290,7 +5337,11 @@ class WarnHub extends IPSModule
                 $distanceKm = $hasGeo
                     ? WHUB_Geo::distanceToAny($coords['lat'], $coords['lon'], $w['rings'], $w['circles'])
                     : null;
-                $matches = $hasGeo && $distanceKm !== null && $distanceKm <= $standort['RadiusKm'];
+                // 'insideOnly' (flächige Alertswiss-Meldung, siehe
+                // ALERTSWISS_FLAECHIG_AB_KM): nur Abstand 0 = Standort liegt IN der
+                // Fläche, der Umkreis des Standorts zählt hier nicht.
+                $maxDistanceKm = !empty($w['insideOnly']) ? 0.0 : $standort['RadiusKm'];
+                $matches = $hasGeo && $distanceKm !== null && $distanceKm <= $maxDistanceKm;
 
                 // Meteoalarm liefert keine Warnfläche, nur benannte Gebiete
                 // (siehe fetchMeteoalarmCountry()) -- Ersatzabgleich per Name
@@ -6486,17 +6537,16 @@ HTML;
                 // undokumentierte Funktion, kein `=== true` möglich). Deckt
                 // damit u. a. IPSView-only-Geräte ab, die bei keiner
                 // WebFront-/Kachel-Instanz als Konfigurator eingetragen sind
-                // (Praxis-Fund tomfes, Symcon-Forum, 01.10.2026) -- über GENAU
-                // die Visualisierungs-ID, unter der sich das Gerät zuletzt
-                // angemeldet hat. $ok zählt diese EINE Zeile als
-                // "funktioniert", sobald mindestens EIN Gerät/Konfigurator-
-                // Paar erreicht wurde (konsistent mit den übrigen Typen:
-                // 1 Zeile = 1 Ziel in "X von Y gesendet"), auch wenn
-                // dahinter mehrere Geräte/Konfiguratoren liegen können. Ein
-                // Gerät mit mehreren aktiven Konfiguratoren bekommt die
-                // Benachrichtigung bewusst MEHRFACH (einmal je aktivem
-                // Konfigurator) -- Notification Control selbst kennt keine
-                // geräteweite Sammeladresse.
+                // (Praxis-Fund tomfes, Symcon-Forum, 01.10.2026).
+                // Pro EINDEUTIGEM aktiven Konfigurator genau EIN Aufruf: wie
+                // WFC_PushNotification gilt ein Push an einen Konfigurator allen
+                // seinen Geräten gleichzeitig -- ein Aufruf je Gerät UND
+                // Konfigurator (so in 1.17.0/1.17.1) schickte jedem Gerät so
+                // viele Kopien, wie Geräte denselben Konfigurator teilen
+                // (Rückmeldung baslerleckerli, Symcon-Forum, 04.10.2026:
+                // "Geräte haben quasi dauer-alarmiert"). $ok zählt diese EINE
+                // Zeile als "funktioniert", sobald mindestens EIN Konfigurator
+                // erreicht wurde (1 Zeile = 1 Ziel in "X von Y gesendet").
                 if (!function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'NC_GetDevices/NC_PushNotification sind nicht verfügbar (keine Notification-Control-Instanz installiert).');
                     continue;
@@ -6506,22 +6556,24 @@ HTML;
                     $this->LogError('pushToAllWebfronts', 'NC_GetDevices lieferte keine Geräteliste für Instanz ' . $w['InstanceID'] . '.');
                     continue;
                 }
-                $ok = false;
+                $konfiguratoren = [];
                 foreach ($devices as $device) {
-                    if (!is_array($device)) {
+                    if (!is_array($device) || !is_array($device['Visualizations'] ?? null)) {
                         continue;
                     }
-                    $visualizations = is_array($device['Visualizations'] ?? null) ? $device['Visualizations'] : [];
-                    foreach ($visualizations as $visualizationID => $aktiv) {
-                        if ($aktiv !== true) {
-                            continue; // für diesen Konfigurator abgeschaltet
+                    foreach ($device['Visualizations'] as $visualizationID => $aktiv) {
+                        if ($aktiv === true) {
+                            $konfiguratoren[(int) $visualizationID] = true; // eindeutig
                         }
-                        $result = @NC_PushNotification($w['InstanceID'], (int) $visualizationID, $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), $sound);
-                        if ($result !== false) {
-                            $ok = true;
-                        } else {
-                            $this->LogError('pushToAllWebfronts', 'NC_PushNotification an Gerät "' . (string) ($device['Name'] ?? ($device['ID'] ?? '?')) . '" / Konfigurator ' . $visualizationID . ' (Notification-Control-Instanz ' . $w['InstanceID'] . ') fehlgeschlagen.');
-                        }
+                    }
+                }
+                $ok = false;
+                foreach (array_keys($konfiguratoren) as $visualizationID) {
+                    $result = @NC_PushNotification($w['InstanceID'], $visualizationID, $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), $sound);
+                    if ($result !== false) {
+                        $ok = true;
+                    } else {
+                        $this->LogError('pushToAllWebfronts', 'NC_PushNotification an Konfigurator ' . $visualizationID . ' (Notification-Control-Instanz ' . $w['InstanceID'] . ') fehlgeschlagen.');
                     }
                 }
             } else {

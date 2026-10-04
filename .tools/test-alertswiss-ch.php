@@ -286,5 +286,47 @@ check('Identifier mit Komma darin -- letztes Feld bleibt maßgeblich (Regex vera
 check('leerer String -> null', $ts('') === null);
 check('kein ISO-Zeitstempel am Ende -> null', $ts('info@alertswiss.ch,TEST-333,irgendwas') === null);
 
+echo "\n== Flächige vs. örtliche Meldungen (Praxis-Wunsch baslerleckerli 04.10.2026) ==\n";
+$ring = fn (float $lat0, float $lat1, float $lon0, float $lon1) => [[(string) $lat0, (string) $lon0], [(string) $lat0, (string) $lon1], [(string) $lat1, (string) $lon1], [(string) $lat1, (string) $lon0]];
+$grossFlaeche = ['identifier' => 'G-1', 'event' => 'Trockenheit', 'severity' => 'moderate', 'reference' => '',
+    'areas' => [['description' => ['description' => 'Gesamter Kanton Test'], 'polygons' => [['coordinates' => $ring(46.40, 46.60, 7.40, 7.80)]], 'circles' => []]]];
+$kleinFlaeche = ['identifier' => 'K-1', 'event' => 'Fels- und Bergsturz', 'severity' => 'moderate', 'reference' => '',
+    'areas' => [['description' => ['description' => 'Ortschaft'], 'polygons' => [['coordinates' => $ring(46.60, 46.63, 7.55, 7.58)]], 'circles' => []]]];
+$kreisKlein = ['identifier' => 'C-1', 'event' => 'Anderes Ereignis', 'severity' => 'minor', 'reference' => '',
+    'areas' => [['description' => ['description' => 'Strasse'], 'polygons' => [], 'circles' => [['centerPosition' => ['46.627', '7.6'], 'radius' => '0.3']]]]];
+$kreisGross = ['identifier' => 'C-2', 'event' => 'Alarm', 'severity' => 'moderate', 'reference' => '',
+    'areas' => [['description' => ['description' => 'Grossraum'], 'polygons' => [], 'circles' => [['centerPosition' => ['46.5', '7.6'], 'radius' => '20']]]]];
+$parsed = callPrivate($hub, 'parseAlertSwissJson', [['alerts' => [$grossFlaeche, $kleinFlaeche, $kreisKlein, $kreisGross, $landesweit]]]);
+$byId2 = [];
+foreach ($parsed as $w) {
+    $byId2[$w['identifier']] = $w;
+}
+check('grosses Polygon (ca. 22 x 34 km) ist flächig -> insideOnly', ($byId2['alertswiss-G-1']['insideOnly'] ?? null) === true);
+check('kleines Polygon (ca. 3 km) ist örtlich -> kein insideOnly', ($byId2['alertswiss-K-1']['insideOnly'] ?? null) === false);
+check('kleiner Kreis (300 m) ist örtlich', ($byId2['alertswiss-C-1']['insideOnly'] ?? null) === false);
+check('grosser Kreis (20 km Radius) ist flächig', ($byId2['alertswiss-C-2']['insideOnly'] ?? null) === true);
+check('Landesweit-Näherungskreis zählt NICHT als flächig (behält den Umkreis)', ($byId2['alertswiss-X-4']['insideOnly'] ?? null) === false);
+check('Hüllbox-Diagonale ohne Geometrie ist 0', callPrivate($hub, 'geometryDiagonalKm', [[], []]) === 0.0);
+
+echo "\n== Abgleich: flächige Meldung nur bei Standort IN der Fläche ==\n";
+function standort(string $name, float $lat, float $lon, float $radius): array
+{
+    return ['Name' => $name, 'Ort' => '', 'Lat' => $lat, 'Lon' => $lon, 'RadiusKm' => $radius, 'MinSeverity' => 1, 'Aktiv' => true, 'PushZielFilter' => ''];
+}
+$aktiv = function (array $standorte, array $warnungen) {
+    $h = new WarnHub();
+    $h->Create();
+    $h->SetProp('PushAktiv', false);
+    $h->SetProp('Standorte', json_encode($standorte));
+    return callPrivate($h, 'processWarnings', [$warnungen])['activeCount'];
+};
+$gross = [$byId2['alertswiss-G-1']];
+$klein = [$byId2['alertswiss-C-1']];
+check('Standort IN der grossen Fläche -> Treffer', $aktiv([standort('Drin', 46.50, 7.60, 5.0)], $gross) === 1);
+check('Standort 3 km ausserhalb der grossen Fläche, Umkreis 10 km -> KEIN Treffer (der Nachbarkanton-Fall)', $aktiv([standort('Nachbar', 46.627, 7.60, 10.0)], $gross) === 0);
+check('dieselbe Lage, aber örtliche Meldung 0,3 km entfernt, Umkreis 10 km -> Treffer (Umkreis gilt weiter)', $aktiv([standort('Nachbar', 46.627, 7.60, 10.0)], $klein) === 1);
+check('örtliche Meldung ausserhalb des Umkreises -> kein Treffer', $aktiv([standort('Weit', 46.50, 7.60, 5.0)], $klein) === 0);
+check('drei Standorte, ein Nachbarkanton-Standort: nur die beiden innerhalb melden', $aktiv([standort('A', 46.50, 7.60, 10.0), standort('B', 46.45, 7.50, 10.0), standort('C', 46.627, 7.60, 10.0)], $gross) === 2);
+
 echo "\n" . ($failures === 0 ? "Alle $checks Prüfungen bestanden." : "$failures von $checks Prüfungen FEHLGESCHLAGEN.") . "\n";
 exit($failures === 0 ? 0 : 1);
