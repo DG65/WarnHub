@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.17.2';
-    private const NEWS_VERSION = '1.17.2';
+    private const DOC_VERSION = '1.17.3';
+    private const NEWS_VERSION = '1.17.3';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -1985,7 +1985,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• NEU: Notification Control als sechster Push-Kanal -- erreicht Geräte, die NUR über die IPSView-App registriert sind und bei KEINER WebFront- oder Kachel-Visualisierung-Instanz als Konfigurator eingetragen sind (WFC_PushNotification/VISU_PostNotificationEx erreichen so ein Gerät strukturell nie, unabhängig davon, welche WebFront-Zeile aktiviert ist). Einfach "🔎 Push-Ziele suchen" erneut klicken, eine vorhandene Notification-Control-Instanz wird automatisch gefunden. Praxis-Fund tomfes, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix Notification Control: die Suche fand die Instanz bei manchen Systemen nicht, obwohl sie unter "Kern-Instanzen" vorhanden ist. Sie prüft jetzt zusätzlich über Modulname/Präfix "NC" und verwechselt das Store-Modul "Notification" nicht mehr mit der Kerninstanz. Praxis-Fund tomfes, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Alertswiss: flächige Meldungen (kantonal/regional, z. B. "Gesamter Kanton Solothurn", Waldbrandgefahr, Feuerverbot) gelten jetzt nur noch für Standorte, die IN der Fläche liegen -- vorher bekam ein Standort in Basel auch die Solothurner Kantonsmeldung, nur weil der Kanton in Umkreisnähe beginnt. Örtliche Meldungen (Fels-/Bergsturz, Strassensperrung, Grossveranstaltung) gelten weiterhin im eingestellten Umkreis. Anfrage baslerleckerli, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix Notification Control: jedes Gerät bekam die Benachrichtigung so oft, wie Geräte denselben Konfigurator teilen -- jetzt genau einmal je Konfigurator. Rückmeldung baslerleckerli, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix Notification Control: ein Gerät, das bei mehreren Konfiguratoren aktiv ist, bekam die Benachrichtigung je Konfigurator einmal (bei einem Anwender 3-4 Kopien je Meldung). Jetzt werden so wenige Konfiguratoren angestoßen, dass jedes Gerät genau einmal erreicht wird; schlägt einer fehl, springt ein anderer ein. Rückmeldung baslerleckerli, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -6538,15 +6538,20 @@ HTML;
                 // damit u. a. IPSView-only-Geräte ab, die bei keiner
                 // WebFront-/Kachel-Instanz als Konfigurator eingetragen sind
                 // (Praxis-Fund tomfes, Symcon-Forum, 01.10.2026).
-                // Pro EINDEUTIGEM aktiven Konfigurator genau EIN Aufruf: wie
-                // WFC_PushNotification gilt ein Push an einen Konfigurator allen
-                // seinen Geräten gleichzeitig -- ein Aufruf je Gerät UND
-                // Konfigurator (so in 1.17.0/1.17.1) schickte jedem Gerät so
-                // viele Kopien, wie Geräte denselben Konfigurator teilen
-                // (Rückmeldung baslerleckerli, Symcon-Forum, 04.10.2026:
-                // "Geräte haben quasi dauer-alarmiert"). $ok zählt diese EINE
-                // Zeile als "funktioniert", sobald mindestens EIN Konfigurator
-                // erreicht wurde (1 Zeile = 1 Ziel in "X von Y gesendet").
+                // Jedes Gerät soll die Benachrichtigung genau EINMAL bekommen. Ein
+                // Push an einen Konfigurator geht wie bei WFC_PushNotification an
+                // ALLE seine Geräte -- ist ein Gerät bei mehreren Konfiguratoren
+                // aktiv, bekäme es bei einem Aufruf je Konfigurator (so in
+                // 1.17.0-1.17.2) jedes Mal eine Kopie (Rückmeldung baslerleckerli,
+                // Symcon-Forum, 05.10.2026: je Meldung 3-4 Kopien, genau die Zahl
+                // der aktiven Konfiguratoren seiner Geräte). Deshalb so wenige
+                // Konfiguratoren wie nötig anstoßen, bis jedes Gerät erreicht ist
+                // (Greedy: der Konfigurator mit den meisten noch nicht erreichten
+                // Geräten zuerst, bei Gleichstand die kleinste ID). Schlägt ein
+                // Aufruf fehl, bleiben seine Geräte offen und ein anderer
+                // Konfigurator springt ein. $ok zählt diese EINE Zeile als
+                // "funktioniert", sobald mindestens EIN Konfigurator erreicht
+                // wurde (1 Zeile = 1 Ziel in "X von Y gesendet").
                 if (!function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')) {
                     $this->LogError('pushToAllWebfronts', 'NC_GetDevices/NC_PushNotification sind nicht verfügbar (keine Notification-Control-Instanz installiert).');
                     continue;
@@ -6556,24 +6561,48 @@ HTML;
                     $this->LogError('pushToAllWebfronts', 'NC_GetDevices lieferte keine Geräteliste für Instanz ' . $w['InstanceID'] . '.');
                     continue;
                 }
-                $konfiguratoren = [];
-                foreach ($devices as $device) {
+                $aktiveJeGeraet = [];
+                foreach ($devices as $deviceIndex => $device) {
                     if (!is_array($device) || !is_array($device['Visualizations'] ?? null)) {
                         continue;
                     }
                     foreach ($device['Visualizations'] as $visualizationID => $aktiv) {
                         if ($aktiv === true) {
-                            $konfiguratoren[(int) $visualizationID] = true; // eindeutig
+                            $aktiveJeGeraet[$deviceIndex][] = (int) $visualizationID;
                         }
                     }
                 }
+                $offeneGeraete = array_keys($aktiveJeGeraet);
+                $versucht = [];
                 $ok = false;
-                foreach (array_keys($konfiguratoren) as $visualizationID) {
-                    $result = @NC_PushNotification($w['InstanceID'], $visualizationID, $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), $sound);
+                while (count($offeneGeraete) > 0) {
+                    $abdeckung = [];
+                    foreach ($offeneGeraete as $deviceIndex) {
+                        foreach ($aktiveJeGeraet[$deviceIndex] as $visualizationID) {
+                            if (!isset($versucht[$visualizationID])) {
+                                $abdeckung[$visualizationID] = ($abdeckung[$visualizationID] ?? 0) + 1;
+                            }
+                        }
+                    }
+                    if (count($abdeckung) === 0) {
+                        break; // übrige Geräte nur noch über bereits fehlgeschlagene Konfiguratoren erreichbar
+                    }
+                    ksort($abdeckung); // bei Gleichstand gewinnt die kleinste ID
+                    $beste = null;
+                    $besteAnzahl = 0;
+                    foreach ($abdeckung as $visualizationID => $anzahl) {
+                        if ($anzahl > $besteAnzahl) {
+                            $beste = $visualizationID;
+                            $besteAnzahl = $anzahl;
+                        }
+                    }
+                    $versucht[$beste] = true;
+                    $result = @NC_PushNotification($w['InstanceID'], $beste, $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), $sound);
                     if ($result !== false) {
                         $ok = true;
+                        $offeneGeraete = array_values(array_filter($offeneGeraete, fn ($deviceIndex) => !in_array($beste, $aktiveJeGeraet[$deviceIndex], true)));
                     } else {
-                        $this->LogError('pushToAllWebfronts', 'NC_PushNotification an Konfigurator ' . $visualizationID . ' (Notification-Control-Instanz ' . $w['InstanceID'] . ') fehlgeschlagen.');
+                        $this->LogError('pushToAllWebfronts', 'NC_PushNotification an Konfigurator ' . $beste . ' (Notification-Control-Instanz ' . $w['InstanceID'] . ') fehlgeschlagen.');
                     }
                 }
             } else {

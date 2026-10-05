@@ -240,9 +240,9 @@ $sent = callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'a
 check('genau EINE Zeile zählt als gesendet (1 Notification-Control-Ziel, nicht 1 je Gerät/Konfigurator)', $sent === 1);
 check('Gerät #1: sein EINER aktiver Konfigurator (58070) wurde als Visualisierungs-ID angestoßen', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'notification' && $c[2] === 58070)) === 1);
 check('Gerät #2 (sein einziger Konfigurator ist inaktiv) wurde NICHT angestoßen', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[0] === 'notification' && $c[2] === 58070)) === 1); // nur von Gerät #1, nicht doppelt
-check('Gerät #5: ALLE VIER aktiven Konfiguratoren wurden einzeln angestoßen (54409, 42569, 16508, 54810)', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => in_array($c[2], [54409, 42569, 16508, 54810], true))) === 4);
-check('Gerät #5: der inaktive Konfigurator (43734) wurde NICHT angestoßen', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[2] === 43734)) === 0);
-check('insgesamt 5 Push-Versuche (1 + 0 + 4), NICHT 3 (eine pro Gerät)', count($GLOBALS['whub_test_pushCalls']) === 5);
+check('Gerät #5 (vier aktive Konfiguratoren) bekommt genau EINEN Push, nicht vier (Rückmeldung baslerleckerli 05.10.2026)', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => in_array($c[2], [54409, 42569, 16508, 54810], true))) === 1);
+check('der inaktive Konfigurator (43734) wurde NICHT angestoßen', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[2] === 43734)) === 0);
+check('insgesamt 2 Push-Versuche (Gerät #1 über 58070, Gerät #5 über einen seiner Konfiguratoren)', count($GLOBALS['whub_test_pushCalls']) === 2);
 check('NC_PushNotification bekommt die Notification-Control-Instanz-ID als ersten Parameter', $GLOBALS['whub_test_pushCalls'][0][1] === 34698);
 check('Titel/Text werden wie bei WFC_PushNotification auf 32/256 Byte gekürzt übergeben', mb_strlen($GLOBALS['whub_test_pushCalls'][0][3]) <= 32 && mb_strlen($GLOBALS['whub_test_pushCalls'][0][4]) <= 256);
 check('Sound wird durchgereicht', $GLOBALS['whub_test_pushCalls'][0][5] === 'alarm');
@@ -289,7 +289,7 @@ $GLOBALS['whub_test_ncDevices'][34698] = false;
 $sentFalse = callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
 check('Nicht-Array-Antwort -> kein Fehler, Zeile zählt nicht als gesendet', $sentFalse === 0 && count($GLOBALS['whub_test_pushCalls']) === 0);
 
-echo "\n== Mehrere Geräte teilen einen Konfigurator -- EIN Push je eindeutigem Konfigurator (Rückmeldung baslerleckerli 04.10.2026) ==\n";
+echo "\n== Mehrere Geräte teilen einen Konfigurator -- so wenige Konfiguratoren wie nötig (Rückmeldung baslerleckerli) ==\n";
 $GLOBALS['whub_test_pushCalls'] = [];
 $GLOBALS['whub_test_ncPushResults'] = [];
 $GLOBALS['whub_test_ncDevices'][34698] = [
@@ -299,7 +299,50 @@ $GLOBALS['whub_test_ncDevices'][34698] = [
 ];
 $sent = callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
 check('Konfigurator 54409 (bei DREI Geräten aktiv) wird nur EINMAL angestoßen, nicht dreimal', count(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => $c[2] === 54409)) === 1);
-check('insgesamt genau 2 Aufrufe (54409 und 42569), kein Aufruf für den inaktiven 43734', count($GLOBALS['whub_test_pushCalls']) === 2 && $sent === 1);
+check('genau EIN Aufruf (54409 erreicht alle drei Geräte, 42569 wäre überflüssig), kein Aufruf für den inaktiven 43734', count($GLOBALS['whub_test_pushCalls']) === 1 && $sent === 1);
+
+echo "\n== Komplette echte Geräteliste von Dietmars System (01.10.2026, 12 Geräte, anonymisiert) -- jedes Gerät genau einmal ==\n";
+$GLOBALS['whub_test_pushCalls'] = [];
+$GLOBALS['whub_test_ncPushResults'] = [];
+$GLOBALS['whub_test_ncDevices'][34698] = [
+    ['ID' => 1, 'Name' => 'a', 'Modified' => 1, 'Visualizations' => [58070 => true]],
+    ['ID' => 2, 'Name' => 'b', 'Modified' => 1, 'Visualizations' => [58070 => false]],
+    ['ID' => 3, 'Name' => 'c', 'Modified' => 1, 'Visualizations' => [16493 => true]],
+    ['ID' => 4, 'Name' => 'd', 'Modified' => 1, 'Visualizations' => [41422 => true]],
+    ['ID' => 5, 'Name' => 'e', 'Modified' => 1, 'Visualizations' => [54409 => true, 42569 => true, 16508 => true, 43734 => false, 54810 => true]],
+    ['ID' => 6, 'Name' => 'f', 'Modified' => 1, 'Visualizations' => [43734 => true]],
+    ['ID' => 7, 'Name' => 'g', 'Modified' => 1, 'Visualizations' => [42569 => false]],
+    ['ID' => 8, 'Name' => 'h', 'Modified' => 1, 'Visualizations' => [14338 => true]],
+    ['ID' => 9, 'Name' => 'i', 'Modified' => 1, 'Visualizations' => [14338 => true]],
+    ['ID' => 10, 'Name' => 'j', 'Modified' => 1, 'Visualizations' => [42569 => false]],
+    ['ID' => 11, 'Name' => 'k', 'Modified' => 1, 'Visualizations' => [54409 => true]],
+    ['ID' => 12, 'Name' => 'l', 'Modified' => 1, 'Visualizations' => [54409 => true]],
+];
+callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
+$ids = array_map(fn ($c) => $c[2], $GLOBALS['whub_test_pushCalls']);
+sort($ids);
+check('Konfigurator 54409 deckt Gerät 5, 11 und 12 ab, 14338 die Geräte 8 und 9 -> 6 Aufrufe statt 12 bzw. 8', $ids === [14338, 16493, 41422, 43734, 54409, 58070]);
+$abgedeckt = [];
+foreach ($GLOBALS['whub_test_ncDevices'][34698] as $g) {
+    foreach ($g['Visualizations'] as $vid => $aktiv) {
+        if ($aktiv === true && in_array($vid, $ids, true)) {
+            $abgedeckt[$g['ID']] = ($abgedeckt[$g['ID']] ?? 0) + 1;
+        }
+    }
+}
+check('jedes der 9 Geräte mit aktivem Konfigurator wird erreicht', count($abgedeckt) === 9);
+check('jedes dieser Geräte wird GENAU EINMAL erreicht (keine Kopien)', count(array_filter($abgedeckt, fn ($n) => $n !== 1)) === 0);
+
+echo "\n== Ausweichen: der gewählte Konfigurator schlägt fehl, ein anderer erreicht das Gerät trotzdem ==\n";
+$GLOBALS['whub_test_pushCalls'] = [];
+$GLOBALS['whub_test_ncPushResults'] = [34698 => [100 => false]];
+$GLOBALS['whub_test_ncDevices'][34698] = [
+    ['ID' => 1, 'Name' => 'x', 'Modified' => 1, 'Visualizations' => [100 => true, 200 => true]],
+];
+$sent = callPrivate(neuerHub([$row]), 'pushToAllWebfronts', ['Titel', 'Text', 'alarm']);
+$ids = array_map(fn ($c) => $c[2], $GLOBALS['whub_test_pushCalls']);
+check('100 (kleinste ID) schlägt fehl -> 200 springt ein, Gerät wird erreicht', $ids === [100, 200] && $sent === 1);
+$GLOBALS['whub_test_ncPushResults'] = [];
 
 echo "\n== Funktionen auf dem System nicht verfügbar (kein Notification-Control-Modul installiert) ==\n";
 check('pushToAllWebfronts() prüft function_exists für NC_GetDevices/NC_PushNotification im Quellcode', str_contains(file_get_contents(__DIR__ . '/../WarnHub/module.php'), "function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')"));

@@ -2,6 +2,27 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.17.3 (2026-10-05)
+
+- Fix Notification Control, zweiter Anlauf: 1.17.2 rief je eindeutigem
+  Konfigurator einmal auf. Ein Gerät, das bei MEHREREN Konfiguratoren aktiv
+  ist (typisch: dasselbe Handy bei Kachel-Visualisierung, IPSView und
+  WebFront), bekam so weiter je Konfigurator eine Kopie -- Rückmeldung
+  baslerleckerli, Symcon-Forum, 05.10.2026: je Meldung 3 Kopien auf der
+  Symcon-App, 3 auf Visu und 4 auf IPSView, genau die Zahl der aktiven
+  Konfiguratoren seiner Geräte. Jetzt werden so wenige Konfiguratoren
+  angestoßen wie nötig, damit jedes Gerät mindestens einmal erreicht wird
+  (Greedy: zuerst der Konfigurator mit den meisten noch nicht erreichten
+  Geräten, bei Gleichstand die kleinste ID). Schlägt ein Aufruf fehl,
+  springt ein anderer Konfigurator für die offenen Geräte ein. Bei der
+  echten Geräteliste von Dietmars System (12 Geräte, 9 davon aktiv) sind
+  das 6 Aufrufe statt 12, und jedes Gerät wird genau einmal erreicht.
+  Wie bei 1.17.2 stützt sich das darauf, dass ein Push an einen
+  Konfigurator allen seinen Geräten gilt (Verhalten von
+  `WFC_PushNotification`, Geräte-ID als Zieladresse lieferte `false`); die
+  tatsächliche Zustellzahl je Gerät ist nicht gemessen. Test:
+  `.tools/test-notification-control-push.php` auf 30 Prüfungen.
+
 ## 1.17.2 (2026-10-04)
 
 - Alertswiss: **flächige Meldungen gelten nur noch für Standorte IN der
