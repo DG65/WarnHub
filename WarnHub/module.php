@@ -3133,10 +3133,12 @@ class WarnHub extends IPSModule
     private function LogError(string $context, string $message): void
     {
         $this->SendDebug($context, $message, 0);
-        // $this->LogMessage() statt IPS_LogMessage() -- liefert automatisch
-        // den korrekten Instanz-Kontext (Symcon-Store-Review-Hinweis,
-        // 07.09.2026), IPS_LogMessage() bräuchte den Bezug manuell als
-        // Sender-String nachgebaut.
+        // Die Instanzmethode statt der globalen Log-Funktion -- liefert
+        // automatisch den korrekten Instanz-Kontext (Symcon-Store-Review-
+        // Hinweis, 07.09.2026 und 12.10.2026, SUITE.md Store-Review-Checkliste
+        // Punkt 15); die globale Funktion bräuchte den Bezug manuell als
+        // Sender-String nachgebaut. Der Funktionsname steht hier bewusst nicht
+        // im Klartext: .tools/test-form.php prüft module.php auf sein Fehlen.
         $this->LogMessage($context . ': ' . $message, KL_ERROR);
     }
 

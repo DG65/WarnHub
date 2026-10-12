@@ -475,5 +475,9 @@ check('Deutschland-Panel ohne HeimLandCode zugeklappt', ($dePanelUn['expanded'] 
 check('Österreich-Panel ohne HeimLandCode zugeklappt', ($atPanelUn['expanded'] ?? null) === false);
 check('Schweiz-Panel ohne HeimLandCode zugeklappt', ($chPanelUn['expanded'] ?? null) === false);
 
+echo "\n== Store-Review-Checkliste Punkt 15: Logging nur über die Instanzmethode ==\n";
+$moduleSource = (string) file_get_contents(__DIR__ . '/../WarnHub/module.php');
+check('module.php ruft IPS_LogMessage( nirgends auf (nur $this->LogMessage, Symcon-Store-Review 12.10.2026)', strpos($moduleSource, 'IPS_LogMessage(') === false && strpos($moduleSource, 'IPS_LogMessage ') === false);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
