@@ -2,6 +2,40 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.18.0 (2026-10-17)
+
+- Neu: **Alarmtyp "💨 Rauch/Gefahrstoffe"** und **Aktionstyp "Variable auf
+  Wert setzen"** (Praxis-Wunsch mike256, Symcon-Forum, 17.10.2026: bei einer
+  NINA-Meldung wie "Rauchgase, Fenster schließen" die Stufe der
+  Wohnraumlüftung auf 0 setzen). Bisher gab es dafür keine Kategorie:
+  Rauch-Meldungen landeten in "sonstige", und "keine Kategorie angekreuzt"
+  heißt "jede Warnung" -- die Lüftung wäre bei jedem Sturm ausgegangen.
+  - Neues Kästchen "💨 Rauch/Gefahrstoffe" bei den Schutzaktionen und der
+    Fenster-/Tür-Überwachung, plus eigener Test-Knopf. Erkannt wird über
+    Stichwörter in Meldungsart und Überschrift: rauch (deckt Rauchgase,
+    Rauchentwicklung), brandgas, gefahrstoff, schadstoff, gasaustritt,
+    gaswolke, chemieunfall, chemikalien, giftig. "Brand"/"Großbrand" allein
+    bewusst nicht -- ein fernes Feuer ohne Rauchgefahr soll z. B. keine Lüftung
+    abschalten. Das Stichwort steht in der Reihenfolge VOR den übrigen,
+    weil das Schnee-Stichwort "eis" in Wörtern wie "Hinweis" steckt und eine
+    Rauch-Meldung sonst wegnähme. Die Stichwörter sind aus dem Beispiel des
+    Anwenders und allgemeinem Meldungsvokabular gewählt, NICHT an echten
+    NINA-Meldungen geprüft (zum Zeitpunkt lag keine passende vor) --
+    Rückmeldung mit echten Überschriften willkommen.
+  - Aktionstyp "Variable auf Wert setzen (z. B. Lüftung aus)": Ziel-Variable
+    plus Zielwert, sonst nichts. Bisher ging das nur über den Typ
+    "Raffstore/Markise/Garagentor" oder ein Skript. WarnHub stellt den Wert
+    nach einer Entwarnung NICHT zurück (wie bei allen Schutzaktionen, außer
+    der Wetterstations-Rückstellung).
+  - Gespeicherte Zeilen aus älteren Versionen haben kein Rauch-Kästchen und
+    gelten dort als nicht angekreuzt -- bestehendes Verhalten bleibt gleich.
+- Intern: `IPS_LogMessage` kommt im Quelltext nicht mehr vor, auch nicht im
+  Kommentar (SUITE.md Store-Review-Checkliste Punkt 15, Prüfung in
+  `.tools/test-form.php`); der Code nutzte schon `$this->LogMessage()`.
+- Test: neuer Prüfstand `.tools/test-kategorie-rauch.php` (16 Prüfungen:
+  Klassifikation, Ende zu Ende "Lüftung auf 0 nur bei Rauch");
+  `.tools/test-form.php` auf 99 Prüfungen.
+
 ## 1.17.3 (2026-10-05)
 
 - Fix Notification Control, zweiter Anlauf: 1.17.2 rief je eindeutigem

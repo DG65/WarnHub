@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.17.3';
-    private const NEWS_VERSION = '1.17.3';
+    private const DOC_VERSION = '1.18.0';
+    private const NEWS_VERSION = '1.18.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -547,6 +547,13 @@ class WarnHub extends IPSModule
     // Kategorie-Zuordnung fuer Schutzaktionen: Stichwortsuche im event/headline-Text
     // (Deutsch, DWD/MoWaS-Vokabular -- siehe reale Beispiele in .tools/test-geo.php).
     private const CATEGORY_KEYWORDS = [
+        // Rauch/Gefahrstoffe ZUERST: das schnee-Stichwort 'eis' steckt in
+        // Wörtern wie "Hinweis" und würde eine solche Meldung sonst
+        // wegnehmen. Nur spezifische Stichwörter -- "Brand"/"Großbrand" allein
+        // bewusst nicht (ein fernes Feuer ohne Rauchgefahr soll z. B. keine
+        // Lüftung abschalten). Praxis-Wunsch mike256, Symcon-Forum, 17.10.2026
+        // ("Rauchgase, Fenster schließen").
+        'rauch'      => ['rauch', 'brandgas', 'gefahrstoff', 'schadstoff', 'gasaustritt', 'gaswolke', 'chemieunfall', 'chemikalien', 'giftig'],
         'sturm'      => ['sturm', 'orkan', 'böen', 'boeen', 'windböen', 'windboeen'],
         'hagel'      => ['hagel'],
         'starkregen' => ['starkregen', 'dauerregen', 'hochwasser', 'flut', 'überflutung', 'ueberflutung'],
@@ -569,6 +576,7 @@ class WarnHub extends IPSModule
         'gewitter'   => ['KatGewitter', '⚡ Gewitter'],
         'schnee'     => ['KatSchnee', '❄️ Schnee'],
         'hitze'      => ['KatHitze', '🥵 Hitze'],
+        'rauch'      => ['KatRauch', '💨 Rauch/Gefahrstoffe'],
     ];
 
     // ----------------------------------------------------------------
@@ -1140,6 +1148,7 @@ class WarnHub extends IPSModule
                         'caption' => 'Felder je Aktionstyp',
                         'items' => [
                             ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-/Markisen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren/eingefahren, bitte am eigenen Aktor prüfen).'],
+                            ['type' => 'Label', 'caption' => 'Variable auf Wert setzen: Ziel-Variable + Zielwert, sonst nichts -- für alles, was einfach auf einen Wert gehört, z. B. die Stufe der Wohnraumlüftung auf 0, wenn Rauchgase gemeldet werden (Kategorie "💨 Rauch/Gefahrstoffe" ankreuzen). WarnHub stellt den Wert nach einer Entwarnung NICHT zurück -- das bleibt Nutzerhandeln (oder ein eigenes Skript).'],
                             ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern). 🛑 Beachte unbedingt den Sicherheitshinweis ganz oben im Panel -- Einklemmgefahr, keine Hinderniserkennung.'],
                             ['type' => 'Label', 'caption' => 'Kofferraum/Heckklappe schließen: WICHTIG -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Deshalb zusätzlich zur Ziel-Variable zwingend eine Zustands-Variable angeben, die aktuell offene Klappen namentlich nennt (z. B. Tessies "Tür-/Klappenstatus") -- ausgelöst wird nur, wenn "Kofferraum" oder "Heckklappe" darin vorkommt, sonst passiert nichts. Ohne gültige Zustands-Variable feuert die Aktion GAR NICHT (Sicherheitssperre, kein Raten). 🛑 Beachte unbedingt den Sicherheitshinweis ganz oben im Panel -- Einklemmgefahr, keine Hinderniserkennung.'],
                             ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
@@ -1375,6 +1384,7 @@ class WarnHub extends IPSModule
             ['caption' => 'Fenster schließen (z. B. Tesla)', 'value' => 'fenster'],
             ['caption' => 'Kofferraum/Heckklappe schließen (nur mit Zustands-Variable)', 'value' => 'kofferraum'],
             ['caption' => 'Akustischer Alarm', 'value' => 'sirene'],
+            ['caption' => 'Variable auf Wert setzen (z. B. Lüftung aus)', 'value' => 'wert'],
             ['caption' => 'Skript ausführen', 'value' => 'skript'],
         ];
     }
@@ -1986,6 +1996,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix Notification Control: die Suche fand die Instanz bei manchen Systemen nicht, obwohl sie unter "Kern-Instanzen" vorhanden ist. Sie prüft jetzt zusätzlich über Modulname/Präfix "NC" und verwechselt das Store-Modul "Notification" nicht mehr mit der Kerninstanz. Praxis-Fund tomfes, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Alertswiss: flächige Meldungen (kantonal/regional, z. B. "Gesamter Kanton Solothurn", Waldbrandgefahr, Feuerverbot) gelten jetzt nur noch für Standorte, die IN der Fläche liegen -- vorher bekam ein Standort in Basel auch die Solothurner Kantonsmeldung, nur weil der Kanton in Umkreisnähe beginnt. Örtliche Meldungen (Fels-/Bergsturz, Strassensperrung, Grossveranstaltung) gelten weiterhin im eingestellten Umkreis. Anfrage baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix Notification Control: ein Gerät, das bei mehreren Konfiguratoren aktiv ist, bekam die Benachrichtigung je Konfigurator einmal (bei einem Anwender 3-4 Kopien je Meldung). Jetzt werden so wenige Konfiguratoren angestoßen, dass jedes Gerät genau einmal erreicht wird; schlägt einer fehl, springt ein anderer ein. Rückmeldung baslerleckerli, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• NEU: Alarmtyp "💨 Rauch/Gefahrstoffe" für Schutzaktionen und Fenster-/Tür-Überwachung (erkennt Meldungen wie "Rauchgase", "Gefahrstoff", "Gasaustritt") sowie der Aktionstyp "Variable auf Wert setzen" -- z. B. die Stufe der Wohnraumlüftung auf 0, sobald Rauchgase gemeldet werden. Vorher landeten solche Meldungen in keiner Kategorie, und ohne angekreuzte Kategorie löst eine Aktion bei JEDER Warnung aus. WarnHub stellt den Wert nach einer Entwarnung nicht zurück. Praxis-Wunsch mike256, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -2558,6 +2569,7 @@ class WarnHub extends IPSModule
                 'KatGewitter' => false,
                 'KatSchnee' => false,
                 'KatHitze' => false,
+                'KatRauch' => false,
                 'MinSeverity' => 3,
                 'StandortFilter' => '',
                 'VariableID' => $variableID,
@@ -6702,7 +6714,7 @@ HTML;
                 return;
             }
 
-            // raffstore / markise / garage: Zielwert exakt wie vom Nutzer angegeben setzen
+            // raffstore / markise / garage / wert: Zielwert exakt wie vom Nutzer angegeben setzen
             $ok = @RequestAction($action['ZielVariableID'], $action['ZielWert']);
             if (!$ok) {
                 $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '": RequestAction fehlgeschlagen.');

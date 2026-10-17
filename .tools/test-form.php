@@ -263,7 +263,9 @@ foreach ($schutzaktionenPanel['items'] ?? [] as $item) {
 }
 check('eine Zeile mit Test-Schaltflächen je Alarmtyp steht im Schutzaktionen-Panel', $testRow !== null);
 $testCaptions = array_column($testRow['items'] ?? [], 'caption');
-check('"testen"-Schaltfläche für jeden der 6 Alarmtypen vorhanden', count(array_filter($testCaptions, fn ($c) => str_contains($c, 'testen'))) === 6);
+check('"testen"-Schaltfläche für jeden der 7 Alarmtypen vorhanden (inkl. Rauch/Gefahrstoffe)', count(array_filter($testCaptions, fn ($c) => str_contains($c, 'testen'))) === 7);
+check('Schutzaktionen-Typ "Variable auf Wert setzen" wählbar', in_array('wert', array_column(findByName($decoded['elements'], 'Schutzaktionen')['columns'][2]['edit']['options'] ?? [], 'value'), true));
+check('Schutzaktionen-Liste hat die Spalte "💨 Rauch/Gefahrstoffe" (KatRauch)', in_array('KatRauch', array_column(findByName($decoded['elements'], 'Schutzaktionen')['columns'], 'name'), true));
 $testOnClicks = array_column($testRow['items'] ?? [], 'onClick');
 check('jede Schaltfläche ruft WHUB_TestSchutzaktionen mit ihrem eigenen Kategorie-Schlüssel auf', count(array_filter($testOnClicks, fn ($c) => str_contains($c, "WHUB_TestSchutzaktionen(\$id, 'sturm')"))) === 1
     && count(array_filter($testOnClicks, fn ($c) => str_contains($c, "WHUB_TestSchutzaktionen(\$id, 'hagel')"))) === 1);

@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.17.3-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.18.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -130,7 +130,7 @@ kennt anders als die übrigen Typen nur den Versandweg, nicht den Empfänger -- 
 inaktiv angelegt, bis eine Zieladresse eingetragen ist. Aktive Warnungen können optional
 **Schutzaktionen** auslösen --
 z. B. Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Autofenster
-schließen, Kofferraum/Heckklappe schließen (mit zwingender Sicherheitsprüfung gegen ein
+schließen, eine beliebige Variable auf einen Wert setzen (z. B. Lüftung aus bei Rauchgasen), Kofferraum/Heckklappe schließen (mit zwingender Sicherheitsprüfung gegen ein
 versehentliches Öffnen, siehe unten), ein akustisches Signal schalten oder ein eigenes
 Skript ausführen. Jede Schutzaktion feuert nur einmal je Warnung; es gibt bewusst keine
 automatische Rückstellung -- das bleibt Nutzerhandeln. Eine Schutzaktion ohne eigenen
