@@ -2,6 +2,24 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.18.1 (2026-10-23)
+
+- Fix: war **Meteoalarm zusätzlich zu NINA/DWD** aktiv, erschien eine
+  DWD-Warnung für deutsche Standorte zweimal -- einmal deutsch ("Sturmböen",
+  aus NINA/DWD) und einmal englisch ("Gale-Force Gusts", aus dem
+  Meteoalarm-Deutschland-Feed). Der Feed reicht genau die DWD-Warnungen
+  weiter, nur mit englischem Ereignisnamen -- für den Episoden-Schlüssel
+  (Quelle+Ereignis+Standort) also eine zweite Meldung, keine Dublette.
+  Deutschland übernehmen jetzt NINA bzw. die direkte DWD-Anbindung
+  automatisch von Meteoalarm, sobald eine davon aktiv ist -- wie schon
+  Österreich (GeoSphere Austria) und die Schweiz (Alertswiss). Meteoalarm
+  bleibt für Standorte im übrigen Europa unverändert. Live gegen den Feed
+  geprüft: Kreis Osterholz, "gale-force gusts", gültig bis 02:00 UTC =
+  04:00 Uhr MESZ, exakt die Kachel des Anwenders. Praxis-Fund hbraun,
+  Symcon-Forum, 23.10.2026. Die Länderauswahl ist jetzt eine eigene,
+  netzfreie Funktion (`meteoalarmSlugsForStandorte()`) mit Prüfungen in
+  `.tools/test-meteoalarm.php`.
+
 ## 1.18.0 (2026-10-17)
 
 - Neu: **Alarmtyp "💨 Rauch/Gefahrstoffe"** und **Aktionstyp "Variable auf

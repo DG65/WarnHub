@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.18.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.18.1-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -34,7 +34,10 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   39 Länder **inklusive Österreich und Schweiz**, wichtig für mobile Standorte im Ausland.
   Die frei zugänglichen Feeds liefern keine Warnfläche, nur benannte Gebiete -- der Abgleich
   läuft deshalb über einen separaten, im Meldungstext klar gekennzeichneten Namensvergleich
-  statt geometrischem Matching.
+  statt geometrischem Matching. Für Deutschland übernehmen NINA bzw. die direkte
+  DWD-Anbindung automatisch, sobald eine davon aktiv ist (der Meteoalarm-Deutschland-Feed
+  würde dieselben DWD-Warnungen sonst nur englisch ein zweites Mal liefern) -- analog zu
+  GeoSphere Austria und Alertswiss.
 - **GeoSphere Austria** (`warnungen.zamg.at`) -- optional, amtliche Warnungen direkt von der
   österreichischen Wetterbehörde (ZAMG), koordinatengenau statt Namensabgleich. Übernimmt für
   österreichische Standorte automatisch von Meteoalarm, sobald aktiviert (analog dazu, wie die

@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.18.0';
-    private const NEWS_VERSION = '1.18.0';
+    private const DOC_VERSION = '1.18.1';
+    private const NEWS_VERSION = '1.18.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -932,7 +932,7 @@ class WarnHub extends IPSModule
                     'onClick' => $this->rememberPanelOnClick('DatenquellenAllgemein', $expDqAllgemein),
                     'items' => [
                         ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
-                        ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland liefert die direkte DWD-Anbindung unten bereits die präziseren Polygone -- Meteoalarm lohnt sich vor allem für Standorte im europäischen Ausland.'],
+                        ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland übernehmen NINA bzw. die direkte DWD-Anbindung automatisch (präzise Polygone, deutschsprachig): Sobald eine davon aktiv ist, wird der Meteoalarm-Deutschland-Feed nicht mehr abgefragt -- er würde dieselben DWD-Warnungen nur englisch ein zweites Mal liefern. Meteoalarm lohnt sich deshalb vor allem für Standorte im europäischen Ausland.'],
                         ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
                         $this->statusLabelItem('WetterstationStatusLabel', $this->wetterstationStatusLine(
                             $this->ReadPropertyInteger('WetterstationInstanceID'),
@@ -1997,6 +1997,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Alertswiss: flächige Meldungen (kantonal/regional, z. B. "Gesamter Kanton Solothurn", Waldbrandgefahr, Feuerverbot) gelten jetzt nur noch für Standorte, die IN der Fläche liegen -- vorher bekam ein Standort in Basel auch die Solothurner Kantonsmeldung, nur weil der Kanton in Umkreisnähe beginnt. Örtliche Meldungen (Fels-/Bergsturz, Strassensperrung, Grossveranstaltung) gelten weiterhin im eingestellten Umkreis. Anfrage baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix Notification Control: ein Gerät, das bei mehreren Konfiguratoren aktiv ist, bekam die Benachrichtigung je Konfigurator einmal (bei einem Anwender 3-4 Kopien je Meldung). Jetzt werden so wenige Konfiguratoren angestoßen, dass jedes Gerät genau einmal erreicht wird; schlägt einer fehl, springt ein anderer ein. Rückmeldung baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: Alarmtyp "💨 Rauch/Gefahrstoffe" für Schutzaktionen und Fenster-/Tür-Überwachung (erkennt Meldungen wie "Rauchgase", "Gefahrstoff", "Gasaustritt") sowie der Aktionstyp "Variable auf Wert setzen" -- z. B. die Stufe der Wohnraumlüftung auf 0, sobald Rauchgase gemeldet werden. Vorher landeten solche Meldungen in keiner Kategorie, und ohne angekreuzte Kategorie löst eine Aktion bei JEDER Warnung aus. WarnHub stellt den Wert nach einer Entwarnung nicht zurück. Praxis-Wunsch mike256, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix Meteoalarm: war Meteoalarm zusätzlich zu NINA/DWD aktiv, erschien eine DWD-Warnung für deutsche Standorte zweimal -- einmal deutsch ("Sturmböen") und einmal englisch ("Gale-Force Gusts") aus dem Meteoalarm-Deutschland-Feed, der dieselben DWD-Warnungen nur mit englischem Ereignisnamen weiterreicht. Deutschland übernehmen jetzt NINA bzw. die DWD-Anbindung automatisch von Meteoalarm, wie schon Österreich (GeoSphere Austria) und die Schweiz (Alertswiss). Praxis-Fund hbraun, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4100,13 +4101,41 @@ class WarnHub extends IPSModule
      */
     private function fetchMeteoalarm(): array
     {
-        // Ist die direkte GeoSphere-Austria- bzw. Alertswiss-Anbindung aktiv,
-        // übernimmt SIE Österreich bzw. die Schweiz (koordinatengenau, siehe
-        // fetchGeosphereAt()/fetchAlertSwissCh()) -- Meteoalarm liefert dort
-        // nur einen ungenaueren Namensabgleich. Gleiches Prinzip wie "DWD
-        // direkt ersetzt den NINA-'dwd'-Kanal" oben in Poll().
+        $out = [];
+        foreach ($this->meteoalarmSlugsForStandorte() as $slug) {
+            $out = array_merge($out, $this->fetchMeteoalarmCountry($slug));
+        }
+        return $out;
+    }
+
+    /**
+     * Länder-Slugs der Meteoalarm-Feeds, die für die aktiven Standorte
+     * tatsächlich abzufragen sind -- vom HTTP-Abruf getrennt, damit sich die
+     * Länderauswahl ohne Netzzugriff testen lässt (.tools/test-meteoalarm.php).
+     *
+     * Ist für ein Land eine direkte, amtliche Quelle aktiv, übernimmt SIE das
+     * Land, und Meteoalarm wird dort NICHT abgefragt: GeoSphere Austria für
+     * Österreich, Alertswiss für die Schweiz (beide koordinatengenau,
+     * Meteoalarm liefert dort nur den ungenaueren Namensabgleich) und NINA
+     * bzw. die direkte DWD-Anbindung für Deutschland. Gleiches Prinzip wie
+     * "DWD direkt ersetzt den NINA-'dwd'-Kanal" in Poll().
+     *
+     * Deutschland-Fall: der Meteoalarm-Feed "germany" reicht genau die
+     * DWD-Warnungen weiter, die NINA/DWD ohnehin liefern -- nur ENGLISCH
+     * ("gale-force gusts" statt "STURMBÖEN"), also mit anderem Ereignisnamen
+     * und damit für warningEpisodeKey() eine ZWEITE Meldung. Praxis-Fund
+     * hbraun, Symcon-Forum, 23.10.2026: "Sturmböen" und "Gale-Force Gusts"
+     * zugleich in der Kachel, beide "bis 04:00 Uhr". Live gegen den Feed
+     * geprüft: Kreis Osterholz, gale-force gusts, expires 02:00 UTC =
+     * 04:00 Uhr MESZ, exakt die Kachel des Anwenders.
+     *
+     * @return string[]
+     */
+    private function meteoalarmSlugsForStandorte(): array
+    {
         $geosphereAtActive = $this->ReadPropertyBoolean('QuelleGeosphereAt');
         $alertSwissActive = $this->ReadPropertyBoolean('QuelleAlertSwissCh');
+        $germanyCovered = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
 
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
         $slugs = [];
@@ -4117,17 +4146,13 @@ class WarnHub extends IPSModule
             if ($slug === null
                 || ($slug === 'austria' && $geosphereAtActive)
                 || ($slug === 'switzerland' && $alertSwissActive)
+                || ($slug === 'germany' && $germanyCovered)
             ) {
                 continue;
             }
             $slugs[$slug] = true;
         }
-
-        $out = [];
-        foreach (array_keys($slugs) as $slug) {
-            $out = array_merge($out, $this->fetchMeteoalarmCountry($slug));
-        }
-        return $out;
+        return array_keys($slugs);
     }
 
     private function fetchMeteoalarmCountry(string $slug): array

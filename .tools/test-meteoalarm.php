@@ -36,6 +36,10 @@ class IPSModule
     {
         $this->props[$n] ??= $v;
     }
+    public function SetProp($n, $v)
+    {
+        $this->props[$n] = $v;
+    }
     public function ReadPropertyFloat($n)
     {
         return (float) ($this->props[$n] ?? 0);
@@ -263,6 +267,50 @@ check('umgekehrte Substring-Richtung ebenfalls', callPrivate($hub, 'namesOverlap
 check('unterschiedliche Gebiete matchen NICHT (keine geratene Präzision)', callPrivate($hub, 'namesOverlap', [['Hamburg'], ['Berlin']]) === false);
 check('leere Listen matchen nie', callPrivate($hub, 'namesOverlap', [[], ['Berlin']]) === false);
 check('eine von mehreren Kandidaten-Regionen reicht (Standort liefert mehrere Nominatim-Ebenen)', callPrivate($hub, 'namesOverlap', [['Berlin'], ['Deutschland', 'Berlin', 'Mitte']]) === true);
+
+echo "\n== meteoalarmSlugsForStandorte(): Länderauswahl ohne Netzzugriff (Reverse-Geocoding kommt aus dem Cache) ==\n";
+// Praxis-Fund hbraun, Symcon-Forum, 23.10.2026: Meteoalarm zusätzlich zu
+// NINA aktiv -> "Sturmböen" (NINA/DWD) UND "Gale-Force Gusts" (Meteoalarm-
+// Deutschland-Feed, englischer Ereignisname = eigener Episoden-Schlüssel)
+// zugleich in der Kachel. Deutschland übernimmt deshalb NINA bzw. DWD
+// direkt, wie Österreich GeoSphere und die Schweiz Alertswiss.
+function hubMitStandorten(array $laender, array $quellen, array $inaktiv = []): WarnHub
+{
+    $h = new WarnHub();
+    $h->Create();
+    $standorte = [];
+    $cache = [];
+    $i = 0;
+    foreach ($laender as $name => $cc) {
+        $lat = 47.0 + $i;
+        $lon = 7.0 + $i;
+        $i++;
+        $standorte[] = ['Name' => $name, 'Ort' => '', 'Lat' => $lat, 'Lon' => $lon, 'RadiusKm' => 10, 'MinSeverity' => 1, 'Aktiv' => !in_array($name, $inaktiv, true), 'PushZielFilter' => ''];
+        $cache[sprintf('%.1f_%.1f', $lat, $lon)] = ['ts' => time(), 'countryCode' => $cc, 'names' => [$name]];
+    }
+    $h->SetProp('Standorte', json_encode($standorte));
+    $h->WriteAttributeString('ReverseGeoCache', json_encode($cache));
+    foreach (['QuelleNina', 'QuelleDwd', 'QuelleGeosphereAt', 'QuelleAlertSwissCh'] as $p) {
+        $h->SetProp($p, in_array($p, $quellen, true));
+    }
+    return $h;
+}
+$slugs = fn (WarnHub $h) => callPrivate($h, 'meteoalarmSlugsForStandorte');
+
+check('hbrauns Fall: deutscher Standort, NINA aktiv -> Meteoalarm-Deutschland wird NICHT abgefragt', $slugs(hubMitStandorten(['Schwanewede' => 'de'], ['QuelleNina'])) === []);
+check('deutscher Standort, nur DWD direkt aktiv -> ebenfalls nicht', $slugs(hubMitStandorten(['Schwanewede' => 'de'], ['QuelleDwd'])) === []);
+check('deutscher Standort, NINA UND DWD aktiv -> nicht', $slugs(hubMitStandorten(['Schwanewede' => 'de'], ['QuelleNina', 'QuelleDwd'])) === []);
+check('deutscher Standort OHNE NINA/DWD -> Meteoalarm bleibt die einzige deutsche Quelle und wird abgefragt', $slugs(hubMitStandorten(['Schwanewede' => 'de'], [])) === ['germany']);
+check('Deutschland + Frankreich, NINA aktiv -> nur Frankreich (die Deutschland-Regel frisst kein anderes Land)', $slugs(hubMitStandorten(['Zuhause' => 'de', 'Urlaub' => 'fr'], ['QuelleNina'])) === ['france']);
+check('Niederlande, NINA aktiv -> Niederlande bleibt (NINA deckt nur Deutschland ab)', $slugs(hubMitStandorten(['Camping' => 'nl'], ['QuelleNina'])) === ['netherlands']);
+check('Österreich mit GeoSphere -> nicht (bestehende Regel unverändert)', $slugs(hubMitStandorten(['Wien' => 'at'], ['QuelleGeosphereAt'])) === []);
+check('Österreich ohne GeoSphere -> austria (NINA/DWD spielen für Österreich keine Rolle)', $slugs(hubMitStandorten(['Wien' => 'at'], ['QuelleNina', 'QuelleDwd'])) === ['austria']);
+check('Schweiz mit Alertswiss -> nicht (bestehende Regel unverändert)', $slugs(hubMitStandorten(['Basel' => 'ch'], ['QuelleAlertSwissCh'])) === []);
+check('Schweiz ohne Alertswiss -> switzerland', $slugs(hubMitStandorten(['Basel' => 'ch'], ['QuelleNina'])) === ['switzerland']);
+check('Land ohne Meteoalarm-Feed (us) -> nichts', $slugs(hubMitStandorten(['Reise' => 'us'], [])) === []);
+check('inaktiver Standort zählt nicht', $slugs(hubMitStandorten(['Alt' => 'fr'], [], ['Alt'])) === []);
+check('zwei Standorte im selben Land -> der Feed wird nur EINMAL abgefragt', $slugs(hubMitStandorten(['A' => 'fr', 'B' => 'fr'], [])) === ['france']);
+check('D-A-CH komplett mit allen direkten Quellen -> Meteoalarm hat nichts mehr zu tun', $slugs(hubMitStandorten(['D' => 'de', 'A' => 'at', 'CH' => 'ch'], ['QuelleNina', 'QuelleGeosphereAt', 'QuelleAlertSwissCh'])) === []);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
