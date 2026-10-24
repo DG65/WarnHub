@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.18.1-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.18.2-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -37,7 +37,12 @@ WarnHub bündelt amtliche Warnmeldungen aus mehreren, einzeln zuschaltbaren Quel
   statt geometrischem Matching. Für Deutschland übernehmen NINA bzw. die direkte
   DWD-Anbindung automatisch, sobald eine davon aktiv ist (der Meteoalarm-Deutschland-Feed
   würde dieselben DWD-Warnungen sonst nur englisch ein zweites Mal liefern) -- analog zu
-  GeoSphere Austria und Alertswiss.
+  GeoSphere Austria. Für die Schweiz bleibt Meteoalarm die Wetterquelle, auch wenn Alertswiss
+  aktiv ist (Alertswiss führt keine MeteoSchweiz-Wetterwarnungen).
+- **Alertswiss** (`alert.swiss`, Bundesamt für Bevölkerungsschutz BABS, Schweiz) -- optional,
+  das Schweizer Pendant zu NINA: kantonale Feuerverbote, Trockenheit, Fels-/Bergsturz,
+  Strassensperrungen und weitere Zivilschutz-Meldungen mit echter Polygon-/Kreis-Geometrie.
+  Keine Wetterwarnungen -- ergänzt Meteoalarm, ersetzt es nicht.
 - **GeoSphere Austria** (`warnungen.zamg.at`) -- optional, amtliche Warnungen direkt von der
   österreichischen Wetterbehörde (ZAMG), koordinatengenau statt Namensabgleich. Übernimmt für
   österreichische Standorte automatisch von Meteoalarm, sobald aktiviert (analog dazu, wie die

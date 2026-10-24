@@ -2,6 +2,39 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.18.2 (2026-10-24)
+
+Drei Punkte aus einer Rückmeldung von baslerleckerli (Symcon-Forum,
+24.10.2026, Standorte in BL/BS und Rheinfelden Baden, Sturmwochenende):
+
+- Fix Schweiz: **Alertswiss ersetzte seit 1.16.0 Meteoalarm** für Schweizer
+  Standorte -- Alertswiss (BABS) ist aber Zivilschutz (Feuerverbot,
+  Trockenheit, Sperrungen) und führt die MeteoSchweiz-Wetterwarnungen NICHT.
+  Live 24.10.2026: Meteoalarm-CH "Gale force wind" für Basel/Oberes
+  Baselbiet, Alertswiss zugleich ohne eine einzige Wetterwarnung. Ein
+  Schweizer Standort mit Alertswiss verlor dadurch die Sturmwarnung des
+  eigenen Wetterdienstes, bekam aber die deutschen DWD-Warnungen der
+  Grenzgemeinden über den Umkreis. Alertswiss ergänzt Meteoalarm jetzt nur
+  noch; die Übernahme-Regel gilt weiter für Österreich (GeoSphere) und
+  Deutschland (NINA/DWD), die beide Wetter mitliefern. Formular-Hinweis,
+  README und Tests entsprechend berichtigt -- die 1.16.0-Begründung "analog
+  zur DWD-/GeoSphere-Anbindung" war falsch, weil Alertswiss kein
+  Wetterdienst ist.
+- Fix Waldbrandgefahrenindex (DWD): außerhalb der Waldbrandsaison (DWD
+  rechnet etwa März bis September/Oktober) bleibt die "recent"-Stationsdatei
+  beim letzten Saisonwert stehen, wird aber täglich neu erzeugt. WarnHub
+  nahm den letzten Wert ohne Altersprüfung -- Station Rheinfelden (4175)
+  endete am 24.09.2026 mit Stufe 4 und stand einen Monat später noch als
+  aktive "Waldbrandgefahr" in der Kachel. Ein Stationswert älter als 3 Tage
+  gilt jetzt als veraltet (`wbiReadingIsCurrent()`, Tests in
+  `.tools/test-waldbrand-de.php`).
+- Kacheln: Umkreis-Treffer zeigen die Entfernung ("Home BL · 8 km entfernt
+  · bis 18:00 Uhr"). Die Sturmböen für Home BL waren die DWD-Warnung für
+  Rheinfelden (Baden) 8 km weiter, über den eingestellten Umkreis getroffen
+  -- in der Kachel sah das aus wie eine Warnung für den Standort selbst
+  ("In Alertswiss ist nichts"). Bei Standort in der Warnfläche (0 km) und
+  beim Meteoalarm-Namensabgleich (keine Entfernung) ändert sich nichts.
+
 ## 1.18.1 (2026-10-23)
 
 - Fix: war **Meteoalarm zusätzlich zu NINA/DWD** aktiv, erschien eine

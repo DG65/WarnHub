@@ -305,12 +305,15 @@ check('Deutschland + Frankreich, NINA aktiv -> nur Frankreich (die Deutschland-R
 check('Niederlande, NINA aktiv -> Niederlande bleibt (NINA deckt nur Deutschland ab)', $slugs(hubMitStandorten(['Camping' => 'nl'], ['QuelleNina'])) === ['netherlands']);
 check('Österreich mit GeoSphere -> nicht (bestehende Regel unverändert)', $slugs(hubMitStandorten(['Wien' => 'at'], ['QuelleGeosphereAt'])) === []);
 check('Österreich ohne GeoSphere -> austria (NINA/DWD spielen für Österreich keine Rolle)', $slugs(hubMitStandorten(['Wien' => 'at'], ['QuelleNina', 'QuelleDwd'])) === ['austria']);
-check('Schweiz mit Alertswiss -> nicht (bestehende Regel unverändert)', $slugs(hubMitStandorten(['Basel' => 'ch'], ['QuelleAlertSwissCh'])) === []);
+// Schweiz: Alertswiss ist Zivilschutz ohne MeteoSchweiz-Wetterwarnungen
+// (live 24.10.2026) -- darf Meteoalarm-CH deshalb NICHT ersetzen (1.16.0 bis
+// 1.18.1 falsch, Praxis-Fund baslerleckerli: Sturmwarnung für Basel fehlte).
+check('Schweiz MIT Alertswiss -> switzerland bleibt (Alertswiss hat kein Wetter, ersetzt Meteoalarm nicht)', $slugs(hubMitStandorten(['Basel' => 'ch'], ['QuelleAlertSwissCh'])) === ['switzerland']);
 check('Schweiz ohne Alertswiss -> switzerland', $slugs(hubMitStandorten(['Basel' => 'ch'], ['QuelleNina'])) === ['switzerland']);
 check('Land ohne Meteoalarm-Feed (us) -> nichts', $slugs(hubMitStandorten(['Reise' => 'us'], [])) === []);
 check('inaktiver Standort zählt nicht', $slugs(hubMitStandorten(['Alt' => 'fr'], [], ['Alt'])) === []);
 check('zwei Standorte im selben Land -> der Feed wird nur EINMAL abgefragt', $slugs(hubMitStandorten(['A' => 'fr', 'B' => 'fr'], [])) === ['france']);
-check('D-A-CH komplett mit allen direkten Quellen -> Meteoalarm hat nichts mehr zu tun', $slugs(hubMitStandorten(['D' => 'de', 'A' => 'at', 'CH' => 'ch'], ['QuelleNina', 'QuelleGeosphereAt', 'QuelleAlertSwissCh'])) === []);
+check('D-A-CH komplett mit allen direkten Quellen -> nur noch die Schweiz bleibt bei Meteoalarm', $slugs(hubMitStandorten(['D' => 'de', 'A' => 'at', 'CH' => 'ch'], ['QuelleNina', 'QuelleGeosphereAt', 'QuelleAlertSwissCh'])) === ['switzerland']);
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

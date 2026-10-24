@@ -201,6 +201,24 @@ check('beide Karten sind enthalten (2× whub-card)', substr_count($html, 'class=
 check('Extreme-Warnung nutzt das 🆘-Icon', str_contains($html, '🆘'));
 check('Moderate-Warnung nutzt das ⚠️-Icon', str_contains($html, '⚠️'));
 check('Karte mit Gültigkeitsende zeigt "bis HH:MM Uhr"', str_contains($html, 'bis ' . date('H:i', 1700003600) . ' Uhr'));
+check('ohne distanceKm KEINE Entfernungsangabe', !str_contains($html, 'km entfernt'));
+
+echo "\n== Entfernung bei Umkreis-Treffern (Praxis-Fund baslerleckerli 24.10.2026: DWD-Warnung der Grenzgemeinde sah aus wie eine für den Schweizer Standort) ==\n";
+$suffix = fn ($w) => callPrivate($hub, 'tileDistanceSuffix', [$w]);
+check('8,3 km -> " · 8 km entfernt" (ganze Kilometer)', $suffix(['distanceKm' => 8.3]) === ' · 8 km entfernt');
+check('0,4 km -> " · 0,4 km entfernt" (unter 1 km eine Nachkommastelle)', $suffix(['distanceKm' => 0.4]) === ' · 0,4 km entfernt');
+check('1,5 km -> " · 2 km entfernt" (kaufmännisch gerundet)', $suffix(['distanceKm' => 1.5]) === ' · 2 km entfernt');
+check('0 km (Standort IN der Warnfläche) -> leer', $suffix(['distanceKm' => 0.0]) === '');
+check('null (Meteoalarm-Namensabgleich) -> leer', $suffix(['distanceKm' => null]) === '');
+check('Schlüssel fehlt (alte Zustände) -> leer', $suffix([]) === '');
+$activeFern = [
+    ['identifier' => 'f1', 'standort' => 'Home BL', 'event' => 'Sturmböen', 'headline' => '', 'severity' => 'Moderate', 'category' => 'sturm', 'source' => 'nina', 'expires' => date('c', 1700003600), 'distanceKm' => 8.3],
+    ['identifier' => 'f2', 'standort' => 'Lerchenstrasse BS', 'event' => 'Sturmböen', 'headline' => '', 'severity' => 'Moderate', 'category' => 'sturm', 'source' => 'nina', 'expires' => null, 'distanceKm' => 0.0],
+];
+$htmlFern = callPrivate($hub, 'renderKachelUebersicht', [$activeFern, 1700000000]);
+check('Übersichts-Kachel: Umkreis-Treffer zeigt "Home BL · 8 km entfernt · bis HH:MM Uhr"', str_contains($htmlFern, 'Home BL · 8 km entfernt · bis ' . date('H:i', 1700003600) . ' Uhr'));
+check('Übersichts-Kachel: Standort in der Fläche bleibt ohne Entfernung', str_contains($htmlFern, 'Lerchenstrasse BS<') || str_contains($htmlFern, 'Lerchenstrasse BS</div>'));
+check('Übersichts-Kachel: genau EINE Entfernungsangabe', substr_count($htmlFern, 'km entfernt') === 1);
 
 echo "\n== renderKachelUebersicht(): Deckelung bei 8 Karten ==\n";
 $viele = [];

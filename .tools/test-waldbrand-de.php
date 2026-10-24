@@ -223,5 +223,22 @@ for ($level = 1; $level <= 5; $level++) {
 check('Stufe 5 (sehr hohe Gefahr) -> Extreme', $severityMap[5] === 'Extreme');
 check('Stufe 1 (sehr geringe Gefahr) -> Minor', $severityMap[1] === 'Minor');
 
+echo "\n== wbiReadingIsCurrent(): Altersgrenze des letzten Stationswerts (Saisonende) ==\n";
+// Praxis-Fund baslerleckerli, Symcon-Forum, 24.10.2026: Station Rheinfelden
+// (4175) endete am 24.09.2026 mit Stufe 4, die "recent"-Datei wird trotzdem
+// täglich neu erzeugt -- WarnHub zeigte den Wert einen Monat später noch als
+// aktive Waldbrandgefahr. $today wird übergeben, kein Datums-Mock nötig.
+$aktuell = fn (string $datum, string $heute) => callPrivate($hub, 'wbiReadingIsCurrent', [$datum, $heute]);
+check('Wert von heute ist aktuell', $aktuell('20261024', '20261024') === true);
+check('Wert von gestern ist aktuell', $aktuell('20261023', '20261024') === true);
+check('Wert von vor 3 Tagen ist gerade noch aktuell (Grenze einschließlich)', $aktuell('20261021', '20261024') === true);
+check('Wert von vor 4 Tagen ist veraltet', $aktuell('20261020', '20261024') === false);
+check('baslerleckerlis Fall: 24.09. am 24.10. ist veraltet', $aktuell('20260924', '20261024') === false);
+check('Monatswechsel wird kalendarisch gerechnet (30.09. am 02.10. = 2 Tage, aktuell)', $aktuell('20260930', '20261002') === true);
+check('Jahreswechsel ebenso (30.12. am 02.01. = 3 Tage, aktuell)', $aktuell('20261230', '20270102') === true);
+check('Zukunftsdatum gilt als aktuell (negatives Alter, parseWbiStationCsv filtert es ohnehin)', $aktuell('20261025', '20261024') === true);
+check('unlesbares Datum ist NICHT aktuell', $aktuell('kaputt', '20261024') === false);
+check('leeres Datum ist NICHT aktuell', $aktuell('', '20261024') === false);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

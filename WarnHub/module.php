@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.18.1';
-    private const NEWS_VERSION = '1.18.1';
+    private const DOC_VERSION = '1.18.2';
+    private const NEWS_VERSION = '1.18.2';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -504,6 +504,15 @@ class WarnHub extends IPSModule
         4 => 'hohe Gefahr', 5 => 'sehr hohe Gefahr',
     ];
     private const WBI_LEVEL_SEVERITY = [1 => 'Minor', 2 => 'Minor', 3 => 'Moderate', 4 => 'Severe', 5 => 'Extreme'];
+    // Höchstalter des letzten Stationswerts. DWD rechnet den Index nur in
+    // der Waldbrandsaison (etwa März bis Ende September/Oktober); danach
+    // bleibt die "recent"-Datei beim letzten Saisonwert stehen, wird aber
+    // weiterhin täglich neu erzeugt. Praxis-Fund baslerleckerli, Symcon-
+    // Forum, 24.10.2026: Station Rheinfelden (4175) endete am 24.09.2026 mit
+    // Stufe 4 -- WarnHub zeigte den Wert einen Monat später noch als aktive
+    // "Waldbrandgefahr". Ein Wert älter als 3 Tage ist deshalb KEIN
+    // aktueller Index mehr (der Index ist ein Tageswert).
+    private const WBI_MAX_AGE_DAYS = 3;
 
     // Umweltbundesamt (UBA) Luftqualitätsdaten -- amtliche bundesweite API,
     // live geprüft 07.09.2026 (offiziell dokumentiert unter
@@ -1015,7 +1024,7 @@ class WarnHub extends IPSModule
                         ],
                         ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => 'Zusätzlich deutscher Waldbrandgefahrenindex (DWD) -- amtliche 5-stufige Skala, je Standort die nächstgelegene Messstation'],
                         ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => 'Ab Gefahrenstufe (1-5)', 'minValue' => 1, 'maxValue' => 5],
-                        ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter.'],
+                        ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter. Der DWD rechnet den Index nur in der Waldbrandsaison (etwa März bis September/Oktober): Liegt der letzte Stationswert mehr als 3 Tage zurück, gilt er als veraltet und löst nicht aus.'],
                         ['type' => 'CheckBox', 'name' => 'QuelleOzonDe', 'caption' => 'Zusätzlich deutsche Ozonbelastung (Umweltbundesamt) -- amtlicher Luftqualitätsindex, nur Ozon/Sommersmog'],
                         ['type' => 'NumberSpinner', 'name' => 'UbaOzonSchwelle', 'caption' => 'Ab Luftqualitätsindex-Stufe (0-4)', 'minValue' => 0, 'maxValue' => 4],
                         ['type' => 'Label', 'caption' => 'Nutzt das Umweltbundesamt (UBA) als amtliche Quelle für Ozonmesswerte, ausdrücklich NUR Ozon/Sommersmog -- kein allgemeines Luftgüte-Monitoring und keine private Innenraum-Sensorik (dafür ist WarnHub nicht gedacht, siehe Forum-Diskussion). Amtliche 5-stufige Skala (0 = sehr gut bis 4 = sehr schlecht), berechnet aus der stündlichen Ozonkonzentration je Messstation (0-60 µg/m³ = Stufe 0, ... über 240 µg/m³ = Stufe 4).'],
@@ -1040,7 +1049,7 @@ class WarnHub extends IPSModule
                     'onClick' => $this->rememberPanelOnClick('DatenquellenCh', $expDqCh),
                     'items' => [
                         ['type' => 'CheckBox', 'name' => 'QuelleAlertSwissCh', 'caption' => 'Zusätzlich Alertswiss (alert.swiss/BABS) -- Schweizer Pendant zu NINA: kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, koordinatengenau'],
-                        ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für Schweizer Standorte automatisch von Meteoalarm (echte Warnfläche statt Namensabgleich) -- analog zur direkten DWD- bzw. GeoSphere-Austria-Anbindung. Amtliche Quelle des Bundesamts für Bevölkerungsschutz (BABS), kein Zugangsschlüssel nötig. Deckt mehr als Wetter ab, ergänzt also auch die spezialisierten Quellen unten (BAFU-Hochwasser, Erdbeben).'],
+                        ['type' => 'Label', 'caption' => 'Ergänzt Meteoalarm für Schweizer Standorte, ersetzt es NICHT: Alertswiss führt keine MeteoSchweiz-Wetterwarnungen (Sturm, Starkregen, Hagel), die kommen weiterhin nur über Meteoalarm oben. Amtliche Quelle des Bundesamts für Bevölkerungsschutz (BABS), kein Zugangsschlüssel nötig. Deckt mehr als Wetter ab, ergänzt also auch die spezialisierten Quellen unten (BAFU-Hochwasser, Erdbeben).'],
                         ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
                         ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
                         ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar.'],
@@ -1998,6 +2007,9 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix Notification Control: ein Gerät, das bei mehreren Konfiguratoren aktiv ist, bekam die Benachrichtigung je Konfigurator einmal (bei einem Anwender 3-4 Kopien je Meldung). Jetzt werden so wenige Konfiguratoren angestoßen, dass jedes Gerät genau einmal erreicht wird; schlägt einer fehl, springt ein anderer ein. Rückmeldung baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• NEU: Alarmtyp "💨 Rauch/Gefahrstoffe" für Schutzaktionen und Fenster-/Tür-Überwachung (erkennt Meldungen wie "Rauchgase", "Gefahrstoff", "Gasaustritt") sowie der Aktionstyp "Variable auf Wert setzen" -- z. B. die Stufe der Wohnraumlüftung auf 0, sobald Rauchgase gemeldet werden. Vorher landeten solche Meldungen in keiner Kategorie, und ohne angekreuzte Kategorie löst eine Aktion bei JEDER Warnung aus. WarnHub stellt den Wert nach einer Entwarnung nicht zurück. Praxis-Wunsch mike256, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix Meteoalarm: war Meteoalarm zusätzlich zu NINA/DWD aktiv, erschien eine DWD-Warnung für deutsche Standorte zweimal -- einmal deutsch ("Sturmböen") und einmal englisch ("Gale-Force Gusts") aus dem Meteoalarm-Deutschland-Feed, der dieselben DWD-Warnungen nur mit englischem Ereignisnamen weiterreicht. Deutschland übernehmen jetzt NINA bzw. die DWD-Anbindung automatisch von Meteoalarm, wie schon Österreich (GeoSphere Austria) und die Schweiz (Alertswiss). Praxis-Fund hbraun, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix Schweiz: Alertswiss hatte seit 1.16.0 Meteoalarm für Schweizer Standorte ERSETZT -- Alertswiss ist aber Zivilschutz (Feuerverbot, Trockenheit, Sperrungen) und führt keine MeteoSchweiz-Wetterwarnungen. Ein Schweizer Standort mit Alertswiss verlor dadurch die eigene Sturm-/Starkregenwarnung. Alertswiss ergänzt Meteoalarm jetzt nur noch. Praxis-Fund baslerleckerli, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Fix Waldbrandgefahrenindex (DWD): außerhalb der Waldbrandsaison bleibt die Stationsdatei beim letzten Saisonwert stehen -- WarnHub zeigte so einen Monat alten Wert weiter als aktive Waldbrandgefahr. Ein Stationswert älter als 3 Tage gilt jetzt als veraltet. Praxis-Fund baslerleckerli, Symcon-Forum'],
+                ['type' => 'Label', 'caption' => '• Kacheln: Umkreis-Treffer zeigen jetzt die Entfernung ("Home · 8 km entfernt · bis 18:00 Uhr") -- so ist sichtbar, dass eine Warnung für die Nachbargemeinde (z. B. die deutsche DWD-Warnung jenseits der Grenze) gilt und nicht für den Standort selbst. Bei Standort in der Warnfläche (0 km) und beim Namensabgleich ändert sich nichts'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4113,12 +4125,22 @@ class WarnHub extends IPSModule
      * tatsächlich abzufragen sind -- vom HTTP-Abruf getrennt, damit sich die
      * Länderauswahl ohne Netzzugriff testen lässt (.tools/test-meteoalarm.php).
      *
-     * Ist für ein Land eine direkte, amtliche Quelle aktiv, übernimmt SIE das
-     * Land, und Meteoalarm wird dort NICHT abgefragt: GeoSphere Austria für
-     * Österreich, Alertswiss für die Schweiz (beide koordinatengenau,
-     * Meteoalarm liefert dort nur den ungenaueren Namensabgleich) und NINA
-     * bzw. die direkte DWD-Anbindung für Deutschland. Gleiches Prinzip wie
-     * "DWD direkt ersetzt den NINA-'dwd'-Kanal" in Poll().
+     * Ist für ein Land eine direkte, amtliche WETTER-Quelle aktiv, übernimmt
+     * SIE das Land, und Meteoalarm wird dort NICHT abgefragt: GeoSphere
+     * Austria für Österreich (koordinatengenau, Meteoalarm liefert dort nur
+     * den ungenaueren Namensabgleich) und NINA bzw. die direkte DWD-Anbindung
+     * für Deutschland. Gleiches Prinzip wie "DWD direkt ersetzt den
+     * NINA-'dwd'-Kanal" in Poll().
+     *
+     * Schweiz-Fall (1.16.0 bis 1.18.1 FALSCH): Alertswiss (BABS) ist
+     * Zivilschutz -- Feuerverbot, Trockenheit, Sperrungen -- und führt die
+     * MeteoSchweiz-Wetterwarnungen NICHT. Live 24.10.2026: Meteoalarm-CH
+     * "Gale force wind" für Basel/Oberes Baselbiet, Alertswiss zugleich ohne
+     * eine einzige Wetterwarnung. Alertswiss darf Meteoalarm-CH deshalb nur
+     * ERGÄNZEN, nicht ersetzen -- sonst verliert ein Schweizer Standort die
+     * Sturmwarnung seines eigenen Wetterdienstes, während er die deutschen
+     * DWD-Warnungen der Grenzgemeinden über den Umkreis weiterhin bekommt
+     * (Praxis-Fund baslerleckerli, Symcon-Forum, 24.10.2026).
      *
      * Deutschland-Fall: der Meteoalarm-Feed "germany" reicht genau die
      * DWD-Warnungen weiter, die NINA/DWD ohnehin liefern -- nur ENGLISCH
@@ -4134,7 +4156,6 @@ class WarnHub extends IPSModule
     private function meteoalarmSlugsForStandorte(): array
     {
         $geosphereAtActive = $this->ReadPropertyBoolean('QuelleGeosphereAt');
-        $alertSwissActive = $this->ReadPropertyBoolean('QuelleAlertSwissCh');
         $germanyCovered = $this->ReadPropertyBoolean('QuelleNina') || $this->ReadPropertyBoolean('QuelleDwd');
 
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
@@ -4145,7 +4166,6 @@ class WarnHub extends IPSModule
             $slug = self::METEOALARM_COUNTRY_SLUGS[$geo['countryCode']] ?? null;
             if ($slug === null
                 || ($slug === 'austria' && $geosphereAtActive)
-                || ($slug === 'switzerland' && $alertSwissActive)
                 || ($slug === 'germany' && $germanyCovered)
             ) {
                 continue;
@@ -4716,6 +4736,10 @@ class WarnHub extends IPSModule
             if ($reading === null || $reading['wbi'] < $schwelle) {
                 continue;
             }
+            if (!$this->wbiReadingIsCurrent($reading['date'], date('Ymd'))) {
+                $this->SendDebug('fetchWaldbrandDe', sprintf('Station %d: letzter Wert vom %s ist älter als %d Tage (Saisonende?) -- nicht als aktuelle Waldbrandgefahr gewertet.', $nearest['index'], $reading['date'], self::WBI_MAX_AGE_DAYS), 0);
+                continue;
+            }
             $level = $reading['wbi'];
             $dateObj = DateTime::createFromFormat('Ymd', $reading['date']);
             $dateLabel = $dateObj !== false ? $dateObj->format('d.m.Y') : $reading['date'];
@@ -4815,6 +4839,23 @@ class WarnHub extends IPSModule
             return null;
         }
         return $this->parseWbiStationCsv($csv);
+    }
+
+    /**
+     * true, wenn der Stationswert (Datum "Ymd") höchstens WBI_MAX_AGE_DAYS
+     * Tage vor $today liegt. $today wird übergeben statt intern gelesen,
+     * damit sich die Altersgrenze ohne Datums-Mock testen lässt
+     * (.tools/test-waldbrand-de.php). Unlesbares Datum = nicht aktuell.
+     */
+    private function wbiReadingIsCurrent(string $datum, string $today): bool
+    {
+        $d = DateTime::createFromFormat('!Ymd', $datum);
+        $t = DateTime::createFromFormat('!Ymd', $today);
+        if ($d === false || $t === false) {
+            return false;
+        }
+        $ageDays = (int) $d->diff($t)->format('%r%a');
+        return $ageDays <= self::WBI_MAX_AGE_DAYS;
     }
 
     /** Vom HTTP-Abruf/Entpacken getrennt, damit sich die Auswertung ohne Netzzugriff testen lässt. @return ?array{date:string,wbi:int} letzter verfügbarer Wert (Datum <= heute), null wenn leer. */
@@ -5730,6 +5771,26 @@ class WarnHub extends IPSModule
     //  Kacheln (WebFront-/Kachel-Visualisierung, ~HTMLBox-Variablen)
     // ----------------------------------------------------------------
 
+    /**
+     * " · 6 km entfernt" für Umkreis-Treffer, leer bei Standort IN der
+     * Warnfläche (0 km) oder Namensabgleich (distanceKm null). Ohne diese
+     * Angabe sah eine DWD-Warnung für die deutsche Grenzgemeinde in der
+     * Kachel aus wie eine Warnung FÜR den Schweizer Standort selbst --
+     * Praxis-Fund baslerleckerli, Symcon-Forum, 24.10.2026 ("In Alertswiss
+     * ist nichts": die Sturmböen für Home BL waren die Rheinfeldener
+     * DWD-Warnung 8 km weiter, über den eingestellten Umkreis getroffen).
+     */
+    private function tileDistanceSuffix(array $w): string
+    {
+        $d = $w['distanceKm'] ?? null;
+        if (!is_numeric($d) || (float) $d < 0.05) {
+            return '';
+        }
+        $d = (float) $d;
+        $label = $d < 1.0 ? number_format($d, 1, ',', '') : (string) (int) round($d);
+        return ' · ' . $label . ' km entfernt';
+    }
+
     // Apples eigene HIG-Systemfarben (macOS Tahoe/"Liquid Glass"-Optik,
     // Dietmars ausdrücklicher Wunsch 04.09.2026) -- bewusst NICHT identisch
     // mit den Material-artigen Farben des WHUB.Schweregrad-Profils (das
@@ -5965,7 +6026,7 @@ HTML;
                 $color = self::TILE_SEVERITY_COLOR[$severity] ?? self::TILE_SEVERITY_COLOR['Unknown'];
                 $icon = self::SEVERITY_ICON[$severity] ?? 'ℹ️';
                 $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower(trim($w['event'] ?? '') !== '' ? $w['event'] : 'Warnung'), MB_CASE_TITLE));
-                $sub = htmlspecialchars($w['standort'] ?? '');
+                $sub = htmlspecialchars($w['standort'] ?? '') . $this->tileDistanceSuffix($w);
                 if (!empty($w['expires'])) {
                     $expTs = strtotime((string) $w['expires']);
                     if ($expTs !== false) {
@@ -6055,7 +6116,7 @@ HTML;
             $eventRaw = trim($w['event'] ?? '') !== '' ? $w['event'] : 'Warnung';
             $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower($eventRaw), MB_CASE_TITLE));
             $eventTypes[$eventRaw] = true;
-            $sub = htmlspecialchars($w['standort'] ?? '');
+            $sub = htmlspecialchars($w['standort'] ?? '') . $this->tileDistanceSuffix($w);
             if (!empty($w['expires'])) {
                 $expTs = strtotime((string) $w['expires']);
                 if ($expTs !== false) {
