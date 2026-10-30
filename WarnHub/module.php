@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.18.2';
-    private const NEWS_VERSION = '1.18.2';
+    private const DOC_VERSION = '1.19.0';
+    private const NEWS_VERSION = '1.19.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -597,6 +597,8 @@ class WarnHub extends IPSModule
         parent::Create();
 
         $this->RegisterPropertyString('Standorte', '[]');
+        // "🪟 Formular: Aufbau" (SUITE.md 3a): je Fachpanel Aufklapp-Zustand und Position, siehe formLayout()
+        $this->RegisterPropertyString('FormLayout', '[]');
         $this->RegisterPropertyBoolean('QuelleNina', true);
         $this->RegisterPropertyBoolean('QuelleDwd', true);
         $this->RegisterPropertyBoolean('QuellePegelonline', false);
@@ -815,6 +817,10 @@ class WarnHub extends IPSModule
     public function GetConfigurationForm(): string
     {
         $form = ['elements' => [], 'actions' => [], 'status' => []];
+        // Fachpanels landen erst in $free (Schlüssel aus FORM_PANELS); Reihenfolge,
+        // Aufklapp-Zustand und Sichtbarkeit legt der Nutzer im Panel
+        // "🪟 Formular: Aufbau" fest (SUITE.md 3a), eingebaut unten vor dem Forum-Hinweis.
+        $free = [];
 
         // Reihenfolge nach Verbund-Konvention: 1. Wozu, 2. Neu in Version X.Y,
         // 3. Dokumentation & Hilfe -- ERST DANACH die Fachpanels.
@@ -846,7 +852,7 @@ class WarnHub extends IPSModule
         ];
 
         $expStandorte = $this->getPanelExpandedState('Standorte', true);
-        $form['elements'][] = [
+        $free['standorte'] = [
             'type' => 'ExpansionPanel',
             'caption' => '📍  Standorte (Umkreis-Definition)',
             'expanded' => $expStandorte,
@@ -927,7 +933,7 @@ class WarnHub extends IPSModule
         $expDqCh = $this->getPanelExpandedState('DatenquellenCh', $heimLand === 'ch');
         $expHagelschutz = $this->getPanelExpandedState('HagelschutzCh', false);
 
-        $form['elements'][] = [
+        $free['datenquellen'] = [
             'type' => 'ExpansionPanel',
             'caption' => '🌐  Datenquellen',
             'expanded' => $expDatenquellen,
@@ -1074,7 +1080,7 @@ class WarnHub extends IPSModule
         ];
 
         $expBenachrichtigung = $this->getPanelExpandedState('Benachrichtigung', true);
-        $form['elements'][] = [
+        $free['benachrichtigung'] = [
             'type' => 'ExpansionPanel',
             'caption' => '🔔  Benachrichtigung',
             'expanded' => $expBenachrichtigung,
@@ -1131,7 +1137,7 @@ class WarnHub extends IPSModule
         ];
 
         $expSchutzaktionen = $this->getPanelExpandedState('Schutzaktionen', false);
-        $form['elements'][] = [
+        $free['schutzaktionen'] = [
             'type' => 'ExpansionPanel',
             'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Kofferraum, Sirenen, Skripte)',
             'expanded' => $expSchutzaktionen,
@@ -1212,7 +1218,7 @@ class WarnHub extends IPSModule
         ];
 
         $expFenster = $this->getPanelExpandedState('FensterUeberwachung', false);
-        $form['elements'][] = [
+        $free['fenster'] = [
             'type' => 'ExpansionPanel',
             'caption' => '🪟  Fenster-/Tür-Überwachung',
             'expanded' => $expFenster,
@@ -1280,13 +1286,32 @@ class WarnHub extends IPSModule
             'onClick' => 'echo WHUB_TestPush($id);',
         ];
         $expPruefung = $this->getPanelExpandedState('PruefungStatus', true);
-        $form['elements'][] = [
+        $free['pruefung'] = [
             'type' => 'ExpansionPanel',
             'caption' => '🔎  Prüfung & Status',
             'expanded' => $expPruefung,
             'onClick' => $this->rememberPanelOnClick('PruefungStatus', $expPruefung),
             'items' => $pruefungItems,
         ];
+
+        // Fachpanels in der vom Nutzer gewählten Reihenfolge / mit gewähltem
+        // Zustand einhängen (SUITE.md 3a). "Standard" lässt den oben per
+        // getPanelExpandedState() ermittelten Zustand unverändert. Ausgeblendet
+        // heißt visible:false, NIE weglassen -- sonst gingen die gespeicherten
+        // Werte des Bereichs beim "Übernehmen" verloren.
+        $layout = $this->formLayout(array_keys($free));
+        foreach ($layout as $key => $l) {
+            $panel = $free[$key];
+            if ($l['open'] === 'open') {
+                $panel['expanded'] = true;
+            } elseif ($l['open'] === 'closed') {
+                $panel['expanded'] = false;
+            } elseif ($l['open'] === 'hidden') {
+                $panel['visible'] = false;
+            }
+            $form['elements'][] = $panel;
+        }
+        $form['elements'][] = $this->LayoutPanel($layout);
 
         $forumHint = $this->ForumHint();
         if ($forumHint !== null) {
@@ -1295,6 +1320,110 @@ class WarnHub extends IPSModule
         $form['elements'][] = $this->LicenseHint();
 
         return json_encode($form);
+    }
+
+    // ----------------------------------------------------------------
+    //  "🪟 Formular: Aufbau" -- Verbund-Konvention SUITE.md 3a (Dietmar,
+    //  29.10.2026, Referenz Batteriewächter formLayout()/LayoutPanel()/
+    //  ResetFormLayout()). Symcon merkt sich das Auf-/Zuklappen nicht
+    //  selbst; der Nutzer legt je Fachpanel Zustand und Position fest.
+    //  Nur die sechs Fachpanels sind wählbar, die festen Panels oben (Wozu,
+    //  Neu, Doku) und unten (Forum, Über dieses Modul) nicht.
+    // ----------------------------------------------------------------
+
+    /** Stabile Schlüssel je Fachpanel (NICHT die Caption, die darf sich ändern) => Anzeigename in der Aufbau-Liste. Reihenfolge = Standardreihenfolge. */
+    private const FORM_PANELS = [
+        'standorte'        => '📍 Standorte',
+        'datenquellen'     => '🌐 Datenquellen',
+        'benachrichtigung' => '🔔 Benachrichtigung',
+        'schutzaktionen'   => '🛡️ Schutzaktionen',
+        'fenster'          => '🪟 Fenster-/Tür-Überwachung',
+        'pruefung'         => '🔎 Prüfung & Status',
+    ];
+
+    /**
+     * Reihenfolge und Aufklapp-Zustand der Fachpanels aus der Property
+     * "FormLayout". Unbekannte Schlüssel in der Property werden ignoriert,
+     * fehlende (neues Panel nach einem Update) fallen auf Standard und
+     * Standardposition zurück -- neue Panels erscheinen also automatisch.
+     * Widerspruch bei mehreren Haken: ausgeblendet vor zugeklappt vor
+     * aufgeklappt. Gleiche Position: Standardreihenfolge (stabil über idx).
+     *
+     * @param string[] $keys Schlüssel in Standardreihenfolge
+     * @return array<string,array{open:string,pos:int,idx:int}> sortiert
+     */
+    private function formLayout(array $keys): array
+    {
+        $saved = json_decode((string) $this->ReadPropertyString('FormLayout'), true);
+        $by = [];
+        foreach (is_array($saved) ? $saved : [] as $row) {
+            if (is_array($row) && isset($row['Key'])) {
+                $by[(string) $row['Key']] = $row;
+            }
+        }
+        $out = [];
+        foreach ($keys as $i => $k) {
+            $r = $by[$k] ?? [];
+            $open = !empty($r['Hidden']) ? 'hidden' : (!empty($r['Closed']) ? 'closed' : (!empty($r['Opened']) ? 'open' : 'std'));
+            $out[$k] = [
+                'open' => $open,
+                'pos'  => isset($r['Pos']) ? max(1, min(99, (int) $r['Pos'])) : $i + 1,
+                'idx'  => $i,
+            ];
+        }
+        uasort($out, fn ($a, $b) => [$a['pos'], $a['idx']] <=> [$b['pos'], $b['idx']]);
+        return $out;
+    }
+
+    /** @param array<string,array{open:string,pos:int,idx:int}> $layout Ergebnis von formLayout() */
+    private function LayoutPanel(array $layout): array
+    {
+        $rows = [];
+        $hidden = [];
+        foreach ($layout as $key => $l) {
+            $name = self::FORM_PANELS[$key] ?? $key;
+            $rows[] = ['Key' => $key, 'Panel' => $name, 'Opened' => $l['open'] === 'open', 'Closed' => $l['open'] === 'closed', 'Hidden' => $l['open'] === 'hidden', 'Pos' => $l['pos']];
+            if ($l['open'] === 'hidden') {
+                $hidden[] = trim((string) preg_replace('/^[^\p{L}\p{N}]+/u', '', $name));
+            }
+        }
+        $hiddenLine = $hidden
+            ? [['type' => 'Label', 'caption' => '🙈 Ausgeblendet: ' . implode(', ', $hidden) . ' -- zum Wiederzeigen den Haken bei "Ausgeblendet" entfernen. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt.']]
+            : [];
+        return [
+            'type' => 'ExpansionPanel', 'name' => 'FormLayoutPanel', 'expanded' => false,
+            'caption' => '🪟  Formular: Aufbau' . ($hidden ? ' (' . count($hidden) . ' ausgeblendet)' : ''),
+            'items' => array_merge($hiddenLine, [
+                ['type' => 'Label', 'caption' => 'Hier legst du fest, welche Bereiche beim Öffnen des Formulars aufgeklappt sind und in welcher Reihenfolge sie stehen. Symcon merkt sich das Auf- und Zuklappen nicht selbst, deshalb gilt die Einstellung hier jedes Mal beim Öffnen. Sie wirkt nach "Übernehmen" beim nächsten Öffnen des Formulars.'],
+                ['type' => 'Label', 'caption' => 'Kein Haken heißt "Standard": wie das Modul es vorsieht (z. B. "Standorte" und "Benachrichtigung" aufgeklappt, zuletzt von Hand zugeklappte Bereiche bleiben zu). Die Position ist eine Zahl; bei gleicher Zahl bleibt die Standardreihenfolge. "Ausgeblendet" nimmt einen Bereich aus der Anzeige, ohne dass er etwas verliert: seine Einstellungen bleiben erhalten und wirken weiter (gedacht für Bereiche, die man selten braucht, z. B. die Fenster-/Tür-Überwachung ohne Fensterkontakte). Zum Wiederzeigen den Haken bei "Ausgeblendet" entfernen oder "Auf Standard zurücksetzen" klicken. Sind mehrere Haken gesetzt, gilt "Ausgeblendet" vor "Zugeklappt" vor "Aufgeklappt". Die Bereiche oben (Wozu, Neu, Dokumentation & Hilfe) und unten (Feedback im Symcon-Forum, Über dieses Modul) bleiben, wo sie sind, und lassen sich nicht ausblenden.'],
+                [
+                    'type' => 'List', 'name' => 'FormLayout', 'caption' => 'Bereiche', 'rowCount' => count($rows), 'add' => false, 'delete' => false,
+                    'loadValuesFromConfiguration' => false,
+                    'values' => $rows,
+                    'columns' => [
+                        ['caption' => 'Bereich', 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
+                        ['caption' => 'Schlüssel', 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
+                        ['caption' => 'Aufgeklappt', 'name' => 'Opened', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Zugeklappt', 'name' => 'Closed', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => '🙈 Ausgeblendet', 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => 'Position', 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
+                    ],
+                ],
+                ['type' => 'Button', 'caption' => '↩️ Auf Standard zurücksetzen', 'onClick' => 'echo WHUB_ResetFormLayout($id);'],
+            ]),
+        ];
+    }
+
+    /** Knopf "Auf Standard zurücksetzen": nur die Liste im Formular zurücksetzen, keine Selbstpersistenz -- gespeichert wird erst mit "Übernehmen". */
+    public function ResetFormLayout(): string
+    {
+        $rows = [];
+        $i = 0;
+        foreach (self::FORM_PANELS as $key => $name) {
+            $rows[] = ['Key' => $key, 'Panel' => $name, 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => ++$i];
+        }
+        $this->UpdateFormField('FormLayout', 'values', json_encode($rows, JSON_UNESCAPED_UNICODE));
+        return 'ℹ️ Auf Standard gesetzt. Zum Speichern unten "Übernehmen" klicken.';
     }
 
     /** Sichtbare Zeilenzahl einer Liste an ihren tatsächlichen Inhalt anpassen, statt fest zu scrollen -- Dietmars Fund 04.09.2026 (Schutzaktionen-Liste nach der Objektbaum-Suche). Plus 1 Luft für "Hinzufügen", nach oben gedeckelt, damit ein einzelnes Panel nicht die ganze Seite dominiert. */
@@ -2010,6 +2139,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix Schweiz: Alertswiss hatte seit 1.16.0 Meteoalarm für Schweizer Standorte ERSETZT -- Alertswiss ist aber Zivilschutz (Feuerverbot, Trockenheit, Sperrungen) und führt keine MeteoSchweiz-Wetterwarnungen. Ein Schweizer Standort mit Alertswiss verlor dadurch die eigene Sturm-/Starkregenwarnung. Alertswiss ergänzt Meteoalarm jetzt nur noch. Praxis-Fund baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Fix Waldbrandgefahrenindex (DWD): außerhalb der Waldbrandsaison bleibt die Stationsdatei beim letzten Saisonwert stehen -- WarnHub zeigte so einen Monat alten Wert weiter als aktive Waldbrandgefahr. Ein Stationswert älter als 3 Tage gilt jetzt als veraltet. Praxis-Fund baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Kacheln: Umkreis-Treffer zeigen jetzt die Entfernung ("Home · 8 km entfernt · bis 18:00 Uhr") -- so ist sichtbar, dass eine Warnung für die Nachbargemeinde (z. B. die deutsche DWD-Warnung jenseits der Grenze) gilt und nicht für den Standort selbst. Bei Standort in der Warnfläche (0 km) und beim Namensabgleich ändert sich nichts'],
+                ['type' => 'Label', 'caption' => '• 🪟 NEU: Formular-Aufbau selbst wählen -- im neuen Bereich "Formular: Aufbau" (unten, vor dem Forum-Hinweis) legst du je Fachbereich fest, ob er beim Öffnen aufgeklappt, zugeklappt oder ausgeblendet ist und an welcher Position er steht. Symcon merkt sich das Auf-/Zuklappen nicht selbst, deshalb gilt die Einstellung bei jedem Öffnen. Ausgeblendete Bereiche arbeiten weiter. Verbund-Konvention, Wunsch Dietmar'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];

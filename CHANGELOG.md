@@ -2,6 +2,24 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.19.0 (2026-10-30)
+
+- Neu: **"🪟 Formular: Aufbau"** (Verbund-Konvention SUITE.md 3a, Dietmar
+  29.10.2026, Referenz Batteriewächter). Neues Panel unten vor dem
+  Forum-Hinweis, standardmäßig eingeklappt: je Fachbereich (Standorte,
+  Datenquellen, Benachrichtigung, Schutzaktionen, Fenster-/Tür-Überwachung,
+  Prüfung & Status) wählt der Nutzer "Aufgeklappt", "Zugeklappt" oder
+  "🙈 Ausgeblendet" und eine Position 1-99. Kein Haken = Standard (der
+  bisherige, per Klick gemerkte Zustand bleibt). Ausgeblendet heißt
+  `visible: false`, nie weglassen -- die Werte des Bereichs bleiben beim
+  "Übernehmen" erhalten und wirken weiter. Unbekannte Schlüssel fallen auf
+  Standard zurück, neue Panels erscheinen automatisch. Knopf "↩️ Auf
+  Standard zurücksetzen" (`WHUB_ResetFormLayout`) setzt nur die Liste
+  zurück, gespeichert wird erst mit "Übernehmen". Property `FormLayout`.
+  Die festen Panels oben (Wozu, Neu, Doku) und unten (Forum, Über dieses
+  Modul) sind nicht wählbar. Prüfungen in `.tools/test-form.php`
+  (Reihenfolge, Zustand, `visible:false`, Rückfall, Vorrang, Reset).
+
 ## 1.18.2 (2026-10-24)
 
 Drei Punkte aus einer Rückmeldung von baslerleckerli (Symcon-Forum,

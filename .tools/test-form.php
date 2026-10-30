@@ -109,6 +109,11 @@ class IPSModule
     }
     public function UpdateFormField($n, $k, $v)
     {
+        $GLOBALS['whub_test_updateFormField'][] = [$n, $k, $v];
+    }
+    public function SetProp($n, $v)
+    {
+        $this->props[$n] = $v;
     }
     public function Create()
     {
@@ -480,6 +485,85 @@ check('Schweiz-Panel ohne HeimLandCode zugeklappt', ($chPanelUn['expanded'] ?? n
 echo "\n== Store-Review-Checkliste Punkt 15: Logging nur über die Instanzmethode ==\n";
 $moduleSource = (string) file_get_contents(__DIR__ . '/../WarnHub/module.php');
 check('module.php ruft IPS_LogMessage( nirgends auf (nur $this->LogMessage, Symcon-Store-Review 12.10.2026)', strpos($moduleSource, 'IPS_LogMessage(') === false && strpos($moduleSource, 'IPS_LogMessage ') === false);
+
+echo "\n== \"🪟 Formular: Aufbau\" (SUITE.md 3a): Reihenfolge, Zustand, Ausblenden, Rückfall, Reset ==\n";
+$fachKeys = ['standorte', 'datenquellen', 'benachrichtigung', 'schutzaktionen', 'fenster', 'pruefung'];
+$fachCaptions = ['standorte' => 'Standorte (Umkreis', 'datenquellen' => '🌐  Datenquellen', 'benachrichtigung' => '🔔  Benachrichtigung', 'schutzaktionen' => '🛡️  Schutzaktionen', 'fenster' => 'Fenster-/Tür-Überwachung', 'pruefung' => 'Prüfung & Status'];
+$fachOrder = function (array $elements) use ($fachCaptions): array {
+    $order = [];
+    foreach ($elements as $el) {
+        foreach ($fachCaptions as $key => $needle) {
+            if (str_contains((string) ($el['caption'] ?? ''), $needle) && ($el['type'] ?? '') === 'ExpansionPanel') {
+                $order[] = $key;
+            }
+        }
+    }
+    return $order;
+};
+$fachPanel = fn (array $elements, string $key) => findItem($elements, fn ($el) => ($el['type'] ?? '') === 'ExpansionPanel' && str_contains((string) ($el['caption'] ?? ''), $fachCaptions[$key]));
+
+// Standard (leere Property)
+$layoutPanel = findByName($decoded['elements'], 'FormLayoutPanel');
+check('Panel "Formular: Aufbau" ist vorhanden', $layoutPanel !== null && str_contains($layoutPanel['caption'], 'Formular: Aufbau'));
+check('Panel "Formular: Aufbau" ist standardmäßig eingeklappt', ($layoutPanel['expanded'] ?? true) === false);
+$iAufbau = $idx('Formular: Aufbau');
+check('"Formular: Aufbau" steht NACH dem letzten Fachpanel (Prüfung & Status)', $iAufbau !== false && $iAufbau > $iPruefung);
+check('"Formular: Aufbau" steht VOR "Feedback im Symcon-Forum"', $iAufbau !== false && $iAufbau < $iFeedback);
+check('ohne Einstellung: Fachpanels in Standardreihenfolge', $fachOrder($decoded['elements']) === $fachKeys);
+$layoutList = findByName($decoded['elements'], 'FormLayout');
+check('Liste "FormLayout" mit genau 6 Zeilen (nur Fachpanels, keine festen Panels)', $layoutList !== null && count($layoutList['values']) === 6);
+check('Liste: Schlüssel in Standardreihenfolge, alle Haken leer, Positionen 1..6', array_column($layoutList['values'], 'Key') === $fachKeys && array_column($layoutList['values'], 'Pos') === [1, 2, 3, 4, 5, 6] && !in_array(true, array_merge(array_column($layoutList['values'], 'Opened'), array_column($layoutList['values'], 'Closed'), array_column($layoutList['values'], 'Hidden')), true));
+$keyCol = findItem($layoutList['columns'], fn ($c) => ($c['name'] ?? '') === 'Key');
+check('Spalte "Key" ist unsichtbar und wird gespeichert (save:true)', $keyCol !== null && ($keyCol['visible'] ?? true) === false && ($keyCol['save'] ?? false) === true);
+check('Reset-Knopf ruft WHUB_ResetFormLayout', findItem($layoutPanel['items'], fn ($it) => ($it['type'] ?? '') === 'Button' && str_contains((string) ($it['onClick'] ?? ''), 'WHUB_ResetFormLayout')) !== null);
+check('keine Entfernung/Ausgeblendet-Hinweis ohne Einstellung', !str_contains($layoutPanel['caption'], 'ausgeblendet'));
+
+// Gespeicherte Einstellung: Prüfung nach vorn, Standorte zu, Datenquellen auf, Fenster ausgeblendet, unbekannter Schlüssel, eine Zeile ohne Pos
+$hubLayout = new WarnHub();
+$hubLayout->Create();
+$hubLayout->SetProp('FormLayout', json_encode([
+    ['Key' => 'pruefung', 'Panel' => 'x', 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => 1],
+    ['Key' => 'standorte', 'Panel' => 'x', 'Opened' => false, 'Closed' => true, 'Hidden' => false, 'Pos' => 2],
+    ['Key' => 'datenquellen', 'Panel' => 'x', 'Opened' => true, 'Closed' => false, 'Hidden' => false, 'Pos' => 3],
+    ['Key' => 'fenster', 'Panel' => 'x', 'Opened' => true, 'Closed' => true, 'Hidden' => true, 'Pos' => 4],
+    ['Key' => 'gibtsnicht', 'Panel' => 'x', 'Opened' => true, 'Closed' => false, 'Hidden' => false, 'Pos' => 1],
+    ['Key' => 'benachrichtigung', 'Panel' => 'x', 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => 2],
+]));
+$formLayout = json_decode($hubLayout->GetConfigurationForm(), true);
+$elL = $formLayout['elements'];
+check('Reihenfolge nach Position: pruefung(1), standorte(2), benachrichtigung(2, Standardreihenfolge hinter standorte), datenquellen(3), schutzaktionen(Standardposition 4, Standardindex 3), fenster(4, Standardindex 4)', $fachOrder($elL) === ['pruefung', 'standorte', 'benachrichtigung', 'datenquellen', 'schutzaktionen', 'fenster']);
+check('"Zugeklappt" -> expanded false (Standorte, sonst standardmäßig auf)', ($fachPanel($elL, 'standorte')['expanded'] ?? null) === false);
+check('"Aufgeklappt" -> expanded true (Datenquellen, sonst standardmäßig zu)', ($fachPanel($elL, 'datenquellen')['expanded'] ?? null) === true);
+check('"Ausgeblendet" gewinnt gegen Aufgeklappt+Zugeklappt -> visible false, Panel bleibt im Formular', ($fachPanel($elL, 'fenster')['visible'] ?? true) === false && $fachPanel($elL, 'fenster') !== null);
+check('kein Haken -> Standardzustand bleibt (Prüfung & Status standardmäßig aufgeklappt)', ($fachPanel($elL, 'pruefung')['expanded'] ?? null) === true);
+check('unbekannter Schlüssel erzeugt KEIN zusätzliches Panel und keine Listenzeile', count($fachOrder($elL)) === 6 && count(findByName($elL, 'FormLayout')['values']) === 6);
+check('fehlender Schlüssel (schutzaktionen) fällt auf Standard/Standardposition zurück', ($fachPanel($elL, 'schutzaktionen')['expanded'] ?? null) === false && ($fachPanel($elL, 'schutzaktionen')['visible'] ?? true) === true);
+$layoutPanelL = findByName($elL, 'FormLayoutPanel');
+check('Caption zählt ausgeblendete Bereiche: "(1 ausgeblendet)"', str_contains($layoutPanelL['caption'], '(1 ausgeblendet)'));
+check('Hinweiszeile nennt den ausgeblendeten Bereich', findItem($layoutPanelL['items'], fn ($it) => ($it['type'] ?? '') === 'Label' && str_contains((string) ($it['caption'] ?? ''), 'Ausgeblendet: Fenster-/Tür-Überwachung')) !== null);
+check('feste Panels bleiben: Wozu zuerst, Über dieses Modul zuletzt', str_contains((string) ($elL[0]['caption'] ?? ''), 'Wozu dieses Modul') && str_contains((string) (end($elL)['caption'] ?? ''), 'Über dieses Modul'));
+check('Position wird auf 1..99 begrenzt (Pos 500 -> 99)', (function () {
+    $h = new WarnHub();
+    $h->Create();
+    $h->SetProp('FormLayout', json_encode([['Key' => 'standorte', 'Pos' => 500]]));
+    $list = findByName(json_decode($h->GetConfigurationForm(), true)['elements'], 'FormLayout');
+    return findItem($list['values'], fn ($r) => $r['Key'] === 'standorte')['Pos'] === 99;
+})());
+check('kaputte Property (kein JSON) -> Standard, kein Absturz', (function () use ($fachKeys, $fachOrder) {
+    $h = new WarnHub();
+    $h->Create();
+    $h->SetProp('FormLayout', '{nicht json');
+    return $fachOrder(json_decode($h->GetConfigurationForm(), true)['elements']) === $fachKeys;
+})());
+
+// Reset-Knopf
+$GLOBALS['whub_test_updateFormField'] = [];
+$resetText = $hubLayout->ResetFormLayout();
+check('ResetFormLayout() gibt Klartext mit Hinweis auf "Übernehmen" zurück', is_string($resetText) && str_contains($resetText, 'Übernehmen'));
+$resetCall = findItem($GLOBALS['whub_test_updateFormField'], fn ($c) => $c[0] === 'FormLayout' && $c[1] === 'values');
+$resetRows = $resetCall ? json_decode($resetCall[2], true) : null;
+check('ResetFormLayout() setzt die Liste per UpdateFormField auf 6 Zeilen Standard (alle Haken leer, Pos 1..6)', is_array($resetRows) && array_column($resetRows, 'Key') === $fachKeys && array_column($resetRows, 'Pos') === [1, 2, 3, 4, 5, 6] && !in_array(true, array_merge(array_column($resetRows, 'Opened'), array_column($resetRows, 'Closed'), array_column($resetRows, 'Hidden')), true));
+check('ResetFormLayout() persistiert NICHT selbst (Property unverändert, gespeichert wird erst mit "Übernehmen")', str_contains($hubLayout->ReadPropertyString('FormLayout'), 'gibtsnicht'));
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
