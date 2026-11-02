@@ -486,6 +486,16 @@ echo "\n== Store-Review-Checkliste Punkt 15: Logging nur über die Instanzmethod
 $moduleSource = (string) file_get_contents(__DIR__ . '/../WarnHub/module.php');
 check('module.php ruft IPS_LogMessage( nirgends auf (nur $this->LogMessage, Symcon-Store-Review 12.10.2026)', strpos($moduleSource, 'IPS_LogMessage(') === false && strpos($moduleSource, 'IPS_LogMessage ') === false);
 
+echo "\n== library.json: Version und Datum passen zum neuesten CHANGELOG-Eintrag ==\n";
+// Dietmars Fund 02.11.2026: der Store zeigte "1.19.1 #50 (17.10.2026)" -- das
+// Feld "date" (Unix-Zeit, SUITE.md) war seit 1.18.0 nicht mehr nachgezogen
+// worden, obwohl Version und Build bei jedem Release stiegen.
+$lib = json_decode(file_get_contents(__DIR__ . '/../library.json'), true);
+preg_match('/^## (\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)/m', file_get_contents(__DIR__ . '/../CHANGELOG.md'), $clTop);
+check('library.json "version" == neuester CHANGELOG-Eintrag (' . ($clTop[1] ?? '?') . ')', ($lib['version'] ?? null) === ($clTop[1] ?? ''));
+check('library.json "date" ist Unix-Zeit (kein JJJJMMTT, SUITE.md-Falle "23.8.1970")', is_int($lib['date'] ?? null) && $lib['date'] > 1_700_000_000);
+check('library.json "date" liegt nicht vor dem Datum des neuesten CHANGELOG-Eintrags (' . ($clTop[2] ?? '?') . ')', isset($clTop[2]) && is_int($lib['date'] ?? null) && date('Y-m-d', $lib['date']) >= $clTop[2]);
+
 echo "\n== \"🪟 Formular: Aufbau\" (SUITE.md 3a): Reihenfolge, Zustand, Ausblenden, Rückfall, Reset ==\n";
 $fachKeys = ['standorte', 'datenquellen', 'benachrichtigung', 'schutzaktionen', 'fenster', 'pruefung'];
 $fachCaptions = ['standorte' => 'Standorte (Umkreis', 'datenquellen' => '🌐  Datenquellen', 'benachrichtigung' => '🔔  Benachrichtigung', 'schutzaktionen' => '🛡️  Schutzaktionen', 'fenster' => 'Fenster-/Tür-Überwachung', 'pruefung' => 'Prüfung & Status'];
