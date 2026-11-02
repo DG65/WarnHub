@@ -123,8 +123,8 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.19.0';
-    private const NEWS_VERSION = '1.19.0';
+    private const DOC_VERSION = '1.19.1';
+    private const NEWS_VERSION = '1.19.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -513,6 +513,10 @@ class WarnHub extends IPSModule
     // "Waldbrandgefahr". Ein Wert älter als 3 Tage ist deshalb KEIN
     // aktueller Index mehr (der Index ist ein Tageswert).
     private const WBI_MAX_AGE_DAYS = 3;
+    // Zwischenspeicher für Stationsliste und Tageswerte (siehe wbiStations()).
+    private const WBI_STATION_CACHE_SEC = 7 * 86400;
+    private const WBI_READING_CACHE_SEC = 6 * 3600;
+    private const WBI_FAIL_LOG_SEC = 6 * 3600;
 
     // Umweltbundesamt (UBA) Luftqualitätsdaten -- amtliche bundesweite API,
     // live geprüft 07.09.2026 (offiziell dokumentiert unter
@@ -649,6 +653,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeInteger('PushSnoozeUntilTs', 0);
         $this->RegisterAttributeString('WetterstationRestoreState', '{}');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
+        $this->RegisterAttributeString('WbiCache', '{}');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeBoolean('ForumHintGone', false);
@@ -2140,6 +2145,7 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => '• Fix Waldbrandgefahrenindex (DWD): außerhalb der Waldbrandsaison bleibt die Stationsdatei beim letzten Saisonwert stehen -- WarnHub zeigte so einen Monat alten Wert weiter als aktive Waldbrandgefahr. Ein Stationswert älter als 3 Tage gilt jetzt als veraltet. Praxis-Fund baslerleckerli, Symcon-Forum'],
                 ['type' => 'Label', 'caption' => '• Kacheln: Umkreis-Treffer zeigen jetzt die Entfernung ("Home · 8 km entfernt · bis 18:00 Uhr") -- so ist sichtbar, dass eine Warnung für die Nachbargemeinde (z. B. die deutsche DWD-Warnung jenseits der Grenze) gilt und nicht für den Standort selbst. Bei Standort in der Warnfläche (0 km) und beim Namensabgleich ändert sich nichts'],
                 ['type' => 'Label', 'caption' => '• 🪟 NEU: Formular-Aufbau selbst wählen -- im neuen Bereich "Formular: Aufbau" (unten, vor dem Forum-Hinweis) legst du je Fachbereich fest, ob er beim Öffnen aufgeklappt, zugeklappt oder ausgeblendet ist und an welcher Position er steht. Symcon merkt sich das Auf-/Zuklappen nicht selbst, deshalb gilt die Einstellung bei jedem Öffnen. Ausgeblendete Bereiche arbeiten weiter. Verbund-Konvention, Wunsch Dietmar'],
+                ['type' => 'Label', 'caption' => '• Fix Waldbrandgefahrenindex (DWD): ein kurzer Aussetzer von opendata.dwd.de erschien bisher bei jeder Prüfung als Fehler "WBI-Stationsliste nicht erreichbar". Die Stationsliste wird jetzt zwischengespeichert (neu geladen höchstens einmal pro Woche statt alle 10 Minuten), der Tageswert je Station höchstens alle 6 Stunden. Fällt der Abruf aus, gilt der gespeicherte Stand weiter; eine Fehlermeldung kommt nur noch, wenn es noch nie eine Liste gab, und dann höchstens alle 6 Stunden. Rein schweizerische/österreichische Standorte laden gar nichts mehr. Praxis-Fund baslerleckerli, Symcon-Forum'],
                 ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
             ],
         ];
@@ -4833,34 +4839,41 @@ class WarnHub extends IPSModule
 
     private function fetchWaldbrandDe(): array
     {
-        $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
-        if (count($standorte) === 0) {
+        // Nur deutsche Standorte haben eine DWD-Station -- erst filtern, dann
+        // abrufen (ein reiner Schweizer/österreichischer Aufbau mit
+        // versehentlich aktivierter Quelle lädt so gar nichts).
+        $standorteDe = [];
+        foreach (array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '') as $standort) {
+            $coords = $this->resolveStandortCoords($standort);
+            if ($this->reverseGeocodeStandort($coords['lat'], $coords['lon'])['countryCode'] === 'de') {
+                $standorteDe[] = [$standort, $coords];
+            }
+        }
+        if (count($standorteDe) === 0) {
             return [];
         }
         if (!function_exists('gzdecode')) {
             $this->LogError('fetchWaldbrandDe', 'zlib-Erweiterung (gzdecode) fehlt -- kann die gezippten WBI-Stationsdateien nicht lesen.');
             return [];
         }
-        $stations = $this->fetchWbiStationList();
+        $now = time();
+        $stations = $this->wbiStations($now);
         if ($stations === null) {
-            $this->LogError('fetchWaldbrandDe', 'WBI-Stationsliste (opendata.dwd.de) nicht erreichbar.');
+            if ($this->wbiShouldLogFailure($now)) {
+                $this->LogError('fetchWaldbrandDe', 'WBI-Stationsliste (opendata.dwd.de) nicht erreichbar und noch keine zwischengespeicherte Liste vorhanden -- Waldbrandgefahrenindex vorerst ohne Wert, nächster Versuch bei der nächsten Prüfung. Diese Meldung erscheint höchstens alle 6 Stunden.');
+            }
             return [];
         }
         $schwelle = $this->ReadPropertyInteger('WaldbrandDeSchwelle');
         $stationReadings = []; // Stationsindex => Ergebnis, dedupliziert je Aufruf (mehrere Standorte können dieselbe nächste Station teilen)
         $out = [];
-        foreach ($standorte as $standort) {
-            $coords = $this->resolveStandortCoords($standort);
-            $geo = $this->reverseGeocodeStandort($coords['lat'], $coords['lon']);
-            if ($geo['countryCode'] !== 'de') {
-                continue;
-            }
+        foreach ($standorteDe as [$standort, $coords]) {
             $nearest = $this->findNearestWbiStation($stations, $coords['lat'], $coords['lon']);
             if ($nearest === null) {
                 continue;
             }
             if (!array_key_exists($nearest['index'], $stationReadings)) {
-                $stationReadings[$nearest['index']] = $this->fetchWbiStationCsv($nearest['index']);
+                $stationReadings[$nearest['index']] = $this->wbiReading($nearest['index'], $now);
             }
             $reading = $stationReadings[$nearest['index']];
             if ($reading === null || $reading['wbi'] < $schwelle) {
@@ -4912,9 +4925,98 @@ class WarnHub extends IPSModule
         return $out;
     }
 
+    /**
+     * Stationsliste mit Zwischenspeicher (Attribut WbiCache). Die Liste
+     * (484 Stationen, ~97 KB) ändert sich praktisch nie, wurde bis 1.19.0
+     * aber bei JEDER Prüfung neu geladen (Standardtakt 10 Minuten = ~14 MB
+     * am Tag) -- und jeder einzelne Aussetzer von opendata.dwd.de landete
+     * als Fehler im Meldungsprotokoll. Praxis-Fund baslerleckerli,
+     * Symcon-Forum, 02.11.2026: "produziert regelmässig die Fehlermeldung
+     * ... WBI-Stationsliste (opendata.dwd.de) nicht erreichbar" (Datei war
+     * zur selben Zeit von hier aus abrufbar, also ein zeitweiser Aussetzer).
+     * Jetzt: frisch geladen höchstens alle WBI_STATION_CACHE_SEC; schlägt
+     * der Abruf fehl, gilt die letzte gespeicherte Liste weiter, egal wie
+     * alt. null nur, wenn es noch nie eine gab.
+     */
+    private function wbiStations(int $now): ?array
+    {
+        $cache = $this->wbiCache();
+        $list = $cache['stations'] ?? [];
+        if (is_array($list) && count($list) > 0 && ($now - (int) ($cache['stationsTs'] ?? 0)) < self::WBI_STATION_CACHE_SEC) {
+            return $list;
+        }
+        return $this->wbiStationsAfterFetch($this->fetchWbiStationList(), $now);
+    }
+
+    /** Vom HTTP-Abruf getrennt, damit sich Speichern/Rückfall ohne Netzzugriff testen lassen. $fetched = Ergebnis von fetchWbiStationList() (null/leer = Abruf fehlgeschlagen). */
+    private function wbiStationsAfterFetch(?array $fetched, int $now): ?array
+    {
+        $cache = $this->wbiCache();
+        if ($fetched !== null && count($fetched) > 0) {
+            $cache['stations'] = $fetched;
+            $cache['stationsTs'] = $now;
+            $this->WriteAttributeString('WbiCache', json_encode($cache));
+            return $fetched;
+        }
+        $list = $cache['stations'] ?? [];
+        if (is_array($list) && count($list) > 0) {
+            $this->SendDebug('fetchWaldbrandDe', 'WBI-Stationsliste nicht erreichbar -- nutze die zwischengespeicherte Liste vom ' . date('d.m.Y H:i', (int) ($cache['stationsTs'] ?? 0)) . '.', 0);
+            return $list;
+        }
+        return null;
+    }
+
+    /**
+     * Tageswert einer Station mit Zwischenspeicher: der Index ist ein
+     * Tageswert, ein erneuter Abruf vor Ablauf von WBI_READING_CACHE_SEC
+     * bringt nichts Neues. Schlägt der Abruf fehl, gilt der gespeicherte
+     * Wert weiter (die Altersgrenze wbiReadingIsCurrent() greift trotzdem,
+     * weil sie am Datum des Werts hängt, nicht am Abrufzeitpunkt).
+     */
+    private function wbiReading(int $stationIndex, int $now): ?array
+    {
+        $cache = $this->wbiCache();
+        $c = $cache['readings'][(string) $stationIndex] ?? null;
+        if (is_array($c) && isset($c['date'], $c['wbi']) && ($now - (int) ($c['ts'] ?? 0)) < self::WBI_READING_CACHE_SEC) {
+            return ['date' => (string) $c['date'], 'wbi' => (int) $c['wbi']];
+        }
+        return $this->wbiReadingAfterFetch($stationIndex, $this->fetchWbiStationCsv($stationIndex), $now);
+    }
+
+    /** Vom HTTP-Abruf getrennt (siehe wbiStationsAfterFetch()). */
+    private function wbiReadingAfterFetch(int $stationIndex, ?array $fetched, int $now): ?array
+    {
+        $cache = $this->wbiCache();
+        if ($fetched !== null) {
+            $cache['readings'][(string) $stationIndex] = ['ts' => $now, 'date' => $fetched['date'], 'wbi' => $fetched['wbi']];
+            $this->WriteAttributeString('WbiCache', json_encode($cache));
+            return $fetched;
+        }
+        $c = $cache['readings'][(string) $stationIndex] ?? null;
+        return is_array($c) && isset($c['date'], $c['wbi']) ? ['date' => (string) $c['date'], 'wbi' => (int) $c['wbi']] : null;
+    }
+
+    /** true höchstens einmal je WBI_FAIL_LOG_SEC -- eine dauerhaft fehlende Stationsliste soll sichtbar sein, aber nicht alle 10 Minuten. */
+    private function wbiShouldLogFailure(int $now): bool
+    {
+        $cache = $this->wbiCache();
+        if (($now - (int) ($cache['failLogTs'] ?? 0)) < self::WBI_FAIL_LOG_SEC) {
+            return false;
+        }
+        $cache['failLogTs'] = $now;
+        $this->WriteAttributeString('WbiCache', json_encode($cache));
+        return true;
+    }
+
+    private function wbiCache(): array
+    {
+        $c = json_decode($this->ReadAttributeString('WbiCache'), true);
+        return is_array($c) ? $c : [];
+    }
+
     private function fetchWbiStationList(): ?array
     {
-        $body = $this->httpGet(self::WBI_STATION_LIST_URL, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        $body = $this->httpGet(self::WBI_STATION_LIST_URL, 30,'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         return $body !== null ? $this->parseWbiStationList($body) : null;
     }
 
@@ -4960,7 +5062,7 @@ class WarnHub extends IPSModule
     private function fetchWbiStationCsv(int $stationIndex): ?array
     {
         $url = sprintf(self::WBI_STATION_CSV_URL_TEMPLATE, $stationIndex);
-        $body = $this->httpGet($url, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
+        $body = $this->httpGet($url, 30,'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         if ($body === null) {
             return null;
         }

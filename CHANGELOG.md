@@ -2,6 +2,25 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.19.1 (2026-11-02)
+
+- Fix Waldbrandgefahrenindex (DWD): ein zeitweiser Aussetzer von
+  opendata.dwd.de erschien bei jeder Prüfung als Fehler
+  "fetchWaldbrandDe: WBI-Stationsliste (opendata.dwd.de) nicht erreichbar"
+  (Praxis-Fund baslerleckerli, Symcon-Forum, 02.11.2026; die Datei war zur
+  selben Zeit von hier aus abrufbar, 3x HTTP 200). Ursache: WarnHub lud die
+  Stationsliste (484 Stationen, ~97 KB, ändert sich praktisch nie) bei
+  JEDER Prüfung neu, im Standardtakt also ~144-mal am Tag, und meldete
+  jeden Aussetzer. Jetzt Zwischenspeicher im Attribut `WbiCache`:
+  Stationsliste höchstens alle 7 Tage neu, Tageswert je Station höchstens
+  alle 6 Stunden. Schlägt ein Abruf fehl, gilt der gespeicherte Stand
+  weiter (die Altersgrenze von 1.18.2 greift trotzdem, sie hängt am Datum
+  des Werts). Eine Fehlermeldung kommt nur noch, wenn es noch nie eine
+  Liste gab, und dann höchstens alle 6 Stunden. Zeitlimit beider Abrufe
+  15 -> 30 s (wie die DWD-Warnungen). Zusätzlich wird erst nach deutschen
+  Standorten gefiltert und nur dann überhaupt etwas geladen.
+  Prüfungen in `.tools/test-waldbrand-de.php` (+16).
+
 ## 1.19.0 (2026-10-30)
 
 - Neu: **"🪟 Formular: Aufbau"** (Verbund-Konvention SUITE.md 3a, Dietmar

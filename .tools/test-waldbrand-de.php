@@ -240,5 +240,35 @@ check('Zukunftsdatum gilt als aktuell (negatives Alter, parseWbiStationCsv filte
 check('unlesbares Datum ist NICHT aktuell', $aktuell('kaputt', '20261024') === false);
 check('leeres Datum ist NICHT aktuell', $aktuell('', '20261024') === false);
 
+echo "\n== Zwischenspeicher Stationsliste/Tageswerte (Praxis-Fund baslerleckerli 02.11.2026: Aussetzer von opendata.dwd.de als wiederkehrender Fehler) ==\n";
+$hubC = new WarnHub();
+$hubC->Create();
+$t0 = 1_800_000_000;
+$liste = [['index' => 4175, 'name' => 'Rheinfelden', 'lat' => 47.56, 'lon' => 7.77]];
+check('kein Speicher + Abruf fehlgeschlagen -> null', callPrivate($hubC, 'wbiStationsAfterFetch', [null, $t0]) === null);
+check('leere Liste zählt als fehlgeschlagen -> null', callPrivate($hubC, 'wbiStationsAfterFetch', [[], $t0]) === null);
+check('erfolgreicher Abruf wird zurückgegeben', callPrivate($hubC, 'wbiStationsAfterFetch', [$liste, $t0]) === $liste);
+check('... und gespeichert (Attribut WbiCache)', (json_decode($hubC->ReadAttributeString('WbiCache'), true)['stations'][0]['index'] ?? null) === 4175);
+check('späterer Abruf fehlgeschlagen -> gespeicherte Liste gilt weiter (egal wie alt)', callPrivate($hubC, 'wbiStationsAfterFetch', [null, $t0 + 400 * 86400]) === $liste);
+check('frische Liste innerhalb von 7 Tagen kommt aus dem Speicher, ohne Abruf', callPrivate($hubC, 'wbiStations', [$t0 + 6 * 86400]) === $liste);
+
+$wert = ['date' => '20261102', 'wbi' => 2];
+check('Tageswert: kein Speicher + Abruf fehlgeschlagen -> null', callPrivate($hubC, 'wbiReadingAfterFetch', [4175, null, $t0]) === null);
+check('Tageswert: erfolgreicher Abruf wird zurückgegeben', callPrivate($hubC, 'wbiReadingAfterFetch', [4175, $wert, $t0]) === $wert);
+check('Tageswert: Abruf fehlgeschlagen -> gespeicherter Wert gilt weiter', callPrivate($hubC, 'wbiReadingAfterFetch', [4175, null, $t0 + 86400]) === $wert);
+check('Tageswert: innerhalb von 6 Stunden aus dem Speicher, ohne Abruf', callPrivate($hubC, 'wbiReading', [4175, $t0 + 5 * 3600]) === $wert);
+check('Tageswert: andere Station ohne Speicher bleibt unberührt (null nach Fehlschlag)', callPrivate($hubC, 'wbiReadingAfterFetch', [1443, null, $t0]) === null);
+check('Speicher für Tageswert überlebt das Neuschreiben der Stationsliste', (function () use ($hubC, $liste, $t0, $wert) {
+    callPrivate($hubC, 'wbiStationsAfterFetch', [$liste, $t0 + 10]);
+    return callPrivate($hubC, 'wbiReadingAfterFetch', [4175, null, $t0 + 20]) === $wert;
+})());
+check('Altersgrenze greift auch beim gespeicherten Wert (hängt am Datum, nicht am Abruf)', callPrivate($hubC, 'wbiReadingIsCurrent', ['20260924', '20261102']) === false);
+
+$hubL = new WarnHub();
+$hubL->Create();
+check('Fehlermeldung beim ersten Fehlschlag erlaubt', callPrivate($hubL, 'wbiShouldLogFailure', [$t0]) === true);
+check('... danach 6 Stunden lang nicht erneut', callPrivate($hubL, 'wbiShouldLogFailure', [$t0 + 6 * 3600 - 1]) === false);
+check('... nach 6 Stunden wieder', callPrivate($hubL, 'wbiShouldLogFailure', [$t0 + 6 * 3600]) === true);
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);
