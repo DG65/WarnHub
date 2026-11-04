@@ -26,6 +26,15 @@ function IPS_LogMessage(string $sender, string $message): void
 
 class IPSModule
 {
+    public function Translate($t)
+    {
+        // Wie Symcon: Text über locale.json in die Systemsprache (Prüfstand: Deutsch, WHUB_SPRACHE=en für Englisch).
+        static $tabelle = null;
+        if ($tabelle === null) {
+            $tabelle = json_decode((string) @file_get_contents(__DIR__ . '/../WarnHub/locale.json'), true)['translations'][getenv('WHUB_SPRACHE') ?: 'de'] ?? [];
+        }
+        return $tabelle[$t] ?? $t;
+    }
     public int $InstanceID = 999999;
     protected array $props = [];
     protected array $attrs = [];
@@ -219,6 +228,43 @@ for ($level = 0; $level <= 4; $level++) {
 check('Stufe 4 (sehr schlecht) -> Extreme', $severityMap[4] === 'Extreme');
 check('Stufe 0 (sehr gut) -> Minor', $severityMap[0] === 'Minor');
 check('Label 3 lautet "schlecht" (amtliche UBA-Bezeichnung)', $labelMap[3] === 'schlecht');
+
+
+echo "\n== Zwischenspeicher (Praxis-Fund baslerleckerli 04.11.2026: UBA-Aussetzer als wiederkehrender Fehler) ==\n";
+$hubC = new WarnHub();
+$hubC->Create();
+$t0 = 1_800_000_000;
+$abrufe = 0;
+$liefert = function ($daten) use (&$abrufe) {
+    return function () use ($daten, &$abrufe) {
+        $abrufe++;
+        return $daten;
+    };
+};
+// Werte kommen aus dem JSON-Speicher zurück (190.0 -> 190), deshalb wertgleich (==) verglichen.
+$werte = ['DEBY001' => ['index' => 3, 'value' => 190.0, 'time' => '2026-11-04 15:00:00']];
+check('kein Speicher + Abruf fehlgeschlagen -> null', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'readings', $t0, 1200, 10800, $liefert(null)]) === null);
+check('leeres Ergebnis zählt als fehlgeschlagen -> null', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'readings', $t0, 1200, 10800, $liefert([])]) === null);
+check('erfolgreicher Abruf wird zurückgegeben', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'readings', $t0, 1200, 10800, $liefert($werte)]) == $werte);
+$abrufe = 0;
+check('innerhalb der Frischezeit (20 min) aus dem Speicher ...', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'readings', $t0 + 1199, 1200, 10800, $liefert(null)]) == $werte);
+check('... ganz ohne Abruf', $abrufe === 0);
+check('nach der Frischezeit wird abgerufen; Fehlschlag -> gespeicherter Stand gilt bis 3 Stunden weiter', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'readings', $t0 + 10799, 1200, 10800, $liefert(null)]) == $werte && $abrufe === 1);
+check('nach 3 Stunden gilt der Stand nicht mehr -> null', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'readings', $t0 + 10800, 1200, 10800, $liefert(null)]) === null);
+$liste = ['DEBY001' => ['name' => 'Augsburg', 'lat' => 48.37, 'lon' => 10.89]];
+callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'stations', $t0, 604800, PHP_INT_MAX, $liefert($liste)]);
+check('Stationsliste: Fehlschlag nach einem Jahr -> gespeicherte Liste gilt weiter', callPrivate($hubC, 'cachedSourceData', ['UbaCache', 'stations', $t0 + 365 * 86400, 604800, PHP_INT_MAX, $liefert(null)]) == $liste);
+check('Fächer stören sich nicht: Messwerte bleiben nach dem Speichern der Stationsliste erhalten', (json_decode($hubC->ReadAttributeString('UbaCache'), true)['readings']['data'] ?? null) == $werte);
+$hubL = new WarnHub();
+$hubL->Create();
+check('Fehlermeldung beim ersten Fehlschlag erlaubt', callPrivate($hubL, 'shouldLogSourceFailure', ['UbaCache', $t0]) === true);
+check('... danach 6 Stunden lang nicht erneut', callPrivate($hubL, 'shouldLogSourceFailure', ['UbaCache', $t0 + 6 * 3600 - 1]) === false);
+check('... nach 6 Stunden wieder', callPrivate($hubL, 'shouldLogSourceFailure', ['UbaCache', $t0 + 6 * 3600]) === true);
+check('Drossel-Merker löscht den Datenspeicher nicht', (function () use ($hubL, $t0, $liefert, $werte) {
+    callPrivate($hubL, 'cachedSourceData', ['UbaCache', 'readings', $t0, 1200, 10800, $liefert($werte)]);
+    callPrivate($hubL, 'shouldLogSourceFailure', ['UbaCache', $t0 + 7 * 3600]);
+    return callPrivate($hubL, 'cachedSourceData', ['UbaCache', 'readings', $t0 + 60, 1200, 10800, $liefert(null)]) == $werte;
+})());
 
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

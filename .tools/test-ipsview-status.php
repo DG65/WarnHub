@@ -50,6 +50,15 @@ function RequestAction(int $variableID, $value): bool
 
 class IPSModule
 {
+    public function Translate($t)
+    {
+        // Wie Symcon: Text über locale.json in die Systemsprache (Prüfstand: Deutsch, WHUB_SPRACHE=en für Englisch).
+        static $tabelle = null;
+        if ($tabelle === null) {
+            $tabelle = json_decode((string) @file_get_contents(__DIR__ . '/../WarnHub/locale.json'), true)['translations'][getenv('WHUB_SPRACHE') ?: 'de'] ?? [];
+        }
+        return $tabelle[$t] ?? $t;
+    }
     public int $InstanceID = 999999;
     protected array $props = [];
     protected array $attrs = [];

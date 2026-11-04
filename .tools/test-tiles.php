@@ -26,6 +26,15 @@ function IPS_LogMessage(string $sender, string $message): void
 
 class IPSModule
 {
+    public function Translate($t)
+    {
+        // Wie Symcon: Text über locale.json in die Systemsprache (Prüfstand: Deutsch, WHUB_SPRACHE=en für Englisch).
+        static $tabelle = null;
+        if ($tabelle === null) {
+            $tabelle = json_decode((string) @file_get_contents(__DIR__ . '/../WarnHub/locale.json'), true)['translations'][getenv('WHUB_SPRACHE') ?: 'de'] ?? [];
+        }
+        return $tabelle[$t] ?? $t;
+    }
     public int $InstanceID = 999999;
     protected array $props = [];
     protected array $attrs = [];
@@ -437,7 +446,7 @@ check('jeder Standort bekommt SEINE EIGENE höchste Schweregrad-Farbe, nicht die
 check('kein Marker-Eintrag für den deaktivierten Standort "Deaktiviert"', !in_array('Deaktiviert', array_column($markersDecoded, 'name'), true));
 
 check('Legende-Container vorhanden', str_contains($karte, 'whub-map-legend'));
-check('Legende: "Alle"-Eintrag zum Zurücksetzen auf die Gesamtübersicht', str_contains($karte, "'🌍 Alle'") && str_contains($karte, 'focusAll'));
+check('Legende: "Alle"-Eintrag zum Zurücksetzen auf die Gesamtübersicht', str_contains($karte, '"🌍 Alle"') && str_contains($karte, 'focusAll'));
 check('Legende: Klick auf einen Pin/Legenden-Eintrag fokussiert diesen Standort (fitBounds nur ohne Fokus)', str_contains($karte, 'function focusOn(name)') && str_contains($karte, 'function applyView(name, animate)') && str_contains($karte, 'fitBounds'));
 check('welcher Standort fokussiert ist, wird PRO BROWSER in localStorage gemerkt (whub-map-focus-), nicht instanzweit', str_contains($karte, 'whub-map-focus-') && str_contains($karte, 'focusKey'));
 check('Startansicht ohne gemerkte Wahl ist "alle Standorte" (Dietmars Wunsch 07.09.2026), kein fest konfigurierter Standard-Standort', str_contains($karte, "applyView(savedFocus, false);") && !str_contains($karte, 'KartenkachelStandort'));

@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.19.1-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.20.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -14,6 +14,10 @@ eigene Wetterstation als unabhängiges Sicherheitsnetz -- gefiltert auf den selb
 Umkreis um eigene (auch mobile) Standorte, mit Mehrkanal-Push-Benachrichtigung an
 WebFront-/Kachel-Visualisierung-Geräte, Telegram, Pushover und E-Mail sowie optionalen
 Schutzaktionen.
+
+English version: [README.en.md](README.en.md). Seit 1.20.0 folgen Formular, Benachrichtigungen,
+Kacheln und Meldungen der Sprache des Symcon-Systems (Deutsch oder Englisch); die Warnungen
+selbst bleiben in der Sprache ihrer Quelle.
 
 ## Was tut dieses Modul?
 

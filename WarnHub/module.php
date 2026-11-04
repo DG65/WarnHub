@@ -123,8 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.19.1';
-    private const NEWS_VERSION = '1.19.1';
+    private const DOC_VERSION = '1.20.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -536,6 +535,10 @@ class WarnHub extends IPSModule
     // übersprungen.
     private const UBA_STATIONS_URL = 'https://luftdaten.umweltbundesamt.de/api/air-data/v2/stations/json';
     private const UBA_AIRQUALITY_URL = 'https://luftdaten.umweltbundesamt.de/api/air-data/v2/airquality/json';
+    // Zwischenspeicher (siehe fetchOzonDe()/cachedSourceData()).
+    private const UBA_STATION_CACHE_SEC = 7 * 86400;
+    private const UBA_READING_CACHE_SEC = 20 * 60;
+    private const UBA_READING_MAX_AGE_SEC = 3 * 3600;
     private const UBA_OZONE_COMPONENT_ID = 3;
     private const UBA_LQI_LABEL = [
         0 => 'sehr gut', 1 => 'gut', 2 => 'mäßig', 3 => 'schlecht', 4 => 'sehr schlecht',
@@ -583,13 +586,13 @@ class WarnHub extends IPSModule
     // angekreuzt = Aktion gilt für JEDE Kategorie (Ersatz für das frühere
     // "alle"-Select).
     private const CATEGORY_FIELDS = [
-        'sturm'      => ['KatSturm', '🌪️ Sturm'],
-        'hagel'      => ['KatHagel', '🧊 Hagel'],
-        'starkregen' => ['KatStarkregen', '🌧️ Starkregen'],
-        'gewitter'   => ['KatGewitter', '⚡ Gewitter'],
-        'schnee'     => ['KatSchnee', '❄️ Schnee'],
-        'hitze'      => ['KatHitze', '🥵 Hitze'],
-        'rauch'      => ['KatRauch', '💨 Rauch/Gefahrstoffe'],
+        'sturm'      => ['KatSturm', '🌪️ Storm'],
+        'hagel'      => ['KatHagel', '🧊 Hail'],
+        'starkregen' => ['KatStarkregen', '🌧️ Heavy rain'],
+        'gewitter'   => ['KatGewitter', '⚡ Thunderstorm'],
+        'schnee'     => ['KatSchnee', '❄️ Snow'],
+        'hitze'      => ['KatHitze', '🥵 Heat'],
+        'rauch'      => ['KatRauch', '💨 Smoke/hazardous substances'],
     ];
 
     // ----------------------------------------------------------------
@@ -654,6 +657,7 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeString('WetterstationRestoreState', '{}');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
         $this->RegisterAttributeString('WbiCache', '{}');
+        $this->RegisterAttributeString('UbaCache', '{}');
         $this->RegisterAttributeBoolean('PurposeIntroGone', false);
         $this->RegisterAttributeString('SeenNews', '');
         $this->RegisterAttributeBoolean('ForumHintGone', false);
@@ -689,7 +693,7 @@ class WarnHub extends IPSModule
         // IPSView-Dashboard (oder jede andere Symcon-Visualisierung).
         if (!IPS_VariableProfileExists('WHUB.Schweregrad')) {
             IPS_CreateVariableProfile('WHUB.Schweregrad', VARIABLETYPE_INTEGER);
-            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 0, 'Keine aktive Warnung', 'ℹ️', 0x00C853);
+            IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 0, $this->Translate('No active warning'), 'ℹ️', 0x00C853);
             IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 1, 'Minor', 'ℹ️', 0x00C853);
             IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 2, 'Moderate', '⚠️', 0xFFD600);
             IPS_SetVariableProfileAssociation('WHUB.Schweregrad', 3, 'Severe', '🚨', 0xFF6D00);
@@ -701,15 +705,15 @@ class WarnHub extends IPSModule
     {
         parent::ApplyChanges();
 
-        $this->MaintainVariable('AktiveWarnungen', 'Aktive Warnungen', VARIABLETYPE_INTEGER, '', 1, true);
-        $this->MaintainVariable('HoechsterSchweregrad', 'Höchster Schweregrad', VARIABLETYPE_INTEGER, 'WHUB.Schweregrad', 2, true);
+        $this->MaintainVariable('AktiveWarnungen', $this->Translate('Active warnings'), VARIABLETYPE_INTEGER, '', 1, true);
+        $this->MaintainVariable('HoechsterSchweregrad', $this->Translate('Highest severity'), VARIABLETYPE_INTEGER, 'WHUB.Schweregrad', 2, true);
         $this->MaintainVariable('StatusText', 'Status', VARIABLETYPE_STRING, '', 3, true);
-        $this->MaintainVariable('LetztePruefung', 'Letzte Prüfung', VARIABLETYPE_INTEGER, '~UnixTimestamp', 4, true);
-        $this->MaintainVariable('KachelStatus', 'Kachel (kompakt)', VARIABLETYPE_STRING, '~HTMLBox', 5, true);
-        $this->MaintainVariable('KachelUebersicht', 'Kachel (Übersicht)', VARIABLETYPE_STRING, '~HTMLBox', 6, true);
-        $this->MaintainVariable('KachelKarte', 'Kachel (Karte)', VARIABLETYPE_STRING, '~HTMLBox', 7, true);
-        $this->MaintainVariable('KachelZamg', 'Kachel (ZAMG-Warnkarte, Österreich)', VARIABLETYPE_STRING, '~HTMLBox', 8, true);
-        $this->MaintainVariable('KachelAlle', 'Kachel (Alle Warnungen)', VARIABLETYPE_STRING, '~HTMLBox', 9, true);
+        $this->MaintainVariable('LetztePruefung', $this->Translate('Last check'), VARIABLETYPE_INTEGER, '~UnixTimestamp', 4, true);
+        $this->MaintainVariable('KachelStatus', $this->Translate('Tile (compact)'), VARIABLETYPE_STRING, '~HTMLBox', 5, true);
+        $this->MaintainVariable('KachelUebersicht', $this->Translate('Tile (overview)'), VARIABLETYPE_STRING, '~HTMLBox', 6, true);
+        $this->MaintainVariable('KachelKarte', $this->Translate('Tile (map)'), VARIABLETYPE_STRING, '~HTMLBox', 7, true);
+        $this->MaintainVariable('KachelZamg', $this->Translate('Tile (ZAMG warning map, Austria)'), VARIABLETYPE_STRING, '~HTMLBox', 8, true);
+        $this->MaintainVariable('KachelAlle', $this->Translate('Tile (all warnings)'), VARIABLETYPE_STRING, '~HTMLBox', 9, true);
         $this->refreshStatusVariables();
 
         if (!$this->hasAnyActiveSource()) {
@@ -796,13 +800,13 @@ class WarnHub extends IPSModule
         }
         $lastTs = $this->ReadAttributeInteger('LastPollTs');
         $statusText = $lastTs === 0
-            ? 'Noch keine Prüfung durchgeführt.'
+            ? $this->Translate('No check performed yet.')
             : (count($active) > 0
-                ? sprintf('%d aktive Warnung(en)', count($active))
-                : 'Keine aktive Warnung.');
+                ? sprintf($this->Translate('%d active warning(s)'), count($active))
+                : $this->Translate('No active warning.'));
         $snoozed = $this->isPushSnoozed();
         if ($snoozed) {
-            $statusText .= sprintf(' 🔕 Push pausiert bis %s Uhr.', date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
+            $statusText .= sprintf($this->Translate(' 🔕 Push paused until %s.'), date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
         }
         @$this->SetValue('AktiveWarnungen', count($active));
         @$this->SetValue('HoechsterSchweregrad', $highest);
@@ -840,46 +844,46 @@ class WarnHub extends IPSModule
         $expDokuHilfe = $this->getPanelExpandedState('DokuHilfe', false);
         $form['elements'][] = [
             'type' => 'ExpansionPanel',
-            'caption' => '📖  Dokumentation & Hilfe',
+            'caption' => $this->Translate('📖  Documentation & help'),
             'expanded' => $expDokuHilfe,
             'onClick' => $this->rememberPanelOnClick('DokuHilfe', $expDokuHilfe),
             'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub Version ' . self::DOC_VERSION],
-                ['type' => 'Label', 'caption' => 'Bündelt Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz (D-A-CH) -- amtliche Quellen für Deutschland (Katastrophenschutz, Wetter, Hochwasser, Polizei, Pegel, Radioaktivität), europaweite Wetterwarnungen für 39 Länder (deckt Österreich/Schweiz mit ab) sowie optional die eigene Wetterstation -- und meldet nur, was innerhalb des selbst definierten Umkreises eines Standorts liegt (auch mobiler Standorte im Ausland).'],
-                ['type' => 'Label', 'caption' => 'Datenquellen: NINA-Aggregation (offiziell von der BBK-App genutzt, warnung.bund.de, Deutschland), optional die direkten DWD-Wetterwarnungen (opendata.dwd.de, Deutschland), optional Pegelstände (PEGELONLINE/WSV, Deutschland), optional Radioaktivitäts-Messwerte (BfS Ortsdosisleistung, Deutschland), optional europaweite Wetterwarnungen (Meteoalarm, 39 Länder inkl. Österreich und Schweiz), optional koordinatengenaue Warnungen für Österreich (GeoSphere Austria/ZAMG), optional koordinatengenaue kantonale Zivilschutz-Meldungen für die Schweiz (Alertswiss/BABS), optional amtliche Hochwasser-Gefahrenstufen für die Schweiz (BAFU/LINDAS), optional die eigene Wetterstation als unabhängiges Sicherheitsnetz sowie -- BETA, ungetestet -- optional die eigene VKF-Hagelschutz-Signalbox (Schweiz).'],
-                ['type' => 'Label', 'caption' => 'Bei PEGELONLINE, BfS ODL-Info und der eigenen Wetterstation gibt es keine amtliche Warnstufen-Klassifikation -- WarnHub meldet stattdessen einen erhöhten Pegel (über dem mittleren bzw. bisherigen Höchstwasser), eine Überschreitung des selbst eingestellten Strahlungs-Schwellwerts bzw. eine Überschreitung der selbst eingestellten Windböen-/Regenraten-Schwelle. Das ist keine amtliche Alarmstufe.'],
-                ['type' => 'Label', 'caption' => 'Radius-Prüfung erfolgt geometrisch gegen die tatsächliche Warnfläche (Polygon/Kreis der Meldung), nicht gegen Postleitzahlen/Gemeindegrenzen.'],
-                ['type' => 'Label', 'caption' => 'Liegt zu einer Meldung keine Geometrie vor, wird sie sicherheitshalber NICHT automatisch zugeordnet (keine geratene Präzision).'],
-                ['type' => 'Label', 'caption' => 'Ein Standort kann statt fester Koordinaten auch an zwei Variablen (Lat/Lon) gebunden werden, z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeug -- WarnHub liest dann bei jeder Prüfung die aktuelle Position. Die Objektbaum-Suche im Standorte-Panel findet passende Variablenpaare automatisch und verknüpft sie direkt. Über "Push nur an" lässt sich außerdem festlegen, dass ein Standort nur bestimmte WebFronts benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig genutzten Standorten).'],
-                ['type' => 'Label', 'caption' => 'Schutzaktionen feuern NICHT schon bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf im Schutzaktionen-Panel) -- eine morgens eintreffende, aber erst für den Nachmittag gültige Warnung fährt die Markise also nicht schon morgens ein. Die Push-Benachrichtigung selbst bleibt davon unberührt und kommt weiterhin sofort.'],
-                ['type' => 'Label', 'caption' => 'Konfigurationsverhalten bei Standorten/Push-Zielen/Schutzaktionen: WarnHub durchsucht bei der Einrichtung automatisch den Objektbaum und schlägt Treffer VORAKTIVIERT vor -- mobile Standorte (Tessie-Fahrzeugposition, Geofency, Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeuge), die eigene Wetterstation (Froggit), WebFront- und Kachel-Visualisierung-Instanzen, sowie Instanzen/Variablen mit "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" im Namen -- die beiden Letzteren passen insbesondere zu Tessies eigenen Tesla-Aktionen. Ein Kofferraum/Heckklappe-Treffer bleibt dabei ausnahmsweise INAKTIV, wenn keine passende Zustands-Variable danebengefunden wurde (Sicherheitssperre). Nicht gewünschte Treffer lassen sich einfach über die Aktiv-Spalte abwählen -- eine erneute Suche überschreibt eigene Abwahl-Entscheidungen nicht.'],
+                ['type' => 'Label', 'caption' => $this->Translate('WarnHub version ') . self::DOC_VERSION],
+                ['type' => 'Label', 'caption' => $this->Translate('Bundles warning and alert messages for Germany, Austria and Switzerland (D-A-CH) -- official sources for Germany (civil protection, weather, floods, police, water levels, radioactivity), Europe-wide weather warnings for 39 countries (also covering Austria/Switzerland) and optionally your own weather station -- and only reports what lies within the radius you define around a location (including mobile locations abroad).')],
+                ['type' => 'Label', 'caption' => $this->Translate('Data sources: NINA aggregation (officially used by the BBK app, warnung.bund.de, Germany), optionally the direct DWD weather warnings (opendata.dwd.de, Germany), optionally water levels (PEGELONLINE/WSV, Germany), optionally radioactivity readings (BfS ambient dose rate, Germany), optionally Europe-wide weather warnings (Meteoalarm, 39 countries incl. Austria and Switzerland), optionally coordinate-exact warnings for Austria (GeoSphere Austria/ZAMG), optionally coordinate-exact cantonal civil protection messages for Switzerland (Alertswiss/BABS), optionally official flood danger levels for Switzerland (BAFU/LINDAS), optionally your own weather station as an independent safety net and -- BETA, untested -- optionally your own VKF hail protection signal box (Switzerland).')],
+                ['type' => 'Label', 'caption' => $this->Translate('PEGELONLINE, BfS ODL-Info and your own weather station have no official warning level classification -- instead WarnHub reports an elevated water level (above the mean or previous highest water level), an exceedance of your own radiation threshold or an exceedance of your own wind gust/rain rate threshold. This is not an official alert level.')],
+                ['type' => 'Label', 'caption' => $this->Translate('The radius check is geometric against the actual warning area (polygon/circle of the message), not against postcodes or municipal boundaries.')],
+                ['type' => 'Label', 'caption' => $this->Translate('If a message has no geometry, it is deliberately NOT assigned automatically (no guessed precision).')],
+                ['type' => 'Label', 'caption' => $this->Translate('Instead of fixed coordinates, a location can also be bound to two variables (lat/lon), e.g. from Tessie, Geofency or a Stellantis/Smartcar/BMW ConnectedDrive/Hyundai-Kia Bluelink/OVMS native vehicle -- WarnHub then reads the current position at every check. The object tree search in the locations panel finds matching variable pairs automatically and links them directly. "Push only to" also lets a location notify only certain WebFronts (e.g. one person/vehicle each when several locations are used at the same time).')],
+                ['type' => 'Label', 'caption' => $this->Translate('Protective actions do NOT fire as soon as a message arrives, but only shortly before it actually becomes valid (adjustable lead time in the protective actions panel) -- a warning that arrives in the morning but is only valid for the afternoon does not retract the awning in the morning. The push notification itself is not affected and still arrives immediately.')],
+                ['type' => 'Label', 'caption' => $this->Translate('Configuration behaviour for locations/push targets/protective actions: during setup WarnHub automatically searches the object tree and suggests matches PRE-ACTIVATED -- mobile locations (Tessie vehicle position, Geofency, Stellantis/Smartcar/BMW ConnectedDrive/Hyundai-Kia Bluelink/OVMS native vehicles), your own weather station (Froggit), WebFront and tile visualization instances, as well as instances/variables with "Raffstore"/"Jalousie"/"Markise"/"Garage"/"Fenster schließen"/"Heckklappe"/"Sirene" in their name -- the last two fit Tessie\'s own Tesla actions in particular. As an exception, a boot/tailgate match stays INACTIVE if no matching state variable was found next to it (safety lock). Unwanted matches can simply be deselected in the active column -- a new search does not overwrite your own deselections.')],
             ],
         ];
 
         $expStandorte = $this->getPanelExpandedState('Standorte', true);
         $free['standorte'] = [
             'type' => 'ExpansionPanel',
-            'caption' => '📍  Standorte (Umkreis-Definition)',
+            'caption' => $this->Translate('📍  Locations (radius definition)'),
             'expanded' => $expStandorte,
             'onClick' => $this->rememberPanelOnClick('Standorte', $expStandorte),
             'items' => [
-                ['type' => 'Label', 'caption' => 'Jeder Standort erhält Warnungen nur, wenn eine Meldung innerhalb des angegebenen Umkreises liegt und mindestens den gewählten Schweregrad erreicht. Mehrere Standorte sind möglich (z. B. eigener Wohnort + Zweitwohnsitz/Angehörige).'],
+                ['type' => 'Label', 'caption' => $this->Translate('Each location only receives warnings if a message lies within the given radius and reaches at least the selected severity. Several locations are possible (e.g. your own home + second home/relatives).')],
                 [
                     'type' => 'Button',
-                    'caption' => '📍 Standort aus Symcon-Systemeinstellungen übernehmen',
+                    'caption' => $this->Translate('📍 Take location from Symcon system settings'),
                     'onClick' => 'echo WHUB_AddStandortFromSystemLocation($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Übernimmt Breiten-/Längengrad aus der Symcon-Kerninstanz "Standort" (Kern-Instanzen) als neue Zeile -- fügt sie nur der offenen Tabelle hinzu, "Übernehmen" bleibt trotzdem nötig.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Takes latitude/longitude from the Symcon core instance "Location" (core instances) as a new row -- it is only added to the open table, "Apply" is still required.')],
                 $this->statusLabelItem('SystemLocationStatusLabel', $this->systemLocationStatusLine()),
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Fahrzeug-/Standort-Variablen suchen (mobiler Standort)',
+                    'caption' => $this->Translate('🔎 Search vehicle/location variables (mobile location)'),
                     'onClick' => 'echo WHUB_DiscoverMobileStandorte($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Durchsucht den Objektbaum nach bekannten Positions-Variablenpaaren (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", sowie Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- und OVMS-native-Fahrzeuge) und legt je Fund einen bereits mit den Live-Variablen verknüpften Standort an -- direkt aktiviert, "Live-Standort Lat/Lon" ist schon gesetzt. Nicht gewünschte Treffer einfach über die Aktiv-Spalte abwählen; Umkreis/Schweregrad danach noch prüfen. Eine erneute Suche ergänzt nur neue Funde.'],
-                ['type' => 'Label', 'caption' => 'Mobiler Standort auch von Hand einrichtbar (z. B. aus Tessie, Geofency oder einem Stellantis-/Smartcar-/BMW ConnectedDrive-/Hyundai-Kia-Bluelink-/OVMS-native-Fahrzeug): "Live-Standort Lat/Lon" auf die jeweilige Positions-Variable verweisen -- WarnHub liest dann bei jeder Prüfung die AKTUELLE Position daraus, Lat/Lon in der Tabelle sind dann nur der Startwert/Fallback. 0 = feste Koordinaten aus der Tabelle (bisheriges Verhalten).'],
-                ['type' => 'Label', 'caption' => 'Welche Module genau: "Tessie" (DG65-eigenes Modul für Tesla), "Geofency" (Bridge für die gleichnamige Geofencing-App), sowie vier über den Symcon Module Store bzw. GitHub installierbare Community-Module -- im Store nach dem jeweiligen Namen suchen: "Stellantis Vehicles" (Opel u. a. ehemalige PSA-Marken, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ Fahrzeugmarken über die Smartcar-Plattform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, aktuell Beta), "OVMS native" (für OVMS-Boxen mit der älteren API V2, github.com/lorbetzki/net.lorbetzki.native.ovms).'],
-                ['type' => 'Label', 'caption' => '"Push nur an" schränkt die Benachrichtigung dieses Standorts auf einzelne, namentlich genannte Ziele aus der WebFronts-Liste weiter unten ein (Komma-getrennt, z. B. "iPhone Dietmar") -- praktisch bei mehreren Personen/Fahrzeugen, damit nicht jeder die Warnung der anderen Person bekommt. Leer = wie bisher an alle aktivierten Ziele.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Searches the object tree for known position variable pairs (Tessie "Fahrzeugposition – Breitengrad/Längengrad", Geofency "Current Latitude/Longitude", as well as Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink and OVMS native vehicles) and creates a location already linked to the live variables for each match -- activated directly, "Live location lat/lon" is already set. Simply deselect unwanted matches in the active column; check radius/severity afterwards. A new search only adds new matches.')],
+                ['type' => 'Label', 'caption' => $this->Translate('A mobile location can also be set up by hand (e.g. from Tessie, Geofency or a Stellantis/Smartcar/BMW ConnectedDrive/Hyundai-Kia Bluelink/OVMS native vehicle): point "Live location lat/lon" to the respective position variable -- WarnHub then reads the CURRENT position from it at every check, lat/lon in the table are then only the start value/fallback. 0 = fixed coordinates from the table (previous behaviour).')],
+                ['type' => 'Label', 'caption' => $this->Translate('Which modules exactly: "Tessie" (DG65 module for Tesla), "Geofency" (bridge for the geofencing app of the same name), as well as four community modules installable from the Symcon Module Store or GitHub -- search the store for the respective name: "Stellantis Vehicles" (Opel and other former PSA brands, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ vehicle brands via the Smartcar platform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, currently beta), "OVMS native" (for OVMS boxes with the older API V2, github.com/lorbetzki/net.lorbetzki.native.ovms).')],
+                ['type' => 'Label', 'caption' => $this->Translate('"Push only to" limits the notifications of this location to individual targets from the WebFronts list further down, named explicitly (comma-separated, e.g. "iPhone Dietmar") -- handy with several people/vehicles so that not everyone gets the warnings of the other person. Empty = all activated targets as before.')],
                 $this->statusLabelItem('MobileStandorteStatusLabel', $this->mobileStandorteStatusLine()),
                 [
                     'type' => 'List',
@@ -888,34 +892,34 @@ class WarnHub extends IPSModule
                     'add' => true,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'PLZ/Ort (Info)', 'name' => 'Ort', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Breitengrad (Lat)', 'name' => 'Lat', 'width' => '120px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
-                        ['caption' => 'Längengrad (Lon)', 'name' => 'Lon', 'width' => '120px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
-                        ['caption' => 'Live-Standort Lat (0=fest)', 'name' => 'QuellVarLat', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
-                        ['caption' => 'Live-Standort Lon (0=fest)', 'name' => 'QuellVarLon', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
-                        ['caption' => 'Umkreis (km)', 'name' => 'RadiusKm', 'width' => '100px', 'add' => 10.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1, 'minValue' => 0]],
-                        ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 2, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
-                        ['caption' => 'Push nur an (Name, Komma; leer=alle)', 'name' => 'PushZielFilter', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => $this->Translate('Name'), 'name' => 'Name', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Postcode/place (info)'), 'name' => 'Ort', 'width' => '140px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Latitude (lat)'), 'name' => 'Lat', 'width' => '120px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
+                        ['caption' => $this->Translate('Longitude (lon)'), 'name' => 'Lon', 'width' => '120px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 5]],
+                        ['caption' => $this->Translate('Live location lat (0=fixed)'), 'name' => 'QuellVarLat', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => $this->Translate('Live location lon (0=fixed)'), 'name' => 'QuellVarLon', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => $this->Translate('Radius (km)'), 'name' => 'RadiusKm', 'width' => '100px', 'add' => 10.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1, 'minValue' => 0]],
+                        ['caption' => $this->Translate('From severity'), 'name' => 'MinSeverity', 'width' => '140px', 'add' => 2, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
+                        ['caption' => $this->Translate('Push only to (name, comma; empty=all)'), 'name' => 'PushZielFilter', 'width' => '200px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Active'), 'name' => 'Aktiv', 'width' => '70px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
                     ],
                 ],
-                ['type' => 'ValidationTextBox', 'name' => 'GeoLookupOrt', 'caption' => 'PLZ oder Ort'],
+                ['type' => 'ValidationTextBox', 'name' => 'GeoLookupOrt', 'caption' => $this->Translate('Postcode or place')],
                 [
                     'type' => 'Button',
-                    'caption' => '🔍 Koordinaten nachschlagen',
+                    'caption' => $this->Translate('🔍 Look up coordinates'),
                     'onClick' => 'echo WHUB_LookupCoordinates($id, $GeoLookupOrt);',
                 ],
-                ['type' => 'Label', 'caption' => 'Ermittelt Breiten-/Längengrad über OpenStreetMap Nominatim (kostenlos, kein Zugangsschlüssel) und zeigt sie zum Übertragen in die Tabelle oben an -- schreibt nichts automatisch in eine Zeile.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Determines latitude/longitude via OpenStreetMap Nominatim (free, no access key) and shows them for transfer into the table above -- writes nothing into a row automatically.')],
                 [
                     'type' => 'SelectLocation',
                     'name' => 'KartenStandort',
-                    'caption' => 'Oder auf der Karte auswählen',
+                    'caption' => $this->Translate('Or pick on the map'),
                     'value' => $this->mapDefaultLocation(),
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '📍 Kartenpunkt als Standort übernehmen',
+                    'caption' => $this->Translate('📍 Take map point as location'),
                     'onClick' => 'echo WHUB_AddStandortFromMap($id, $KartenStandort);',
                 ],
             ],
@@ -940,20 +944,20 @@ class WarnHub extends IPSModule
 
         $free['datenquellen'] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🌐  Datenquellen',
+            'caption' => $this->Translate('🌐  Data sources'),
             'expanded' => $expDatenquellen,
             'onClick' => $this->rememberPanelOnClick('Datenquellen', $expDatenquellen),
             'items' => [
                 [
                     'type' => 'ExpansionPanel',
                     'name' => 'DatenquellenAllgemeinPanel',
-                    'caption' => 'Allgemein (grenzüberschreitend)',
+                    'caption' => $this->Translate('General (cross-border)'),
                     'expanded' => $expDqAllgemein,
                     'onClick' => $this->rememberPanelOnClick('DatenquellenAllgemein', $expDqAllgemein),
                     'items' => [
-                        ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => 'Meteoalarm (europaweite Wetterwarnungen, 39 Länder) -- wichtig für mobile Standorte im Ausland'],
-                        ['type' => 'Label', 'caption' => 'Meteoalarm liefert KEINE Warnfläche (Polygon/Kreis), nur benannte Verwaltungsgebiete -- der Abgleich erfolgt deshalb per Namensvergleich (Standort wird per Reverse-Geocoding einem Kreis/einer Region zugeordnet), nicht geometrisch wie bei den übrigen Quellen. Das ist ungenauer und wird in der Meldung ausdrücklich als "Namensabgleich" gekennzeichnet. Für Deutschland übernehmen NINA bzw. die direkte DWD-Anbindung automatisch (präzise Polygone, deutschsprachig): Sobald eine davon aktiv ist, wird der Meteoalarm-Deutschland-Feed nicht mehr abgefragt -- er würde dieselben DWD-Warnungen nur englisch ein zweites Mal liefern. Meteoalarm lohnt sich deshalb vor allem für Standorte im europäischen Ausland.'],
-                        ['type' => 'Label', 'caption' => 'Eigene Wetterstation: löst UNABHÄNGIG von den übrigen Quellen aus, sobald die lokal gemessene Windböe/Regenrate den eigenen Schwellwert überschreitet -- ein Sicherheitsnetz für den Fall, dass amtliche Warnungen ein tatsächlich lokal auftretendes Ereignis nicht oder nicht rechtzeitig melden. 0 = deaktiviert.'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleMeteoalarm', 'caption' => $this->Translate('Meteoalarm (Europe-wide weather warnings, 39 countries) -- important for mobile locations abroad')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Meteoalarm provides NO warning area (polygon/circle), only named administrative areas -- matching is therefore done by name (the location is assigned to a district/region via reverse geocoding), not geometrically as with the other sources. This is less precise and is explicitly marked as "name match" in the message. For Germany, NINA or the direct DWD connection take over automatically (precise polygons, in German): as soon as one of them is active, the Meteoalarm Germany feed is no longer queried -- it would only deliver the same DWD warnings a second time in English. Meteoalarm is therefore mainly worthwhile for locations elsewhere in Europe.')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Own weather station: triggers INDEPENDENTLY of the other sources as soon as the locally measured wind gust/rain rate exceeds your own threshold -- a safety net in case official warnings do not report an event that actually occurs locally, or not in time. 0 = disabled.')],
                         $this->statusLabelItem('WetterstationStatusLabel', $this->wetterstationStatusLine(
                             $this->ReadPropertyInteger('WetterstationInstanceID'),
                             $this->ReadPropertyInteger('WetterstationWindVariableID'),
@@ -962,121 +966,121 @@ class WarnHub extends IPSModule
                         [
                             'type' => 'SelectInstance',
                             'name' => 'WetterstationInstanceID',
-                            'caption' => 'Instanz der Wetterstation',
+                            'caption' => $this->Translate('Weather station instance'),
                             'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);',
                         ],
                         [
                             'type' => 'Button',
-                            'caption' => '🔎 Wetterstation suchen (Froggit/Sainlogic/ELV/Meteobridge & Co.)',
+                            'caption' => $this->Translate('🔎 Search weather station (Froggit/Sainlogic/ELV/Meteobridge & co.)'),
                             'onClick' => 'echo WHUB_DiscoverWetterstation($id);',
                         ],
-                        ['type' => 'Label', 'caption' => 'Findet Froggit (auch als Sainlogic/HP1000SE/WH3000SE vertriebene Ecowitt-Hardware), Sainlogic/ELV (Wunderground-Protokoll) sowie Meteobridge/Meteohub (deckt als Datenlogger-Aggregator zusätzlich weitere Marken wie DAVIS ab). Findet sich keines davon, wird zuletzt systemweit nach Variablen mit dem passenden Symcon-Standardprofil gesucht (z. B. eine bereits profilierte KNX-Wetterstation) -- nur bei einem eindeutigen Treffer übernommen.'],
-                        ['type' => 'Label', 'caption' => 'Andere Fabrikate/Marken (z. B. KNX-Wetterstation ohne zugewiesenes Profil, Netatmo, TFA, Bresser, Homematic): keine automatische Erkennung möglich -- KNX vergibt Variablennamen frei nach eigener ETS-Konfiguration, andere Module nutzen eigene Bezeichnungen. Unten die passenden Wind-/Regen-Variablen des eigenen Systems einfach manuell auswählen (eine reicht, beide zusammen nicht nötig).'],
-                        ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => 'Wind-Variable (manuell, falls keine Froggit-Instanz)', 'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);'],
-                        ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => 'Regen-Variable (manuell, falls keine Froggit-Instanz)', 'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);'],
-                        ['type' => 'Label', 'caption' => 'Ist eine Variable oben manuell gesetzt, hat sie Vorrang vor der Froggit-Instanz -- eine Mischung ist möglich (z. B. Wind von einer KNX-Wetterstation, Regen vom Froggit-Gateway).'],
-                        ['type' => 'Label', 'caption' => 'Windböe -- drei Schwellwerte statt einem: eine Markise ist deutlich windempfindlicher als ein robustes Raffstore. Jede Schutzaktions-Zeile wählt über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert.'],
+                        ['type' => 'Label', 'caption' => $this->Translate('Finds Froggit (including Ecowitt hardware sold as Sainlogic/HP1000SE/WH3000SE), Sainlogic/ELV (Wunderground protocol) and Meteobridge/Meteohub (which as a data logger aggregator also covers other brands such as DAVIS). If none of them is found, the whole system is finally searched for variables with the matching Symcon standard profile (e.g. a KNX weather station that already has a profile) -- only taken over if there is exactly one match.')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Other makes/brands (e.g. KNX weather station without an assigned profile, Netatmo, TFA, Bresser, Homematic): no automatic detection possible -- KNX names variables freely according to its own ETS configuration, other modules use their own names. Simply select the matching wind/rain variables of your system manually below (one is enough, both are not required).')],
+                        ['type' => 'SelectVariable', 'name' => 'WetterstationWindVariableID', 'caption' => $this->Translate('Wind variable (manual, if no Froggit instance)'), 'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);'],
+                        ['type' => 'SelectVariable', 'name' => 'WetterstationRegenVariableID', 'caption' => $this->Translate('Rain variable (manual, if no Froggit instance)'), 'onChange' => 'WHUB_OnChangeWetterstation($id, $WetterstationInstanceID, $WetterstationWindVariableID, $WetterstationRegenVariableID);'],
+                        ['type' => 'Label', 'caption' => $this->Translate('If a variable is set manually above, it takes precedence over the Froggit instance -- mixing is possible (e.g. wind from a KNX weather station, rain from the Froggit gateway).')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Wind gust -- three thresholds instead of one: an awning is much more sensitive to wind than a robust external blind. Each protective action row chooses via its own "From severity" field from which level it reacts.')],
                         [
                             'type' => 'PopupButton',
-                            'caption' => 'Welchen Schwellwert wähle ich?',
+                            'caption' => $this->Translate('Which threshold should I choose?'),
                             'popup' => [
-                                'caption' => 'Windböen-Schwellwerte -- Einordnung',
+                                'caption' => $this->Translate('Wind gust thresholds -- classification'),
                                 'items' => [
-                                    ['type' => 'Label', 'caption' => 'Die Standardwerte lehnen sich an die amtlichen DWD-Windwarnstufen an (Windböen ab 50 km/h, Sturmböen 65-89 km/h, schwere Sturmböen 90-104 km/h) -- die Moderate-Stufe liegt bewusst darunter, weil Sachschutz (Markise, Raffstore) mehr Vorlauf braucht als eine reine Personen-Warnung.'],
-                                    ['type' => 'Label', 'caption' => 'Moderate (Standard 40 km/h): knapp über EN-13561-Windwiderstandsklasse 2 (bis 38 km/h) -- die Grenze, ab der eine durchschnittliche Wohnhaus-Markise gefährdet ist. Empfehlung für Markisen/Sonnensegel: "Ab Schweregrad" auf Moderate setzen.'],
-                                    ['type' => 'Label', 'caption' => 'Severe (Standard 65 km/h): entspricht DWDs "Sturmböen". Empfehlung für Standard-Raffstore/Rollladen/Garagentor: "Ab Schweregrad" auf Severe setzen.'],
-                                    ['type' => 'Label', 'caption' => 'Extreme (Standard 90 km/h): entspricht DWDs "schwere Sturmböen" -- nur für besonders robuste Systeme oder als allgemeiner Auffangwert sinnvoll.'],
-                                    ['type' => 'Label', 'caption' => 'Die tatsächliche Windwiderstandsklasse hängt vom Produkt, den Führungsschienen und der Montage ab -- die Herstellerangabe (falls vorhanden) hat immer Vorrang vor diesen Richtwerten.'],
+                                    ['type' => 'Label', 'caption' => $this->Translate('The default values follow the official DWD wind warning levels (wind gusts from 50 km/h, gale-force gusts 65-89 km/h, severe gale-force gusts 90-104 km/h) -- the Moderate level is deliberately lower because property protection (awning, external blind) needs more lead time than a pure warning for people.')],
+                                    ['type' => 'Label', 'caption' => $this->Translate('Moderate (default 40 km/h): just above EN 13561 wind resistance class 2 (up to 38 km/h) -- the limit above which an average residential awning is at risk. Recommendation for awnings/sun sails: set "From severity" to Moderate.')],
+                                    ['type' => 'Label', 'caption' => $this->Translate('Severe (default 65 km/h): corresponds to the DWD "Sturmböen" (gale-force gusts). Recommendation for standard external blinds/roller shutters/garage doors: set "From severity" to Severe.')],
+                                    ['type' => 'Label', 'caption' => $this->Translate('Extreme (default 90 km/h): corresponds to the DWD "schwere Sturmböen" (severe gale-force gusts) -- only useful for particularly robust systems or as a general catch-all value.')],
+                                    ['type' => 'Label', 'caption' => $this->Translate('The actual wind resistance class depends on the product, the guide rails and the installation -- the manufacturer specification (if available) always takes precedence over these guide values.')],
                                 ],
                             ],
                         ],
-                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleModerate', 'caption' => 'Schwellwert Windböe -- Moderate (km/h)', 'digits' => 1, 'minValue' => 1],
-                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleSevere', 'caption' => 'Schwellwert Windböe -- Severe (km/h)', 'digits' => 1, 'minValue' => 1],
-                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleExtreme', 'caption' => 'Schwellwert Windböe -- Extreme (km/h)', 'digits' => 1, 'minValue' => 1],
-                        ['type' => 'Label', 'caption' => 'Regenrate -- ebenfalls drei Schwellwerte statt einem, analog zur Windböe.'],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleModerate', 'caption' => $this->Translate('Wind gust threshold -- Moderate (km/h)'), 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleSevere', 'caption' => $this->Translate('Wind gust threshold -- Severe (km/h)'), 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationWindSchwelleExtreme', 'caption' => $this->Translate('Wind gust threshold -- Extreme (km/h)'), 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'Label', 'caption' => $this->Translate('Rain rate -- also three thresholds instead of one, analogous to the wind gust.')],
                         [
                             'type' => 'PopupButton',
-                            'caption' => 'Welchen Regen-Schwellwert wähle ich?',
+                            'caption' => $this->Translate('Which rain threshold should I choose?'),
                             'popup' => [
-                                'caption' => 'Regenraten-Schwellwerte -- Einordnung',
+                                'caption' => $this->Translate('Rain rate thresholds -- classification'),
                                 'items' => [
-                                    ['type' => 'Label', 'caption' => 'Die Standardwerte entsprechen DWDs eigenen amtlichen Starkregen-Warnstufen (1 Stunde): Moderate 15 mm/h ("Markante Wetterwarnung"), Severe 25 mm/h ("Unwetterwarnung"), Extreme 40 mm/h ("Warnung vor extremem Unwetter").'],
-                                    ['type' => 'Label', 'caption' => 'Wie bei der Windböe wählt jede Schutzaktions-Zeile über ihr eigenes Feld "Ab Schweregrad" selbst, ab welcher Stufe sie reagiert (z. B. Fenster schließen schon bei Moderate, ein robustes Garagentor erst bei Severe).'],
+                                    ['type' => 'Label', 'caption' => $this->Translate('The default values correspond to the official DWD heavy rain warning levels (1 hour): Moderate 15 mm/h ("Markante Wetterwarnung"), Severe 25 mm/h ("Unwetterwarnung"), Extreme 40 mm/h ("Warnung vor extremem Unwetter").')],
+                                    ['type' => 'Label', 'caption' => $this->Translate('As with the wind gust, each protective action row chooses via its own "From severity" field from which level it reacts (e.g. close windows already at Moderate, a robust garage door only at Severe).')],
                                 ],
                             ],
                         ],
-                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleModerate', 'caption' => 'Schwellwert Regenrate -- Moderate (mm/h)', 'digits' => 1, 'minValue' => 1],
-                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleSevere', 'caption' => 'Schwellwert Regenrate -- Severe (mm/h)', 'digits' => 1, 'minValue' => 1],
-                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleExtreme', 'caption' => 'Schwellwert Regenrate -- Extreme (mm/h)', 'digits' => 1, 'minValue' => 1],
-                        ['type' => 'CheckBox', 'name' => 'WetterstationAutoRueckstellung', 'caption' => 'Automatische Rückstellung nach Windberuhigung (Raffstore/Markise/Garage)'],
-                        ['type' => 'Label', 'caption' => 'Die EINZIGE Ausnahme von "keine automatische Rückstellung" im ganzen Modul -- bewusst nur hier erlaubt, weil die eigene Wetterstation (anders als eine amtliche Warnung) einen fortlaufenden, lokalen Live-Wert liefert. Stellt eine durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktion automatisch auf den Wert zurück, den sie unmittelbar vor dem Auslösen hatte -- aber erst, nachdem Wind UND Regen seit 20 Minuten durchgehend wieder unter der Moderate-Schwelle liegen (Ruhephase gegen kurze Windböen-Pausen mitten im Sturm). Gilt NUR für durch die eigene Wetterstation ausgelöste Aktionen, nicht für amtliche Warnungen. Fenster-/Kofferraum-/Sirenen-/Skript-Aktionen bleiben wie gehabt ohne Rückstellung. Jede Rückstellung wird in der Warnungs-Historie (WHUB_GetHistory()) protokolliert, eine anstehende Rückstellung steht unten im Panel "Prüfung & Status".'],
-                        ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => 'Abfragetakt (Minuten)', 'minValue' => 1, 'maxValue' => 60],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleModerate', 'caption' => $this->Translate('Rain rate threshold -- Moderate (mm/h)'), 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleSevere', 'caption' => $this->Translate('Rain rate threshold -- Severe (mm/h)'), 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'NumberSpinner', 'name' => 'WetterstationRegenSchwelleExtreme', 'caption' => $this->Translate('Rain rate threshold -- Extreme (mm/h)'), 'digits' => 1, 'minValue' => 1],
+                        ['type' => 'CheckBox', 'name' => 'WetterstationAutoRueckstellung', 'caption' => $this->Translate('Automatic reset after the wind calms down (external blind/awning/garage)')],
+                        ['type' => 'Label', 'caption' => $this->Translate('The ONLY exception to "no automatic reset" in the whole module -- deliberately allowed only here, because your own weather station (unlike an official warning) provides a continuous local live value. Automatically sets an external blind/awning/garage door action triggered by your own weather station back to the value it had immediately before triggering -- but only after wind AND rain have been continuously below the Moderate threshold for 20 minutes (calm phase against short wind gust pauses in the middle of a storm). Applies ONLY to actions triggered by your own weather station, not to official warnings. Window/boot/siren/script actions remain without reset as before. Every reset is logged in the warning history (WHUB_GetHistory()), a pending reset is shown at the bottom of the "Check & status" panel.')],
+                        ['type' => 'NumberSpinner', 'name' => 'PollIntervalMinutes', 'caption' => $this->Translate('Polling interval (minutes)'), 'minValue' => 1, 'maxValue' => 60],
                     ],
                 ],
                 [
                     'type' => 'ExpansionPanel',
                     'name' => 'DatenquellenDePanel',
-                    'caption' => '🇩🇪  Deutschland',
+                    'caption' => $this->Translate('🇩🇪  Germany'),
                     'expanded' => $expDqDe,
                     'onClick' => $this->rememberPanelOnClick('DatenquellenDe', $expDqDe),
                     'items' => [
-                        ['type' => 'CheckBox', 'name' => 'QuelleNina', 'caption' => 'NINA-Aggregation (MoWaS/Katwarn/Biwapp/DWD/Hochwasser/Polizei, warnung.bund.de)'],
-                        ['type' => 'CheckBox', 'name' => 'QuelleDwd', 'caption' => 'Zusätzlich direkte DWD-Wetterwarnungen (mehr Detail als die NINA-Zusammenfassung)'],
-                        ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => 'Pegelstände (PEGELONLINE/WSV) -- warnt bei Pegeln über dem mittleren bzw. bisherigen Höchstwasser in der Nähe eines Standorts'],
-                        ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => 'Radioaktivität (BfS Ortsdosisleistung) -- eigener Schwellwert, keine amtliche Meldestufe'],
-                        ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => 'Schwellwert Radioaktivität (µSv/h)', 'digits' => 3, 'minValue' => 0.05],
+                        ['type' => 'CheckBox', 'name' => 'QuelleNina', 'caption' => $this->Translate('NINA aggregation (MoWaS/Katwarn/Biwapp/DWD/floods/police, warnung.bund.de)')],
+                        ['type' => 'CheckBox', 'name' => 'QuelleDwd', 'caption' => $this->Translate('Additionally direct DWD weather warnings (more detail than the NINA summary)')],
+                        ['type' => 'CheckBox', 'name' => 'QuellePegelonline', 'caption' => $this->Translate('Water levels (PEGELONLINE/WSV) -- warns about levels above the mean or previous highest water level near a location')],
+                        ['type' => 'CheckBox', 'name' => 'QuelleBfsOdl', 'caption' => $this->Translate('Radioactivity (BfS ambient dose rate) -- own threshold, no official alert level')],
+                        ['type' => 'NumberSpinner', 'name' => 'BfsOdlSchwellwert', 'caption' => $this->Translate('Radioactivity threshold (µSv/h)'), 'digits' => 3, 'minValue' => 0.05],
                         [
                             'type' => 'PopupButton',
-                            'caption' => 'Was bedeutet dieser Wert? (Einordnung Dosisleistung/Verweildauer)',
+                            'caption' => $this->Translate('What does this value mean? (classification of dose rate/exposure time)'),
                             'popup' => [
-                                'caption' => 'Ortsdosisleistung -- Einordnung',
+                                'caption' => $this->Translate('Ambient dose rate -- classification'),
                                 'items' => $this->bfsOdlReferencePopupItems(),
                             ],
                         ],
-                        ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => 'Zusätzlich deutscher Waldbrandgefahrenindex (DWD) -- amtliche 5-stufige Skala, je Standort die nächstgelegene Messstation'],
-                        ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => 'Ab Gefahrenstufe (1-5)', 'minValue' => 1, 'maxValue' => 5],
-                        ['type' => 'Label', 'caption' => 'Nutzt DWDs amtliche 5-stufige Waldbrandgefahrenindex-Skala (1 = sehr geringe Gefahr bis 5 = sehr hohe Gefahr). Es gibt keine einzelne Datei für "heute, alle Stationen" -- WarnHub ermittelt deshalb je deutschem Standort die nächstgelegene der 484 DWD-Messstationen und fragt NUR deren aktuellen Wert ab, statt alle Stationen bei jeder Prüfung abzurufen. Braucht die PHP-Erweiterung "zlib" (für gzip, meist Standard); fehlt sie, bleibt diese Quelle inaktiv, alle anderen Quellen funktionieren unabhängig davon weiter. Der DWD rechnet den Index nur in der Waldbrandsaison (etwa März bis September/Oktober): Liegt der letzte Stationswert mehr als 3 Tage zurück, gilt er als veraltet und löst nicht aus.'],
-                        ['type' => 'CheckBox', 'name' => 'QuelleOzonDe', 'caption' => 'Zusätzlich deutsche Ozonbelastung (Umweltbundesamt) -- amtlicher Luftqualitätsindex, nur Ozon/Sommersmog'],
-                        ['type' => 'NumberSpinner', 'name' => 'UbaOzonSchwelle', 'caption' => 'Ab Luftqualitätsindex-Stufe (0-4)', 'minValue' => 0, 'maxValue' => 4],
-                        ['type' => 'Label', 'caption' => 'Nutzt das Umweltbundesamt (UBA) als amtliche Quelle für Ozonmesswerte, ausdrücklich NUR Ozon/Sommersmog -- kein allgemeines Luftgüte-Monitoring und keine private Innenraum-Sensorik (dafür ist WarnHub nicht gedacht, siehe Forum-Diskussion). Amtliche 5-stufige Skala (0 = sehr gut bis 4 = sehr schlecht), berechnet aus der stündlichen Ozonkonzentration je Messstation (0-60 µg/m³ = Stufe 0, ... über 240 µg/m³ = Stufe 4).'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleWaldbrandDe', 'caption' => $this->Translate('Additionally German forest fire danger index (DWD) -- official 5-level scale, the nearest measuring station for each location')],
+                        ['type' => 'NumberSpinner', 'name' => 'WaldbrandDeSchwelle', 'caption' => $this->Translate('From danger level (1-5)'), 'minValue' => 1, 'maxValue' => 5],
+                        ['type' => 'Label', 'caption' => $this->Translate('Uses the official DWD 5-level forest fire danger index scale (1 = very low danger to 5 = very high danger). There is no single file for "today, all stations" -- WarnHub therefore determines the nearest of the 484 DWD measuring stations for each German location and queries ONLY its current value instead of fetching all stations at every check. Requires the PHP extension "zlib" (for gzip, usually standard); without it this source stays inactive, all other sources keep working independently. The DWD only calculates the index during the forest fire season (roughly March to September/October): if the last station value is more than 3 days old, it counts as outdated and does not trigger.')],
+                        ['type' => 'CheckBox', 'name' => 'QuelleOzonDe', 'caption' => $this->Translate('Additionally German ozone pollution (Federal Environment Agency) -- official air quality index, ozone/summer smog only')],
+                        ['type' => 'NumberSpinner', 'name' => 'UbaOzonSchwelle', 'caption' => $this->Translate('From air quality index level (0-4)'), 'minValue' => 0, 'maxValue' => 4],
+                        ['type' => 'Label', 'caption' => $this->Translate('Uses the Federal Environment Agency (UBA) as the official source for ozone readings, explicitly ONLY ozone/summer smog -- no general air quality monitoring and no private indoor sensors (WarnHub is not meant for that, see forum discussion). Official 5-level scale (0 = very good to 4 = very poor), calculated from the hourly ozone concentration per measuring station (0-60 µg/m³ = level 0, ... above 240 µg/m³ = level 4).')],
                     ],
                 ],
                 [
                     'type' => 'ExpansionPanel',
                     'name' => 'DatenquellenAtPanel',
-                    'caption' => '🇦🇹  Österreich',
+                    'caption' => $this->Translate('🇦🇹  Austria'),
                     'expanded' => $expDqAt,
                     'onClick' => $this->rememberPanelOnClick('DatenquellenAt', $expDqAt),
                     'items' => [
-                        ['type' => 'CheckBox', 'name' => 'QuelleGeosphereAt', 'caption' => 'Zusätzlich direkte GeoSphere-Austria-Warnungen (warnungen.zamg.at) -- koordinatengenau für österreichische Standorte, präziser als Meteoalarm'],
-                        ['type' => 'Label', 'caption' => 'Ist diese direkte Anbindung aktiv, übernimmt sie für österreichische Standorte automatisch von Meteoalarm (koordinatengenau statt Namensabgleich) -- analog zur direkten DWD-Anbindung, die für deutsche Standorte den entsprechenden NINA-Kanal ersetzt. Amtliche Quelle (GeoSphere Austria/ZAMG), kein Zugangsschlüssel nötig.'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleGeosphereAt', 'caption' => $this->Translate('Additionally direct GeoSphere Austria warnings (warnungen.zamg.at) -- coordinate-exact for Austrian locations, more precise than Meteoalarm')],
+                        ['type' => 'Label', 'caption' => $this->Translate('If this direct connection is active, it automatically takes over Austrian locations from Meteoalarm (coordinate-exact instead of name match) -- analogous to the direct DWD connection, which replaces the corresponding NINA channel for German locations. Official source (GeoSphere Austria/ZAMG), no access key required.')],
                     ],
                 ],
                 [
                     'type' => 'ExpansionPanel',
                     'name' => 'DatenquellenChPanel',
-                    'caption' => '🇨🇭  Schweiz',
+                    'caption' => $this->Translate('🇨🇭  Switzerland'),
                     'expanded' => $expDqCh,
                     'onClick' => $this->rememberPanelOnClick('DatenquellenCh', $expDqCh),
                     'items' => [
-                        ['type' => 'CheckBox', 'name' => 'QuelleAlertSwissCh', 'caption' => 'Zusätzlich Alertswiss (alert.swiss/BABS) -- Schweizer Pendant zu NINA: kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, koordinatengenau'],
-                        ['type' => 'Label', 'caption' => 'Ergänzt Meteoalarm für Schweizer Standorte, ersetzt es NICHT: Alertswiss führt keine MeteoSchweiz-Wetterwarnungen (Sturm, Starkregen, Hagel), die kommen weiterhin nur über Meteoalarm oben. Amtliche Quelle des Bundesamts für Bevölkerungsschutz (BABS), kein Zugangsschlüssel nötig. Deckt mehr als Wetter ab, ergänzt also auch die spezialisierten Quellen unten (BAFU-Hochwasser, Erdbeben).'],
-                        ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => 'Zusätzlich Schweizer Hochwassergefahr (BAFU/LINDAS) -- amtliche Gefahrenstufe für Fliessgewässer und Seen'],
-                        ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => 'Ab Gefahrenstufe (2-5)', 'minValue' => 2, 'maxValue' => 5],
-                        ['type' => 'Label', 'caption' => 'Nutzt BAFUs amtliche 5-stufige Gefahrenstufen-Skala für Hochwasser (1 = keine/geringe Gefahr bis 5 = sehr große Gefahr) -- anders als PEGELONLINE, BfS und die eigene Wetterstation also KEINE Eigenkonstruktion, sondern eine echte behördliche Klassifikation. Nur die Schwelle, AB der WarnHub meldet, ist einstellbar.'],
-                        ['type' => 'CheckBox', 'name' => 'QuelleSedErdbebenCh', 'caption' => 'Zusätzlich Schweizer Erdbeben (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle)'],
-                        ['type' => 'Label', 'caption' => 'Amtliche seismologische Überwachung, keine Wetterquelle. Anders als bei Wetterwarnungen liefert die Quelle selbst weder eine Warnfläche noch ein "Gültig bis" -- ein Erdbeben ist ein Momentereignis. WarnHub bildet deshalb einen eigenen Kreis um das Epizentrum (Radius nach Magnitude gestuft -- eine grobe eigene Näherung, KEINE amtliche Gefährdungsfläche) und ein 2-Stunden-Zeitfenster (Nachbeben-relevant), danach zählt es nicht mehr als aktiv.'],
+                        ['type' => 'CheckBox', 'name' => 'QuelleAlertSwissCh', 'caption' => $this->Translate('Additionally Alertswiss (alert.swiss/BABS) -- Swiss counterpart to NINA: cantonal fire bans, forest fires, drought, rockfall/landslides and other civil protection messages, coordinate-exact')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Complements Meteoalarm for Swiss locations, does NOT replace it: Alertswiss does not carry MeteoSwiss weather warnings (storm, heavy rain, hail), they still only come via Meteoalarm above. Official source of the Federal Office for Civil Protection (BABS), no access key required. Covers more than weather, so it also complements the specialised sources below (BAFU floods, earthquakes).')],
+                        ['type' => 'CheckBox', 'name' => 'QuelleBafuHydroCh', 'caption' => $this->Translate('Additionally Swiss flood danger (BAFU/LINDAS) -- official danger level for rivers and lakes')],
+                        ['type' => 'NumberSpinner', 'name' => 'BafuHydroSchwelle', 'caption' => $this->Translate('From danger level (2-5)'), 'minValue' => 2, 'maxValue' => 5],
+                        ['type' => 'Label', 'caption' => $this->Translate('Uses the official BAFU 5-level flood danger scale (1 = no/low danger to 5 = very high danger) -- unlike PEGELONLINE, BfS and your own weather station, NOT a construct of its own but a real official classification. Only the threshold FROM which WarnHub reports is adjustable.')],
+                        ['type' => 'CheckBox', 'name' => 'QuelleSedErdbebenCh', 'caption' => $this->Translate('Additionally Swiss earthquakes (Swiss Seismological Service SED, ETH Zurich) -- from magnitude 2.5 (the perceptibility threshold according to SED)')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Official seismological monitoring, not a weather source. Unlike weather warnings, the source itself provides neither a warning area nor a "valid until" -- an earthquake is an instantaneous event. WarnHub therefore draws its own circle around the epicentre (radius graded by magnitude -- a rough approximation of its own, NOT an official hazard area) and a 2-hour time window (relevant for aftershocks), after which it no longer counts as active.')],
                         [
                             'type' => 'ExpansionPanel',
                             'name' => 'HagelschutzChPanel',
-                            'caption' => '🧪  BETA: Hagelschutz Schweiz (VKF-Signalbox)',
+                            'caption' => $this->Translate('🧪  BETA: hail protection Switzerland (VKF signal box)'),
                             'expanded' => $expHagelschutz,
                             'onClick' => $this->rememberPanelOnClick('HagelschutzCh', $expHagelschutz),
                             'items' => [
-                                ['type' => 'Label', 'caption' => 'AUSDRÜCKLICH BETA -- ungetestet: Diese Anbindung wurde ausschließlich aus der offiziellen VKF-Dokumentation und dem Quellcode eines aktiven Community-Adapters gebaut. Ohne eigene Signalbox konnte der Live-Abruf selbst nicht gegengeprüft werden -- die sonst in diesem Modul durchgehend befolgte "live verifizieren"-Regel wird hier bewusst ausgesetzt. Rückmeldungen (funktioniert/funktioniert nicht) sind ausdrücklich willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
-                                ['type' => 'Label', 'caption' => 'Setzt eine physisch bei einem konkreten Schweizer Gebäude registrierte VKF-Hagelschutz-Signalbox voraus (hagelschutz-einfach-automatisch.ch) -- kein reiner Software-Zugang. Ohne eigene Signalbox einfach leer lassen, dann bleibt diese Quelle inaktiv.'],
-                                ['type' => 'ValidationTextBox', 'name' => 'HagelschutzPollUrl', 'caption' => 'Poll-URL der eigenen Signalbox'],
-                                ['type' => 'Label', 'caption' => 'Die vollständige Adresse aus der eigenen Signalbox-Konfiguration eintragen (Format https://meteo.netitservices.com/api/v1/devices/<deviceId>/poll?hwtypeId=<HID>) -- nicht selbst aus deviceId/hwtypeId zusammensetzen, da sich das Format zwischen Signalbox-Generationen unterscheiden kann. Meldet eine Hagelwarnung am Symcon-Systemstandort, sobald die Signalbox "currentState" ungleich 0 zurückgibt (inkl. Testalarm).'],
+                                ['type' => 'Label', 'caption' => $this->Translate('EXPLICITLY BETA -- untested: this connection was built solely from the official VKF documentation and the source code of an active community adapter. Without a signal box of my own, the live query itself could not be cross-checked -- the "verify live" rule followed throughout this module is deliberately suspended here. Feedback (works/does not work) is explicitly welcome, see the feedback hint at the end of the form.')],
+                                ['type' => 'Label', 'caption' => $this->Translate('Requires a VKF hail protection signal box physically registered at a specific Swiss building (hagelschutz-einfach-automatisch.ch) -- not a pure software access. Without your own signal box simply leave empty, then this source stays inactive.')],
+                                ['type' => 'ValidationTextBox', 'name' => 'HagelschutzPollUrl', 'caption' => $this->Translate('Poll URL of your own signal box')],
+                                ['type' => 'Label', 'caption' => $this->Translate('Enter the complete address from your own signal box configuration (format https://meteo.netitservices.com/api/v1/devices/<deviceId>/poll?hwtypeId=<HID>) -- do not assemble it yourself from deviceId/hwtypeId, as the format may differ between signal box generations. Reports a hail warning at the Symcon system location as soon as the signal box returns "currentState" other than 0 (incl. test alarm).')],
                             ],
                         ],
                     ],
@@ -1087,21 +1091,21 @@ class WarnHub extends IPSModule
         $expBenachrichtigung = $this->getPanelExpandedState('Benachrichtigung', true);
         $free['benachrichtigung'] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🔔  Benachrichtigung',
+            'caption' => $this->Translate('🔔  Notification'),
             'expanded' => $expBenachrichtigung,
             'onClick' => $this->rememberPanelOnClick('Benachrichtigung', $expBenachrichtigung),
             'items' => [
-                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => 'Push-Benachrichtigung an aktivierte Push-Ziele (WebFront/Kachel-Visualisierung/Telegram/Pushover/E-Mail, auch Handy)'],
-                ['type' => 'Select', 'name' => 'PushSound', 'caption' => 'Signalton (nur WebFront/Kachel-Visualisierung)', 'options' => $this->soundOptions()],
+                ['type' => 'CheckBox', 'name' => 'PushAktiv', 'caption' => $this->Translate('Push notification to activated push targets (WebFront/tile visualization/Telegram/Pushover/e-mail, also mobile phone)')],
+                ['type' => 'Select', 'name' => 'PushSound', 'caption' => $this->Translate('Sound (WebFront/tile visualization only)'), 'options' => $this->soundOptions()],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Push-Ziele suchen',
+                    'caption' => $this->Translate('🔎 Search push targets'),
                     'onClick' => 'echo WHUB_DiscoverWebFronts($id);',
                 ],
                 $this->statusLabelItem('WebFrontStatusLabel', $this->webfrontStatusLine()),
-                ['type' => 'Label', 'caption' => 'Sucht WebFront-Instanzen, Kachel-Visualisierung-Instanzen (die neuere Symcon-Oberfläche, unter "Visualisierung Instanzen" im Objektbaum -- häufig die eigentlich genutzte Oberfläche), sowie -- falls installiert -- Telegram-Bot- (offizielles Symcon-Modul), Pushover- (Community-Modul) und SMTP-Instanzen (offizielles Symcon-Modul, für E-Mail). Gefundene Ziele sind standardmäßig aktiv (bekommen Push) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Eine erneute Suche fügt nur neue Ziele hinzu und lässt bestehende Abwahl-Entscheidungen unangetastet.'],
-                ['type' => 'Label', 'caption' => 'Telegram/Pushover/E-Mail: Anbindung anhand des echten Quellcodes bzw. der echten Funktionssignatur der jeweiligen Module gebaut, aber ohne eigenen Telegram-Bot-/Pushover-Account nicht selbst live gegenprüfbar -- Rückmeldungen willkommen, siehe Feedback-Hinweis am Ende des Formulars.'],
-                ['type' => 'Label', 'caption' => 'E-Mail (SMTP): eine gefundene SMTP-Instanz kennt nur den Versandweg, nicht den Empfänger -- deshalb zunächst INAKTIV angelegt. Erst in der Spalte "Zieladresse" die gewünschte E-Mail-Adresse eintragen, dann in der Spalte "Aktiv" aktivieren. Mehrere Adressen: einfach mit Komma oder Semikolon getrennt in dasselbe Feld eintragen.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Searches WebFront instances, tile visualization instances (the newer Symcon interface, under "Visualization instances" in the object tree -- often the interface actually used), as well as -- if installed -- Telegram bot (official Symcon module), Pushover (community module) and SMTP instances (official Symcon module, for e-mail). Found targets are active by default (receive push) -- simply deselect unwanted ones in the active column. A new search only adds new targets and leaves existing deselections untouched.')],
+                ['type' => 'Label', 'caption' => $this->Translate('Telegram/Pushover/e-mail: connection built from the real source code or the real function signature of the respective modules, but without my own Telegram bot/Pushover account not verifiable live -- feedback welcome, see the feedback hint at the end of the form.')],
+                ['type' => 'Label', 'caption' => $this->Translate('E-mail (SMTP): a found SMTP instance only knows the sending route, not the recipient -- it is therefore created INACTIVE at first. Enter the desired e-mail address in the "Target address" column first, then activate it in the "Active" column. Several addresses: simply enter them separated by comma or semicolon in the same field.')],
                 [
                     'type' => 'List',
                     'name' => 'WebFronts',
@@ -1109,21 +1113,21 @@ class WarnHub extends IPSModule
                     'add' => false,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '190px', 'edit' => ['type' => 'ValidationTextBox', 'enabled' => false]],
-                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '160px', 'edit' => ['type' => 'Select', 'options' => [
+                        ['caption' => $this->Translate('Name'), 'name' => 'Name', 'width' => '190px', 'edit' => ['type' => 'ValidationTextBox', 'enabled' => false]],
+                        ['caption' => $this->Translate('Type'), 'name' => 'Typ', 'width' => '160px', 'edit' => ['type' => 'Select', 'options' => [
                             ['caption' => 'WebFront', 'value' => 'webfront'],
-                            ['caption' => 'Kachel-Visualisierung', 'value' => 'kachel'],
+                            ['caption' => $this->Translate('Tile visualization'), 'value' => 'kachel'],
                             ['caption' => 'Telegram', 'value' => 'telegram'],
                             ['caption' => 'Pushover', 'value' => 'pushover'],
-                            ['caption' => 'E-Mail (SMTP)', 'value' => 'email'],
+                            ['caption' => $this->Translate('E-mail (SMTP)'), 'value' => 'email'],
                             ['caption' => 'Notification Control (IPSView & Co.)', 'value' => 'notification'],
                         ]]],
-                        ['caption' => 'Instanz-ID', 'name' => 'InstanceID', 'width' => '90px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
-                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Zieladresse (nur E-Mail)', 'name' => 'Zieladresse', 'width' => '210px', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Instance ID'), 'name' => 'InstanceID', 'width' => '90px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
+                        ['caption' => $this->Translate('Active'), 'name' => 'Aktiv', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => $this->Translate('Target address (e-mail only)'), 'name' => 'Zieladresse', 'width' => '210px', 'edit' => ['type' => 'ValidationTextBox']],
                     ],
                 ],
-                ['type' => 'Label', 'caption' => 'Ruhephase: pausiert NUR die Benachrichtigung selbst -- Erkennung und Schutzaktionen laufen unverändert weiter (z. B. im Urlaub fährt die Markise bei Sturm trotzdem ein, nur das Handy bleibt still). Ein Klick auf "🧪 Testbenachrichtigung senden" oben kommt auch während einer Pause an.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Quiet period: pauses ONLY the notification itself -- detection and protective actions keep running unchanged (e.g. on holiday the awning still retracts in a storm, only the phone stays silent). A click on "🧪 Send test notification" above also arrives during a pause.')],
                 [
                     'type' => 'Label',
                     'name' => 'SnoozeStatusLabel',
@@ -1132,10 +1136,10 @@ class WarnHub extends IPSModule
                 [
                     'type' => 'RowLayout',
                     'items' => [
-                        ['type' => 'Button', 'caption' => '1 Std. pausieren', 'onClick' => 'echo WHUB_SnoozePush($id, 60);'],
-                        ['type' => 'Button', 'caption' => '4 Std. pausieren', 'onClick' => 'echo WHUB_SnoozePush($id, 240);'],
-                        ['type' => 'Button', 'caption' => '24 Std. pausieren', 'onClick' => 'echo WHUB_SnoozePush($id, 1440);'],
-                        ['type' => 'Button', 'caption' => '🔔 Pause aufheben', 'onClick' => 'echo WHUB_CancelSnooze($id);'],
+                        ['type' => 'Button', 'caption' => $this->Translate('Pause for 1 h'), 'onClick' => 'echo WHUB_SnoozePush($id, 60);'],
+                        ['type' => 'Button', 'caption' => $this->Translate('Pause for 4 h'), 'onClick' => 'echo WHUB_SnoozePush($id, 240);'],
+                        ['type' => 'Button', 'caption' => $this->Translate('Pause for 24 h'), 'onClick' => 'echo WHUB_SnoozePush($id, 1440);'],
+                        ['type' => 'Button', 'caption' => $this->Translate('🔔 Resume notifications'), 'onClick' => 'echo WHUB_CancelSnooze($id);'],
                     ],
                 ],
             ],
@@ -1144,46 +1148,46 @@ class WarnHub extends IPSModule
         $expSchutzaktionen = $this->getPanelExpandedState('Schutzaktionen', false);
         $free['schutzaktionen'] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🛡️  Schutzaktionen (Jalousien/Raffstore, Markisen, Garagentor, Fenster, Kofferraum, Sirenen, Skripte)',
+            'caption' => $this->Translate('🛡️  Protective actions (blinds/external blinds, awnings, garage door, windows, boot, sirens, scripts)'),
             'expanded' => $expSchutzaktionen,
             'onClick' => $this->rememberPanelOnClick('Schutzaktionen', $expSchutzaktionen),
             'items' => [
                 [
                     'type' => 'ExpansionPanel',
-                    'caption' => '🛑 SICHERHEITSHINWEIS -- Fenster/Kofferraum an Fahrzeugen: bitte unbedingt lesen',
+                    'caption' => $this->Translate('🛑 SAFETY NOTICE -- windows/boot on vehicles: please be sure to read'),
                     'expanded' => true,
                     'items' => [
-                        ['type' => 'Label', 'caption' => 'Betrifft die beiden Aktionstypen "Fenster schließen" und "Kofferraum/Heckklappe schließen": Weder das Fahrzeug noch WarnHub können erkennen, ob sich gerade eine Person, eine Hand oder ein anderes Körperteil im Bewegungsbereich der schließenden Scheibe oder Klappe befindet.'],
-                        ['type' => 'Label', 'caption' => 'Anders als bei vielen Garagentoren gibt es hier KEINE zuverlässige Einklemmschutz- oder Hinderniserkennung, auf die sich WarnHub verlassen könnte -- die Aktion schließt unbeaufsichtigt, ohne Vorwarnung und unabhängig davon, ob gerade jemand danebensteht. Das kann zu ernsthaften Verletzungen führen.'],
-                        ['type' => 'Label', 'caption' => 'Aktiviere diese beiden Aktionstypen deshalb NUR, wenn du sicher bist, dass niemand unbeaufsichtigt in Reichweite des Fahrzeugs sein kann, wenn eine Warnung eintrifft (z. B. ein Fahrzeug, das ausschließlich auf einem nicht öffentlich zugänglichen Grundstück steht). IM ZWEIFEL VERZICHTE AUF DIESE FUNKTION und schließe Fenster/Kofferraum stattdessen selbst von Hand, sobald du die Warnung siehst.'],
+                        ['type' => 'Label', 'caption' => $this->Translate('Concerns the two action types "Close windows" and "Close boot/tailgate": neither the vehicle nor WarnHub can detect whether a person, a hand or another body part is in the range of motion of the closing window or tailgate.')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Unlike many garage doors, there is NO reliable anti-trap or obstacle detection that WarnHub could rely on -- the action closes unattended, without warning and regardless of whether someone is standing next to it. This can lead to serious injuries.')],
+                        ['type' => 'Label', 'caption' => $this->Translate('Therefore only activate these two action types if you are sure that nobody can be within reach of the vehicle unattended when a warning arrives (e.g. a vehicle that is only ever parked on private property not accessible to the public). WHEN IN DOUBT, DO WITHOUT THIS FUNCTION and close windows/boot yourself by hand as soon as you see the warning.')],
                     ],
                 ],
-                ['type' => 'Label', 'caption' => 'Löst bei passender Warnung automatisch eine Aktion aus -- z. B. Raffstore hochfahren, Garagentor schließen, Autofenster schließen, ein akustisches Signal schalten oder ein eigenes Skript ausführen. Jede Aktion feuert nur EINMAL je Warnung, es gibt keine automatische Rückstellung -- das bleibt bewusst Nutzerhandeln.'],
-                ['type' => 'Label', 'caption' => 'Warnungen treffen oft Stunden vor ihrem eigentlichen Gültigkeitsbeginn ein -- eine Aktion feuert deshalb NICHT sofort bei Eingang der Meldung, sondern erst kurz vor dem tatsächlichen Beginn (Vorlauf unten, damit z. B. die Markise sicher fertig eingefahren ist). Warnungen ohne eigene Zeitangabe (kommt selten vor) lösen weiterhin sofort aus; bereits laufende/akute Warnungen ebenfalls.'],
-                ['type' => 'NumberSpinner', 'name' => 'SchutzaktionVorlaufMinuten', 'caption' => 'Vorlauf vor Gültigkeitsbeginn (Minuten)', 'minValue' => 0, 'maxValue' => 720],
+                ['type' => 'Label', 'caption' => $this->Translate('Automatically triggers an action for a matching warning -- e.g. raise external blinds, close the garage door, close car windows, switch an acoustic signal or run your own script. Each action fires only ONCE per warning, there is no automatic reset -- that deliberately remains up to the user.')],
+                ['type' => 'Label', 'caption' => $this->Translate('Warnings often arrive hours before they actually become valid -- an action therefore does NOT fire immediately when the message arrives, but only shortly before the actual start (lead time below, so that e.g. the awning is safely retracted). Warnings without their own time information (rare) still trigger immediately; warnings that are already running/acute as well.')],
+                ['type' => 'NumberSpinner', 'name' => 'SchutzaktionVorlaufMinuten', 'caption' => $this->Translate('Lead time before start of validity (minutes)'), 'minValue' => 0, 'maxValue' => 720],
                 [
                     'type' => 'PopupButton',
-                    'caption' => 'Welche Felder brauche ich für welchen Aktionstyp?',
+                    'caption' => $this->Translate('Which fields do I need for which action type?'),
                     'popup' => [
-                        'caption' => 'Felder je Aktionstyp',
+                        'caption' => $this->Translate('Fields per action type'),
                         'items' => [
-                            ['type' => 'Label', 'caption' => 'Raffstore/Rollladen hochfahren, Markise einfahren, Garagentor schließen, Akustischer Alarm: Ziel-Variable (der schaltbare Wert, z. B. Rollladen-/Markisen-Position oder Torsteuerung) + Zielwert (der Wert, der beim Auslösen gesetzt wird -- je nach Hersteller unterschiedlich, z. B. 0 = offen/hochgefahren/eingefahren, bitte am eigenen Aktor prüfen).'],
-                            ['type' => 'Label', 'caption' => 'Variable auf Wert setzen: Ziel-Variable + Zielwert, sonst nichts -- für alles, was einfach auf einen Wert gehört, z. B. die Stufe der Wohnraumlüftung auf 0, wenn Rauchgase gemeldet werden (Kategorie "💨 Rauch/Gefahrstoffe" ankreuzen). WarnHub stellt den Wert nach einer Entwarnung NICHT zurück -- das bleibt Nutzerhandeln (oder ein eigenes Skript).'],
-                            ['type' => 'Label', 'caption' => 'Fenster schließen: nur Ziel-Variable, kein Zielwert nötig (schaltet die Aktion immer auf "Ein" -- bei Tessies eigener Fenster-schließen-Aktion löst das Teslas gerichteten Schließen-Befehl aus, sicher auch bei bereits geschlossenen Fenstern). 🛑 Beachte unbedingt den Sicherheitshinweis ganz oben im Panel -- Einklemmgefahr, keine Hinderniserkennung.'],
-                            ['type' => 'Label', 'caption' => 'Kofferraum/Heckklappe schließen: WICHTIG -- Teslas Kofferraum-Befehl ist ein reiner Umschalter ohne Richtung, ein Auslösen bei bereits geschlossener Klappe würde sie ÖFFNEN statt schließen. Deshalb zusätzlich zur Ziel-Variable zwingend eine Zustands-Variable angeben, die aktuell offene Klappen namentlich nennt (z. B. Tessies "Tür-/Klappenstatus") -- ausgelöst wird nur, wenn "Kofferraum" oder "Heckklappe" darin vorkommt, sonst passiert nichts. Ohne gültige Zustands-Variable feuert die Aktion GAR NICHT (Sicherheitssperre, kein Raten). 🛑 Beachte unbedingt den Sicherheitshinweis ganz oben im Panel -- Einklemmgefahr, keine Hinderniserkennung.'],
-                            ['type' => 'Label', 'caption' => 'Akustischer Alarm zusätzlich: Auto-Aus (Sekunden) -- 0 bedeutet kein automatisches Ausschalten.'],
-                            ['type' => 'Label', 'caption' => 'Skript ausführen: Ziel-Skript statt Ziel-Variable/Zielwert.'],
-                            ['type' => 'Label', 'caption' => 'Mehrere Auslöser gleichzeitig (z. B. Markise soll bei Sturm UND Hagel einfahren): einfach mehrere Kästchen in derselben Zeile ankreuzen -- die Aktion feuert, sobald IRGENDEINE angekreuzte Kategorie zutrifft. Kein Kästchen angekreuzt = die Aktion gilt für jede Kategorie. Die automatische Objektbaum-Suche kreuzt bei Raffstore/Markise Sturm + Hagel an, bei Fenster schließen zusätzlich Starkregen.'],
-                            ['type' => 'Label', 'caption' => 'Leeres "Nur Standort" bedeutet "alle FESTEN Standorte", NICHT auch mobile (Live-Standort-gebundene, siehe Standorte-Panel) -- sonst würde z. B. ein Sturm über Hamburg, den nur der mobile Standort meldet, die zuhause verbaute Jalousie einfahren. Das gilt automatisch für jede Aktion, keine Einrichtung nötig.'],
+                            ['type' => 'Label', 'caption' => $this->Translate('Raise external blind/roller shutter, retract awning, close garage door, acoustic alarm: target variable (the switchable value, e.g. shutter/awning position or door control) + target value (the value set when triggering -- differs by manufacturer, e.g. 0 = open/raised/retracted, please check on your own actuator).')],
+                            ['type' => 'Label', 'caption' => $this->Translate('Set variable to value: target variable + target value, nothing else -- for anything that simply needs to be set to a value, e.g. the level of the home ventilation to 0 when smoke gases are reported (tick the "💨 Smoke/hazardous substances" category). WarnHub does NOT reset the value after an all-clear -- that remains up to the user (or your own script).')],
+                            ['type' => 'Label', 'caption' => $this->Translate('Close windows: target variable only, no target value needed (always switches the action to "On" -- with Tessie\'s own close-windows action this triggers Tesla\'s directed close command, safe even with windows that are already closed). 🛑 Be sure to observe the safety notice at the very top of the panel -- risk of trapping, no obstacle detection.')],
+                            ['type' => 'Label', 'caption' => $this->Translate('Close boot/tailgate: IMPORTANT -- Tesla\'s boot command is a pure toggle without direction, triggering it with the tailgate already closed would OPEN it instead of closing it. Therefore, in addition to the target variable, a state variable that names the currently open tailgates must be given (e.g. Tessie\'s "Tür-/Klappenstatus") -- it only triggers if "Kofferraum" or "Heckklappe" appears in it, otherwise nothing happens. Without a valid state variable the action does NOT fire AT ALL (safety lock, no guessing). 🛑 Be sure to observe the safety notice at the very top of the panel -- risk of trapping, no obstacle detection.')],
+                            ['type' => 'Label', 'caption' => $this->Translate('Acoustic alarm additionally: auto-off (seconds) -- 0 means no automatic switch-off.')],
+                            ['type' => 'Label', 'caption' => $this->Translate('Run script: target script instead of target variable/target value.')],
+                            ['type' => 'Label', 'caption' => $this->Translate('Several triggers at once (e.g. the awning should retract in storm AND hail): simply tick several boxes in the same row -- the action fires as soon as ANY ticked category applies. No box ticked = the action applies to every category. The automatic object tree search ticks storm + hail for external blinds/awnings, and additionally heavy rain for closing windows.')],
+                            ['type' => 'Label', 'caption' => $this->Translate('An empty "Location only" means "all FIXED locations", NOT mobile ones as well (bound to a live location, see locations panel) -- otherwise e.g. a storm over Hamburg that only the mobile location reports would retract the blind installed at home. This applies to every action automatically, no setup required.')],
                         ],
                     ],
                 ],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Objektbaum nach Raffstore/Jalousie/Markise/Garage/Fenster schließen/Heckklappe/Sirene durchsuchen',
+                    'caption' => $this->Translate('🔎 Search object tree for external blinds/blinds/awnings/garage/close windows/tailgate/siren'),
                     'onClick' => 'echo WHUB_DiscoverSchutzaktionen($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Gefundene Treffer werden vorausgefüllt und in der Regel AKTIVIERT als neue Zeile ergänzt (Schweregrad "Hoch" als vorsichtiger Standard) -- nicht gewünschte einfach über die Aktiv-Spalte abwählen. Ausnahme Kofferraum/Heckklappe: bleibt ohne automatisch gefundene Zustands-Variable INAKTIV (Sicherheitssperre, siehe Hilfe-Knopf oben). Eine erneute Suche lässt bestehende Zeilen/Abwahl-Entscheidungen unangetastet und fügt nur neue Treffer hinzu.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Matches found are pre-filled and usually added ACTIVATED as a new row (severity "High" as a cautious default) -- simply deselect unwanted ones in the active column. Exception boot/tailgate: stays INACTIVE without an automatically found state variable (safety lock, see help button above). A new search leaves existing rows/deselections untouched and only adds new matches.')],
                 [
                     'type' => 'List',
                     'name' => 'Schutzaktionen',
@@ -1191,20 +1195,20 @@ class WarnHub extends IPSModule
                     'add' => true,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Typ', 'name' => 'Typ', 'width' => '190px', 'add' => 'raffstore', 'edit' => ['type' => 'Select', 'options' => $this->actionTypeOptions()]],
-                        ...array_map(fn ($f) => ['caption' => $f[1], 'name' => $f[0], 'width' => '75px', 'add' => false, 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
-                        ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
-                        ['caption' => 'Nur Standort (leer=alle festen)', 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Ziel-Variable', 'name' => 'ZielVariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
-                        ['caption' => 'Zielwert', 'name' => 'ZielWert', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
-                        ['caption' => 'Zustands-Variable (nur Kofferraum)', 'name' => 'ZustandsVariableID', 'width' => '190px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
-                        ['caption' => 'Ziel-Skript', 'name' => 'ZielSkriptID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectScript']],
-                        ['caption' => 'Auto-Aus (s)', 'name' => 'AutoOffSekunden', 'width' => '100px', 'add' => 60, 'edit' => ['type' => 'NumberSpinner', 'minValue' => 0]],
+                        ['caption' => $this->Translate('Name'), 'name' => 'Name', 'width' => '160px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Active'), 'name' => 'Aktiv', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => $this->Translate('Type'), 'name' => $this->Translate('Type'), 'width' => '190px', 'add' => 'raffstore', 'edit' => ['type' => 'Select', 'options' => $this->actionTypeOptions()]],
+                        ...array_map(fn ($f) => ['caption' => $this->Translate($f[1]), 'name' => $f[0], 'width' => '75px', 'add' => false, 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
+                        ['caption' => $this->Translate('From severity'), 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
+                        ['caption' => $this->Translate('Location only (empty=all fixed)'), 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Target variable'), 'name' => 'ZielVariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => $this->Translate('Target value'), 'name' => 'ZielWert', 'width' => '90px', 'add' => 0.0, 'edit' => ['type' => 'NumberSpinner', 'digits' => 1]],
+                        ['caption' => $this->Translate('State variable (boot only)'), 'name' => 'ZustandsVariableID', 'width' => '190px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => $this->Translate('Target script'), 'name' => 'ZielSkriptID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectScript']],
+                        ['caption' => $this->Translate('Auto-off (s)'), 'name' => 'AutoOffSekunden', 'width' => '100px', 'add' => 60, 'edit' => ['type' => 'NumberSpinner', 'minValue' => 0]],
                     ],
                 ],
-                ['type' => 'Label', 'caption' => 'Je Alarmtyp testen: löst SOFORT alle aktiven Schutzaktionen aus, die für den gewählten Alarmtyp gelten (angekreuzte Kategorie ODER gar keine angekreuzt) -- unabhängig von einer echten Warnung, vom Standort-Filter und vom Mindest-Schweregrad. Prüft nur, ob die Aktion tatsächlich das Richtige tut (z. B. fährt die Markise wirklich ein?), nicht die Warnungserkennung selbst. Ohne echte Warnung ist keine automatische Rückstellung geplant -- danach von Hand zurückstellen.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Test per alert type: IMMEDIATELY triggers all active protective actions that apply to the selected alert type (ticked category OR none ticked at all) -- independent of a real warning, of the location filter and of the minimum severity. Only checks whether the action really does the right thing (e.g. does the awning really retract?), not the warning detection itself. Without a real warning no automatic reset is scheduled -- reset by hand afterwards.')],
                 [
                     'type' => 'RowLayout',
                     'items' => (function () {
@@ -1212,7 +1216,7 @@ class WarnHub extends IPSModule
                         foreach (self::CATEGORY_FIELDS as $key => $f) {
                             $buttons[] = [
                                 'type' => 'Button',
-                                'caption' => $f[1] . ' testen',
+                                'caption' => sprintf($this->Translate('Test %s'), $this->Translate($f[1])),
                                 'onClick' => "echo WHUB_TestSchutzaktionen(\$id, '" . $key . "');",
                             ];
                         }
@@ -1225,17 +1229,17 @@ class WarnHub extends IPSModule
         $expFenster = $this->getPanelExpandedState('FensterUeberwachung', false);
         $free['fenster'] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🪟  Fenster-/Tür-Überwachung',
+            'caption' => $this->Translate('🪟  Window/door monitoring'),
             'expanded' => $expFenster,
             'onClick' => $this->rememberPanelOnClick('FensterUeberwachung', $expFenster),
             'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub kann ein Fenster oder eine Tür nicht selbst schließen -- anders als Raffstore/Markise/Garage gibt es dafür keinen generischen Aktor. Ist aber ein Öffnungskontakt vorhanden, kann WarnHub erkennen, dass er offen ist, und bei einer passenden aktiven Warnung gezielt darauf hinweisen.'],
+                ['type' => 'Label', 'caption' => $this->Translate('WarnHub cannot close a window or a door by itself -- unlike external blinds/awnings/garages there is no generic actuator for that. But if an opening contact exists, WarnHub can detect that it is open and point this out specifically when a matching warning is active.')],
                 [
                     'type' => 'Button',
-                    'caption' => '🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen',
+                    'caption' => $this->Translate('🔎 Search object tree for window/door contacts'),
                     'onClick' => 'echo WHUB_DiscoverFensterkontakte($id);',
                 ],
-                ['type' => 'Label', 'caption' => 'Findet Boolean-Variablen sowohl über ein klassisches Symcon-Profil (~Window/~Door, auch .Reversed) als auch über die seit Symcon 9.0 neue Variablendarstellung mit einer "Geöffnet"/"Offen"-Option -- unabhängig vom Hersteller/der Integration (z. B. auch Matter-Kontakte). Gefundene Treffer werden vorausgefüllt und mit Sturm/Hagel/Starkregen aktiviert (ein offenes Fenster lässt bei allen dreien Wind/Wasser herein). Eine erneute Suche fügt nur neue Treffer hinzu.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Finds Boolean variables both via a classic Symcon profile (~Window/~Door, also .Reversed) and via the variable presentation introduced in Symcon 9.0 with an "Opened"/"Open" option -- regardless of manufacturer/integration (e.g. Matter contacts as well). Matches found are pre-filled and activated with storm/hail/heavy rain (an open window lets wind/water in with all three). A new search only adds new matches.')],
                 [
                     'type' => 'List',
                     'name' => 'Fensterkontakte',
@@ -1243,20 +1247,20 @@ class WarnHub extends IPSModule
                     'add' => true,
                     'delete' => true,
                     'columns' => [
-                        ['caption' => 'Name', 'name' => 'Name', 'width' => '190px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Aktiv', 'name' => 'Aktiv', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
-                        ...array_map(fn ($f) => ['caption' => $f[1], 'name' => $f[0], 'width' => '75px', 'add' => in_array($f[0], ['KatSturm', 'KatHagel', 'KatStarkregen'], true), 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
-                        ['caption' => 'Ab Schweregrad', 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
-                        ['caption' => 'Nur Standort (leer=alle festen)', 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
-                        ['caption' => 'Kontakt-Variable', 'name' => 'VariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
+                        ['caption' => $this->Translate('Name'), 'name' => 'Name', 'width' => '190px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Active'), 'name' => 'Aktiv', 'width' => '60px', 'add' => true, 'edit' => ['type' => 'CheckBox']],
+                        ...array_map(fn ($f) => ['caption' => $this->Translate($f[1]), 'name' => $f[0], 'width' => '75px', 'add' => in_array($f[0], ['KatSturm', 'KatHagel', 'KatStarkregen'], true), 'edit' => ['type' => 'CheckBox']], array_values(self::CATEGORY_FIELDS)),
+                        ['caption' => $this->Translate('From severity'), 'name' => 'MinSeverity', 'width' => '140px', 'add' => 3, 'edit' => ['type' => 'Select', 'options' => $this->severityOptions()]],
+                        ['caption' => $this->Translate('Location only (empty=all fixed)'), 'name' => 'StandortFilter', 'width' => '170px', 'add' => '', 'edit' => ['type' => 'ValidationTextBox']],
+                        ['caption' => $this->Translate('Contact variable'), 'name' => 'VariableID', 'width' => '160px', 'add' => 0, 'edit' => ['type' => 'SelectVariable']],
                     ],
                 ],
-                ['type' => 'Label', 'caption' => 'Push kommt nur EINMAL je (Warnung, Kontakt) -- schließt man das Fenster und öffnet es später während derselben Warnung erneut, kommt eine neue Meldung. Läuft über dieselben Push-Ziele wie normale Warnungen, respektiert die Push-Ruhephase.'],
+                ['type' => 'Label', 'caption' => $this->Translate('A push is sent only ONCE per (warning, contact) -- if you close the window and open it again later during the same warning, a new message is sent. Uses the same push targets as normal warnings and respects the push quiet period.')],
             ],
         ];
 
         $pruefungItems = [
-            ['type' => 'Label', 'caption' => 'WarnHub fragt die oben konfigurierten Datenquellen automatisch im eingestellten Abfragetakt ab und gleicht sie gegen die Standorte/Schutzaktionen weiter oben ab. Der Knopf unten löst das Ganze zusätzlich sofort aus (z. B. um die Einrichtung direkt zu testen), ohne auf den nächsten automatischen Durchlauf zu warten.'],
+            ['type' => 'Label', 'caption' => $this->Translate('WarnHub automatically queries the data sources configured above at the set polling interval and matches them against the locations/protective actions further up. The button below additionally triggers the whole thing immediately (e.g. to test the setup directly), without waiting for the next automatic run.')],
             [
                 'type' => 'Label',
                 'name' => 'PollStatusLabel',
@@ -1264,7 +1268,7 @@ class WarnHub extends IPSModule
             ],
             [
                 'type' => 'Button',
-                'caption' => '🔎 Jetzt prüfen',
+                'caption' => $this->Translate('🔎 Check now'),
                 'onClick' => 'echo WHUB_Poll($id);',
             ],
         ];
@@ -1272,28 +1276,28 @@ class WarnHub extends IPSModule
         if ($restoreLine !== null) {
             $pruefungItems[] = ['type' => 'Label', 'name' => 'WetterstationRestoreStatusLabel', 'caption' => $restoreLine];
         }
-        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Für ein eigenes Dashboard (z. B. IPSView): dieselben Werte stehen unten im Objektbaum als vier eigene Variablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) -- IPSView baut Views aus vorhandenen Symcon-Variablen zusammen, nicht über einen eigenen Push-Kanal, deshalb hier keine gesonderte Einrichtung nötig.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🧊 Fertige WebFront-Kacheln: fünf weitere Variablen im Objektbaum enthalten fertiges, eigenständiges HTML -- kein eigenes Bauen nötig, einfach im Objektbaum in den Bereich des WebFronts verlinken. "Kachel (kompakt)", "Kachel (Übersicht)" und "Kachel (Alle Warnungen)" passen sich automatisch an Hell/Dunkel an und laden keine externen Ressourcen. Alle enthalten unten außerdem drei kleine Links zu den amtlichen Warnkarten (DWD/ZAMG/MeteoSchweiz).'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '📜 "Kachel (Alle Warnungen)": wie "Kachel (Übersicht)", aber OHNE 8er-Deckel -- scrollbare Liste aller aktiven Warnungen, sortiert nach Schweregrad. Jede Karte hat einen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt (wie die Zoomstufe bei "Kachel (Karte)"), betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen. Jede Karte lässt sich außerdem per Klick aufklappen (Handlungsempfehlung, Gültigkeitszeitraum, volle amtliche Beschreibung).'];
-        $pruefungItems[] = ['type' => 'CheckBox', 'name' => 'AlleWarnungenAufgeklappt', 'caption' => '"Kachel (Alle Warnungen)": Karten standardmäßig aufgeklappt anzeigen (statt eingeklappt) -- Klick zum Ein-/Ausklappen bleibt trotzdem je Karte möglich'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Praxis-Wunsch ruan, Symcon-Forum, 09.09.2026: lieber alles sofort sehen können, ohne jede Karte einzeln anklicken zu müssen.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🗺️ "Kachel (Karte)": zeigt eine Straßenkarte (Esri) mit JEDEM aktiven Standort als eigenem, farbigen Pin (auch mobile Standorte -- folgt deren Live-Position) plus einer kleinen Legende zum Anklicken. Startansicht zeigt alle Standorte gemeinsam; ein Klick auf einen Pin/Legenden-Eintrag zoomt auf diesen -- die Wahl merkt sich der jeweilige Browser für sich (z. B. dein Handy unterwegs auf "Kohlekasten", das Tablet zuhause weiterhin auf alle bzw. den eigenen Standort). Lädt anders als die übrigen Kacheln externe Ressourcen (Leaflet.js von unpkg.com, Kartenkacheln von server.arcgisonline.com -- bewusst nicht OpenStreetMaps eigene Tile-Server, die für eingebettete Drittanbieter-Widgets wie diese Kachel einen Referer-Header verlangen und je nach Browser/WebFront blockieren können).'];
-        $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => 'Höhe "Kachel (Karte)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (Praxis-Fund kronos/Bricoleur, Symcon-Forum, 07.09.2026: Karte skalierte nur in der Breite, nicht in der Höhe). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => '🇦🇹 "Kachel (ZAMG-Warnkarte, Österreich)": bettet die offizielle ZAMG-Warnkarte direkt ein (iframe) -- speziell für österreichische Nutzer. Zeigt aktuell ganz Österreich, noch ohne automatische Zentrierung auf einen einzelnen Standort.'];
-        $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'ZamgKachelHoehePx', 'caption' => 'Höhe "Kachel (ZAMG-Warnkarte, Österreich)" in Pixel (0 = automatisch, an die Kachel anpassen)', 'minValue' => 0, 'maxValue' => 2000];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Bei 0 versucht die Kachel, die Höhe der sie umgebenden WebFront-/Kachel-Visualisierung-Kachel zu übernehmen -- funktioniert nicht in jeder Konfiguration zuverlässig (derselbe Effekt wie bei "Kachel (Karte)", Praxis-Fund kronos/Bricoleur bzw. ruan/Andreas, Symcon-Forum). Bei diesem Verhalten hier eine feste Pixelzahl eintragen.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Warnungs-Historie (auch vergangene, nicht nur aktuell aktive Warnungen/Entwarnungen -- bis zu 500 Einträge) für eigene Auswertungen/Skripte über die Funktion WHUB_GetHistory($id, $limit) abrufbar, kein eigenes Formularfeld dafür nötig.'];
-        $pruefungItems[] = ['type' => 'Label', 'caption' => 'Zum Testen des Zustellwegs, unabhängig von einer echten Warnung:'];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('For your own dashboard (e.g. IPSView): the same values are available below in the object tree as four separate variables (active warnings, highest severity, status, last check) -- IPSView builds views from existing Symcon variables, not via a push channel of its own, so no separate setup is needed here.')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('🧊 Ready-made WebFront tiles: five more variables in the object tree contain finished, self-contained HTML -- nothing to build yourself, simply link them into the WebFront area in the object tree. "Tile (compact)", "Tile (overview)" and "Tile (all warnings)" adapt automatically to light/dark and load no external resources. All of them also contain three small links to the official warning maps (DWD/ZAMG/MeteoSwiss) at the bottom.')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('📜 "Tile (all warnings)": like "Tile (overview)", but WITHOUT the cap of 8 -- scrollable list of all active warnings, sorted by severity. Each card has a "✕" button to hide it, plus a filter bar per event type ("🚫 Waldbrandgefahr" etc.) -- both remembered only in the respective browser (like the zoom level of "Tile (map)"), affecting only the display, not push/history/protective actions. Each card can also be expanded with a click (recommended action, validity period, full official description).')];
+        $pruefungItems[] = ['type' => 'CheckBox', 'name' => 'AlleWarnungenAufgeklappt', 'caption' => $this->Translate('"Tile (all warnings)": show cards expanded by default (instead of collapsed) -- clicking to expand/collapse is still possible per card')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('Request by ruan, Symcon forum, 09.09.2026: rather see everything at once without having to click each card individually.')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('🗺️ "Tile (map)": shows a street map (Esri) with EVERY active location as its own coloured pin (mobile locations too -- follows their live position) plus a small clickable legend. The start view shows all locations together; a click on a pin/legend entry zooms to it -- each browser remembers the choice for itself (e.g. your phone on the road on "Kohlekasten", the tablet at home still on all or your own location). Unlike the other tiles it loads external resources (Leaflet.js from unpkg.com, map tiles from server.arcgisonline.com -- deliberately not the OpenStreetMap tile servers, which require a referer header for embedded third-party widgets like this tile and may block them depending on browser/WebFront).')];
+        $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'KartenkachelHoehePx', 'caption' => $this->Translate('Height of "Tile (map)" in pixels (0 = automatic, fit to the tile)'), 'minValue' => 0, 'maxValue' => 2000];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('At 0 the tile tries to take over the height of the surrounding WebFront/tile visualization tile -- this does not work reliably in every configuration (field report kronos/Bricoleur, Symcon forum, 07.09.2026: map only scaled in width, not in height). If you see this behaviour, enter a fixed number of pixels here.')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('🇦🇹 "Tile (ZAMG warning map, Austria)": embeds the official ZAMG warning map directly (iframe) -- especially for Austrian users. Currently shows all of Austria, not yet automatically centred on a single location.')];
+        $pruefungItems[] = ['type' => 'NumberSpinner', 'name' => 'ZamgKachelHoehePx', 'caption' => $this->Translate('Height of "Tile (ZAMG warning map, Austria)" in pixels (0 = automatic, fit to the tile)'), 'minValue' => 0, 'maxValue' => 2000];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('At 0 the tile tries to take over the height of the surrounding WebFront/tile visualization tile -- this does not work reliably in every configuration (same effect as with "Tile (map)", field report kronos/Bricoleur and ruan/Andreas, Symcon forum). If you see this behaviour, enter a fixed number of pixels here.')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('Warning history (also past warnings, not only currently active warnings/all-clears -- up to 500 entries) can be retrieved for your own evaluations/scripts with the function WHUB_GetHistory($id, $limit), no form field of its own needed.')];
+        $pruefungItems[] = ['type' => 'Label', 'caption' => $this->Translate('To test the delivery route, independent of a real warning:')];
         $pruefungItems[] = [
             'type' => 'Button',
-            'caption' => '🧪 Testbenachrichtigung senden',
+            'caption' => $this->Translate('🧪 Send test notification'),
             'onClick' => 'echo WHUB_TestPush($id);',
         ];
         $expPruefung = $this->getPanelExpandedState('PruefungStatus', true);
         $free['pruefung'] = [
             'type' => 'ExpansionPanel',
-            'caption' => '🔎  Prüfung & Status',
+            'caption' => $this->Translate('🔎  Check & status'),
             'expanded' => $expPruefung,
             'onClick' => $this->rememberPanelOnClick('PruefungStatus', $expPruefung),
             'items' => $pruefungItems,
@@ -1338,12 +1342,12 @@ class WarnHub extends IPSModule
 
     /** Stabile Schlüssel je Fachpanel (NICHT die Caption, die darf sich ändern) => Anzeigename in der Aufbau-Liste. Reihenfolge = Standardreihenfolge. */
     private const FORM_PANELS = [
-        'standorte'        => '📍 Standorte',
-        'datenquellen'     => '🌐 Datenquellen',
-        'benachrichtigung' => '🔔 Benachrichtigung',
-        'schutzaktionen'   => '🛡️ Schutzaktionen',
-        'fenster'          => '🪟 Fenster-/Tür-Überwachung',
-        'pruefung'         => '🔎 Prüfung & Status',
+        'standorte'        => '📍 Locations',
+        'datenquellen'     => '🌐 Data sources',
+        'benachrichtigung' => '🔔 Notification',
+        'schutzaktionen'   => '🛡️ Protective actions',
+        'fenster'          => '🪟 Window/door monitoring',
+        'pruefung'         => '🔎 Check & status',
     ];
 
     /**
@@ -1386,35 +1390,35 @@ class WarnHub extends IPSModule
         $rows = [];
         $hidden = [];
         foreach ($layout as $key => $l) {
-            $name = self::FORM_PANELS[$key] ?? $key;
+            $name = $this->Translate(self::FORM_PANELS[$key] ?? $key);
             $rows[] = ['Key' => $key, 'Panel' => $name, 'Opened' => $l['open'] === 'open', 'Closed' => $l['open'] === 'closed', 'Hidden' => $l['open'] === 'hidden', 'Pos' => $l['pos']];
             if ($l['open'] === 'hidden') {
                 $hidden[] = trim((string) preg_replace('/^[^\p{L}\p{N}]+/u', '', $name));
             }
         }
         $hiddenLine = $hidden
-            ? [['type' => 'Label', 'caption' => '🙈 Ausgeblendet: ' . implode(', ', $hidden) . ' -- zum Wiederzeigen den Haken bei "Ausgeblendet" entfernen. Ausgeblendete Bereiche arbeiten weiter, nur die Anzeige fehlt.']]
+            ? [['type' => 'Label', 'caption' => sprintf($this->Translate('🙈 Hidden: %s -- to show again, remove the tick at "Hidden". Hidden sections keep working, only the display is missing.'), implode(', ', $hidden))]]
             : [];
         return [
             'type' => 'ExpansionPanel', 'name' => 'FormLayoutPanel', 'expanded' => false,
-            'caption' => '🪟  Formular: Aufbau' . ($hidden ? ' (' . count($hidden) . ' ausgeblendet)' : ''),
+            'caption' => $this->Translate('🪟  Form: layout') . ($hidden ? ' (' . count($hidden) . ' ausgeblendet)' : ''),
             'items' => array_merge($hiddenLine, [
-                ['type' => 'Label', 'caption' => 'Hier legst du fest, welche Bereiche beim Öffnen des Formulars aufgeklappt sind und in welcher Reihenfolge sie stehen. Symcon merkt sich das Auf- und Zuklappen nicht selbst, deshalb gilt die Einstellung hier jedes Mal beim Öffnen. Sie wirkt nach "Übernehmen" beim nächsten Öffnen des Formulars.'],
-                ['type' => 'Label', 'caption' => 'Kein Haken heißt "Standard": wie das Modul es vorsieht (z. B. "Standorte" und "Benachrichtigung" aufgeklappt, zuletzt von Hand zugeklappte Bereiche bleiben zu). Die Position ist eine Zahl; bei gleicher Zahl bleibt die Standardreihenfolge. "Ausgeblendet" nimmt einen Bereich aus der Anzeige, ohne dass er etwas verliert: seine Einstellungen bleiben erhalten und wirken weiter (gedacht für Bereiche, die man selten braucht, z. B. die Fenster-/Tür-Überwachung ohne Fensterkontakte). Zum Wiederzeigen den Haken bei "Ausgeblendet" entfernen oder "Auf Standard zurücksetzen" klicken. Sind mehrere Haken gesetzt, gilt "Ausgeblendet" vor "Zugeklappt" vor "Aufgeklappt". Die Bereiche oben (Wozu, Neu, Dokumentation & Hilfe) und unten (Feedback im Symcon-Forum, Über dieses Modul) bleiben, wo sie sind, und lassen sich nicht ausblenden.'],
+                ['type' => 'Label', 'caption' => $this->Translate('Here you define which sections are expanded when the form opens and in which order they appear. Symcon does not remember expanding and collapsing by itself, so the setting here applies every time the form opens. It takes effect after "Apply" the next time the form is opened.')],
+                ['type' => 'Label', 'caption' => $this->Translate('No tick means "default": as the module intends (e.g. "Locations" and "Notification" expanded, sections last collapsed by hand stay closed). The position is a number; with the same number the default order is kept. "Hidden" removes a section from the display without losing anything: its settings are kept and keep working (meant for sections you rarely need, e.g. window/door monitoring without window contacts). To show it again, remove the tick at "Hidden" or click "Reset to default". If several ticks are set, "Hidden" beats "Collapsed" beats "Expanded". The sections at the top (purpose, new, documentation & help) and at the bottom (feedback in the Symcon forum, about this module) stay where they are and cannot be hidden.')],
                 [
-                    'type' => 'List', 'name' => 'FormLayout', 'caption' => 'Bereiche', 'rowCount' => count($rows), 'add' => false, 'delete' => false,
+                    'type' => 'List', 'name' => 'FormLayout', 'caption' => $this->Translate('Sections'), 'rowCount' => count($rows), 'add' => false, 'delete' => false,
                     'loadValuesFromConfiguration' => false,
                     'values' => $rows,
                     'columns' => [
-                        ['caption' => 'Bereich', 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
-                        ['caption' => 'Schlüssel', 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
-                        ['caption' => 'Aufgeklappt', 'name' => 'Opened', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Zugeklappt', 'name' => 'Closed', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => '🙈 Ausgeblendet', 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
-                        ['caption' => 'Position', 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
+                        ['caption' => $this->Translate('Section'), 'name' => 'Panel', 'width' => 'auto', 'add' => ''],
+                        ['caption' => $this->Translate('Key'), 'name' => 'Key', 'width' => '0px', 'visible' => false, 'add' => '', 'save' => true],
+                        ['caption' => $this->Translate('Expanded'), 'name' => 'Opened', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => $this->Translate('Collapsed'), 'name' => 'Closed', 'width' => '110px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => $this->Translate('🙈 Hidden'), 'name' => 'Hidden', 'width' => '130px', 'add' => false, 'edit' => ['type' => 'CheckBox']],
+                        ['caption' => $this->Translate('Position'), 'name' => 'Pos', 'width' => '100px', 'add' => 1, 'edit' => ['type' => 'NumberSpinner', 'minimum' => 1, 'maximum' => 99]],
                     ],
                 ],
-                ['type' => 'Button', 'caption' => '↩️ Auf Standard zurücksetzen', 'onClick' => 'echo WHUB_ResetFormLayout($id);'],
+                ['type' => 'Button', 'caption' => $this->Translate('↩️ Reset to default'), 'onClick' => 'echo WHUB_ResetFormLayout($id);'],
             ]),
         ];
     }
@@ -1425,10 +1429,10 @@ class WarnHub extends IPSModule
         $rows = [];
         $i = 0;
         foreach (self::FORM_PANELS as $key => $name) {
-            $rows[] = ['Key' => $key, 'Panel' => $name, 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => ++$i];
+            $rows[] = ['Key' => $key, 'Panel' => $this->Translate($name), 'Opened' => false, 'Closed' => false, 'Hidden' => false, 'Pos' => ++$i];
         }
         $this->UpdateFormField('FormLayout', 'values', json_encode($rows, JSON_UNESCAPED_UNICODE));
-        return 'ℹ️ Auf Standard gesetzt. Zum Speichern unten "Übernehmen" klicken.';
+        return $this->Translate('ℹ️ Set to default. Click "Apply" below to save.');
     }
 
     /** Sichtbare Zeilenzahl einer Liste an ihren tatsächlichen Inhalt anpassen, statt fest zu scrollen -- Dietmars Fund 04.09.2026 (Schutzaktionen-Liste nach der Objektbaum-Suche). Plus 1 Luft für "Hinzufügen", nach oben gedeckelt, damit ein einzelnes Panel nicht die ganze Seite dominiert. */
@@ -1440,10 +1444,10 @@ class WarnHub extends IPSModule
     private function severityOptions(): array
     {
         return [
-            ['caption' => 'Gering (Minor)', 'value' => 1],
-            ['caption' => 'Mittel (Moderate)', 'value' => 2],
-            ['caption' => 'Hoch (Severe)', 'value' => 3],
-            ['caption' => 'Extrem (Extreme)', 'value' => 4],
+            ['caption' => $this->Translate('Low (Minor)'), 'value' => 1],
+            ['caption' => $this->Translate('Medium (Moderate)'), 'value' => 2],
+            ['caption' => $this->Translate('High (Severe)'), 'value' => 3],
+            ['caption' => $this->Translate('Extreme (Extreme)'), 'value' => 4],
         ];
     }
 
@@ -1457,13 +1461,13 @@ class WarnHub extends IPSModule
      * welcher Dosis aufhalten darf").
      */
     private const BFS_ODL_REFERENZWERTE = [
-        ['rate' => 0.1, 'label' => 'typisches natürliches Untergrundniveau in Deutschland'],
-        ['rate' => 0.2, 'label' => 'obere natürliche Spanne in Deutschland'],
-        ['rate' => 0.3, 'label' => 'WarnHubs Standard-Schwellwert'],
+        ['rate' => 0.1, 'label' => 'typical natural background level in Germany'],
+        ['rate' => 0.2, 'label' => 'upper natural range in Germany'],
+        ['rate' => 0.3, 'label' => 'WarnHub default threshold'],
         ['rate' => 1.0, 'label' => ''],
         ['rate' => 10.0, 'label' => ''],
         ['rate' => 100.0, 'label' => ''],
-        ['rate' => 1000.0, 'label' => 'entspricht 1 mSv/h'],
+        ['rate' => 1000.0, 'label' => 'corresponds to 1 mSv/h'],
     ];
 
     /**
@@ -1492,7 +1496,7 @@ class WarnHub extends IPSModule
             return '';
         }
         return sprintf(
-            'Rein rechnerisch (bei durchgehendem Aufenthalt an dieser Stelle) wäre der Jahres-Vorsorgewert für die Bevölkerung (1 mSv) nach %s erreicht -- das ist ein Vorsorge-, kein Gefahrenwert.',
+            $this->Translate('Purely by calculation (with continuous presence at this spot) the annual precautionary value for the public (1 mSv) would be reached after %s -- this is a precautionary value, not a danger value.'),
             $this->formatDurationToPublicLimit($doseRateUSvH)
         );
     }
@@ -1501,34 +1505,34 @@ class WarnHub extends IPSModule
     private function bfsOdlReferencePopupItems(): array
     {
         $items = [
-            ['type' => 'Label', 'caption' => 'Natürliche Ortsdosisleistung in Deutschland: ca. 0,05-0,2 µSv/h (Summe aus Boden- und Höhenstrahlung, ortsabhängig). Quelle: odlinfo.bfs.de.'],
-            ['type' => 'Label', 'caption' => 'Jahres-Grenzwert für die Bevölkerung: 1 Millisievert (mSv) zusätzlich zu natürlicher/medizinischer Strahlung -- laut BfS ausdrücklich ein Vorsorge-, kein Gefahrenwert: seine Überschreitung bedeutet ein statistisch erhöhtes Langzeitrisiko, keinen unmittelbaren Gesundheitsschaden.'],
-            ['type' => 'Label', 'caption' => 'Akute Strahlenschäden (Strahlenkrankheit) treten laut BfS erst ab etwa 500 mSv als EINZELDOSIS auf -- weit oberhalb dessen, was Umgebungs-Messstationen realistischerweise anzeigen.'],
+            ['type' => 'Label', 'caption' => $this->Translate('Natural ambient dose rate in Germany: approx. 0.05-0.2 µSv/h (sum of terrestrial and cosmic radiation, depending on location). Source: odlinfo.bfs.de.')],
+            ['type' => 'Label', 'caption' => $this->Translate('Annual limit for the public: 1 millisievert (mSv) in addition to natural/medical radiation -- according to BfS explicitly a precautionary value, not a danger value: exceeding it means a statistically increased long-term risk, not immediate damage to health.')],
+            ['type' => 'Label', 'caption' => $this->Translate('According to BfS, acute radiation damage (radiation sickness) only occurs from about 500 mSv as a SINGLE DOSE -- far above what ambient measuring stations can realistically show.')],
         ];
         foreach (self::BFS_ODL_REFERENZWERTE as $ref) {
             $caption = sprintf(
-                '%s µSv/h%s -- Jahres-Vorsorgewert (1 mSv) rechnerisch nach %s bei DURCHGEHENDEM Aufenthalt.',
+                $this->Translate('%s µSv/h%s -- annual precautionary value (1 mSv) reached by calculation after %s with CONTINUOUS presence.'),
                 number_format($ref['rate'], $ref['rate'] < 1 ? 1 : 0, ',', '.'),
-                $ref['label'] !== '' ? ' (' . $ref['label'] . ')' : '',
+                $ref['label'] !== '' ? ' (' . $this->Translate($ref['label']) . ')' : '',
                 $this->formatDurationToPublicLimit($ref['rate'])
             );
             $items[] = ['type' => 'Label', 'caption' => $caption];
         }
-        $items[] = ['type' => 'Label', 'caption' => 'Reine Orientierungsrechnung (eigene Berechnung, keine amtliche Verweildauer-Tabelle) -- in einer echten Lage zählt ausschließlich die Einschätzung der Behörden (BfS, NINA-Warn-App, Katastrophenschutz), nicht diese Tabelle.'];
+        $items[] = ['type' => 'Label', 'caption' => $this->Translate('Purely an orientation calculation (my own calculation, no official exposure time table) -- in a real situation only the assessment of the authorities counts (BfS, NINA warning app, civil protection), not this table.')];
         return $items;
     }
 
     private function actionTypeOptions(): array
     {
         return [
-            ['caption' => 'Raffstore/Rollladen hochfahren', 'value' => 'raffstore'],
-            ['caption' => 'Markise einfahren', 'value' => 'markise'],
-            ['caption' => 'Garagentor schließen', 'value' => 'garage'],
-            ['caption' => 'Fenster schließen (z. B. Tesla)', 'value' => 'fenster'],
-            ['caption' => 'Kofferraum/Heckklappe schließen (nur mit Zustands-Variable)', 'value' => 'kofferraum'],
-            ['caption' => 'Akustischer Alarm', 'value' => 'sirene'],
-            ['caption' => 'Variable auf Wert setzen (z. B. Lüftung aus)', 'value' => 'wert'],
-            ['caption' => 'Skript ausführen', 'value' => 'skript'],
+            ['caption' => $this->Translate('Raise external blind/roller shutter'), 'value' => 'raffstore'],
+            ['caption' => $this->Translate('Retract awning'), 'value' => 'markise'],
+            ['caption' => $this->Translate('Close garage door'), 'value' => 'garage'],
+            ['caption' => $this->Translate('Close windows (e.g. Tesla)'), 'value' => 'fenster'],
+            ['caption' => $this->Translate('Close boot/tailgate (only with state variable)'), 'value' => 'kofferraum'],
+            ['caption' => $this->Translate('Acoustic alarm'), 'value' => 'sirene'],
+            ['caption' => $this->Translate('Set variable to value (e.g. ventilation off)'), 'value' => 'wert'],
+            ['caption' => $this->Translate('Run script'), 'value' => 'skript'],
         ];
     }
 
@@ -1697,15 +1701,15 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('WebFronts', 'rowCount', $this->listRowCount(count($rows), 3));
         $this->setStatusLabel('WebFrontStatusLabel', $this->webfrontStatusLine($rows));
         if ($added === 0 && count($rows) > 0) {
-            return sprintf('ℹ️ Keine neuen Push-Ziele gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows));
+            return sprintf($this->Translate('ℹ️ No new push targets found (%d already known). Please click „Apply" below if not saved yet.'), count($rows));
         }
         if ($added === 0) {
-            return '⚠️ Weder WebFront-, Kachel-Visualisierung-, Telegram-Bot-, Pushover-, SMTP- noch Notification-Control-Instanzen im Objektbaum gefunden.';
+            return $this->Translate('⚠️ No WebFront, tile visualization, Telegram bot, Pushover, SMTP or Notification Control instances found in the object tree.');
         }
         if ($addedEmail > 0) {
-            return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden (insgesamt %d) -- bitte unten „Übernehmen" klicken. %d E-Mail-Ziel(e) sind noch INAKTIV: erst Zieladresse eintragen und aktivieren.', $added, count($rows), $addedEmail);
+            return sprintf($this->Translate('✅ %d new push target(s) found (%d in total) -- please click „Apply" below. %d e-mail target(s) are still INACTIVE: enter the target address first and activate them.'), $added, count($rows), $addedEmail);
         }
-        return sprintf('✅ %d neue(s) Push-Ziel(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
+        return sprintf($this->Translate('✅ %d new push target(s) found and activated (%d in total) -- please click „Apply" below to save.'), $added, count($rows));
     }
 
     /**
@@ -1753,17 +1757,17 @@ class WarnHub extends IPSModule
      */
     private function webfrontStatusLine(?array $rows = null): string
     {
-        $ungespeichert = $rows !== null ? ' (Stand der offenen Tabelle, noch nicht gespeichert -- „Übernehmen“ klicken)' : '';
+        $ungespeichert = $rows !== null ? $this->Translate(' (state of the open table, not saved yet -- click „Apply“)') : '';
         $rows ??= $this->decodeWebFronts();
         if (count($rows) === 0) {
-            return 'ℹ️ Noch keine Push-Ziele gesucht -- oben "🔎 Push-Ziele suchen" klicken. Ohne Push-Ziel kommt keine Benachrichtigung an (Erkennung, Kacheln und Schutzaktionen laufen trotzdem).';
+            return $this->Translate('ℹ️ No push targets searched yet -- click "🔎 Search push targets" above. Without a push target no notification arrives (detection, tiles and protective actions still run).');
         }
         $aktive = array_values(array_filter($rows, fn ($w) => !empty($w['Aktiv'])));
         if (count($aktive) === 0) {
-            return sprintf('⚠️ %d Push-Ziel(e) gefunden, aber keines aktiviert -- Push-Benachrichtigungen kommen aktuell nirgends an.%s', count($rows), $ungespeichert);
+            return sprintf($this->Translate('⚠️ %d push target(s) found, but none activated -- push notifications currently arrive nowhere.%s'), count($rows), $ungespeichert);
         }
 
-        $typNamen = ['webfront' => 'WebFront', 'kachel' => 'Kachel-Visualisierung', 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => 'E-Mail', 'notification' => 'Notification Control'];
+        $typNamen = ['webfront' => 'WebFront', 'kachel' => $this->Translate('Tile visualization'), 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => $this->Translate('E-mail'), 'notification' => 'Notification Control'];
         $laufen = [];
         $ohneAdresse = [];
         $verwaist = [];
@@ -1771,7 +1775,7 @@ class WarnHub extends IPSModule
             $name = trim((string) ($w['Name'] ?? '')) !== '' ? (string) $w['Name'] : ('#' . (int) $w['InstanceID']);
             $typ = (string) ($w['Typ'] ?? '');
             if (!@IPS_InstanceExists((int) $w['InstanceID'])) {
-                $verwaist[] = sprintf('„%s“ (Instanz #%d)', $name, (int) $w['InstanceID']);
+                $verwaist[] = sprintf($this->Translate('„%s“ (instance #%d)'), $name, (int) $w['InstanceID']);
                 continue;
             }
             if ($typ === 'email') {
@@ -1780,28 +1784,28 @@ class WarnHub extends IPSModule
                     $ohneAdresse[] = '„' . $name . '“';
                     continue;
                 }
-                $laufen[] = sprintf('%s (E-Mail an %d Adresse%s)', $name, count($adressen), count($adressen) === 1 ? '' : 'n');
+                $laufen[] = count($adressen) === 1 ? sprintf($this->Translate('%s (e-mail to 1 address)'), $name) : sprintf($this->Translate('%s (e-mail to %d addresses)'), $name, count($adressen));
                 continue;
             }
             $laufen[] = sprintf('%s (%s)', $name, $typNamen[$typ] ?? $typ);
         }
 
         $funktioniert = count($laufen) > 0
-            ? ' Funktionsfähig: ' . implode(', ', $laufen) . '.'
-            : ' Aktuell kommt deshalb nirgends eine Benachrichtigung an.';
+            ? $this->Translate(' Working: ') . implode(', ', $laufen) . '.'
+            : $this->Translate(' So currently no notification arrives anywhere.');
         if ($ohneAdresse !== []) {
-            return sprintf('⛔ E-Mail-Ziel %s ist aktiv, aber ohne Zieladresse -- dorthin geht nichts, unten in der Spalte „Zieladresse“ eintragen.%s%s', implode(', ', $ohneAdresse), $funktioniert, $ungespeichert);
+            return sprintf($this->Translate('⛔ E-mail target %s is active, but has no target address -- nothing goes there, enter it in the „Target address“ column below.%s%s'), implode(', ', $ohneAdresse), $funktioniert, $ungespeichert);
         }
         if ($verwaist !== []) {
-            return sprintf('⚠️ Push-Ziel %s existiert nicht mehr im Objektbaum -- dorthin geht nichts, Zeile löschen oder „🔎 Push-Ziele suchen“ erneut klicken.%s%s', implode(', ', $verwaist), $funktioniert, $ungespeichert);
+            return sprintf($this->Translate('⚠️ Push target %s no longer exists in the object tree -- nothing goes there, delete the row or click „🔎 Search push targets“ again.%s%s'), implode(', ', $verwaist), $funktioniert, $ungespeichert);
         }
-        return sprintf('✅ %d von %d Push-Zielen aktiv und erreichbar: %s -- Push-Benachrichtigungen gehen dorthin.%s', count($aktive), count($rows), implode(', ', $laufen), $ungespeichert);
+        return sprintf($this->Translate('✅ %d of %d push targets active and reachable: %s -- push notifications go there.%s'), count($aktive), count($rows), implode(', ', $laufen), $ungespeichert);
     }
 
     /** Anzeigename zu einem ISO-3166-Ländercode (nur D-A-CH als Klartext, sonst der Code) -- für die Statuszeilen. */
     private function landName(string $code): string
     {
-        return ['de' => 'Deutschland', 'at' => 'Österreich', 'ch' => 'Schweiz'][$code] ?? strtoupper($code);
+        return ['de' => $this->Translate('Germany'), 'at' => $this->Translate('Austria'), 'ch' => $this->Translate('Switzerland')][$code] ?? strtoupper($code);
     }
 
     /** Ist irgendeine eigene Wetterstation eingetragen (Instanz ODER manuelle Wind-/Regen-Variable)? Wie in Poll(). */
@@ -1826,25 +1830,25 @@ class WarnHub extends IPSModule
         $loc = $this->getSystemLocation();
         $braucht = [];
         if ($this->hasWetterstationConfigured()) {
-            $braucht[] = 'die eigene Wetterstation';
+            $braucht[] = $this->Translate('your own weather station');
         }
         if (trim($this->ReadPropertyString('HagelschutzPollUrl')) !== '') {
-            $braucht[] = 'Hagelschutz Schweiz';
+            $braucht[] = $this->Translate('hail protection Switzerland');
         }
         if ($loc === null) {
             if ($braucht !== []) {
-                return sprintf('⛔ Kein Systemstandort in der Symcon-Kerninstanz „Standort“ eingetragen -- %s braucht ihn und meldet ohne ihn nichts. Breiten-/Längengrad dort eintragen.', implode(' und ', $braucht));
+                return sprintf($this->Translate('⛔ No system location entered in the Symcon core instance „Location“ -- %s needs it and reports nothing without it. Enter latitude/longitude there.'), implode($this->Translate(' and '), $braucht));
             }
-            return 'ℹ️ Kein Systemstandort in der Symcon-Kerninstanz „Standort“ eingetragen -- der Knopf oben bleibt wirkungslos, die Karte startet in der Mitte Deutschlands, das Länder-Panel bei „Datenquellen“ hat keine Vorauswahl. Standorte lassen sich trotzdem per Adresse, Karte oder Koordinaten anlegen.';
+            return $this->Translate('ℹ️ No system location entered in the Symcon core instance „Location“ -- the button above has no effect, the map starts in the middle of Germany, the country panel under „Data sources“ has no preselection. Locations can still be created via address, map or coordinates.');
         }
         $heim = $this->ReadAttributeString('HeimLandCode');
         return sprintf(
-            '✅ Systemstandort 🔗 automatisch aus der Symcon-Kerninstanz „Standort“ #%d übernommen: Breite %s, Länge %s, Land: %s. Genutzt für den Knopf „Standort aus Symcon-Systemeinstellungen übernehmen“, den Kartenstart und die Länder-Vorauswahl bei „Datenquellen“%s.',
+            $this->Translate('✅ System location 🔗 taken over automatically from the Symcon core instance „Location“ #%d: latitude %s, longitude %s, country: %s. Used for the button „Take location from Symcon system settings“, the map start and the country preselection under „Data sources“%s.'),
             (int) ($loc['instanceID'] ?? 0),
             number_format($loc['lat'], 5, ',', '.'),
             number_format($loc['lon'], 5, ',', '.'),
-            $heim !== '' ? $this->landName($heim) : 'wird beim nächsten Abgleich ermittelt',
-            $braucht !== [] ? ' sowie als Platzierung für ' . implode(' und ', $braucht) : ''
+            $heim !== '' ? $this->landName($heim) : $this->Translate('determined at the next check'),
+            $braucht !== [] ? $this->Translate(' and as placement for ') . implode($this->Translate(' and '), $braucht) : ''
         );
     }
 
@@ -1859,7 +1863,7 @@ class WarnHub extends IPSModule
     private function wetterstationStatusLine(int $instanceID, int $windVar, int $regenVar): string
     {
         if ($instanceID <= 0 && $windVar <= 0 && $regenVar <= 0) {
-            return 'ℹ️ Eigene Wetterstation nicht eingerichtet -- diese Quelle ist aus, amtliche Warnungen laufen davon unabhängig. „🔎 Wetterstation suchen“ klicken oder Wind-/Regen-Variable von Hand wählen.';
+            return $this->Translate('ℹ️ Own weather station not set up -- this source is off, official warnings run independently of it. Click „🔎 Search weather station“ or choose a wind/rain variable by hand.');
         }
         [$windID] = $this->resolveWetterstationSource($windVar, $instanceID, 'Windböe', self::WETTERSTATION_WIND_IDENTS);
         [$regenID] = $this->resolveWetterstationSource($regenVar, $instanceID, 'Regenrate', self::WETTERSTATION_REGEN_IDENTS);
@@ -1868,28 +1872,28 @@ class WarnHub extends IPSModule
 
         $beschreibe = function (?int $id, int $manuell, string $label, bool $istWind) use ($instanceID, $instanzName): string {
             if ($id === null) {
-                return $label . ': nichts gefunden';
+                return $label . $this->Translate(': nothing found');
             }
             $wert = $istWind ? $this->readWindSpeedKmh($id) : (float) @GetValue($id);
             $quelle = ($manuell > 0 && $id === $manuell)
-                ? '✏️ von Hand gewählt'
-                : sprintf('🔗 automatisch aus Instanz „%s“ #%d', $instanzName, $instanceID);
-            return sprintf('%s %s %s (Variable „%s“ #%d, %s)', $label, number_format($wert, 1, ',', '.'), $istWind ? 'km/h' : 'mm/h', (string) (@IPS_GetName($id) ?: ''), $id, $quelle);
+                ? $this->Translate('✏️ chosen by hand')
+                : sprintf($this->Translate('🔗 automatically from instance „%s“ #%d'), $instanzName, $instanceID);
+            return sprintf($this->Translate('%s %s %s (variable „%s“ #%d, %s)'), $label, number_format($wert, 1, ',', '.'), $istWind ? 'km/h' : 'mm/h', (string) (@IPS_GetName($id) ?: ''), $id, $quelle);
         };
-        $wind = $beschreibe($windID, $windVar, 'Windböe', true);
-        $regen = $beschreibe($regenID, $regenVar, 'Regenrate', false);
+        $wind = $beschreibe($windID, $windVar, $this->Translate('Wind gust'), true);
+        $regen = $beschreibe($regenID, $regenVar, $this->Translate('Rain rate'), false);
 
         if ($windID !== null && $regenID !== null) {
-            return '✅ Eigene Wetterstation verbunden: ' . $wind . '; ' . $regen . '.';
+            return $this->Translate('✅ Own weather station connected: ') . $wind . '; ' . $regen . '.';
         }
-        $grund = ($instanceID > 0 && !$instanzVorhanden) ? sprintf(' Die eingetragene Instanz #%d existiert nicht mehr.', $instanceID) : '';
+        $grund = ($instanceID > 0 && !$instanzVorhanden) ? sprintf($this->Translate(' The entered instance #%d no longer exists.'), $instanceID) : '';
         if ($windID === null && $regenID === null) {
-            return '⚠️ Eigene Wetterstation eingetragen, aber weder Windböe noch Regenrate auffindbar.' . $grund . ' „🔎 Wetterstation suchen“ erneut klicken oder die Variablen unten von Hand wählen -- solange gilt diese Quelle als aus.';
+            return $this->Translate('⚠️ Own weather station entered, but neither wind gust nor rain rate can be found.') . $grund . $this->Translate(' Click „🔎 Search weather station“ again or choose the variables below by hand -- until then this source counts as off.');
         }
         return sprintf(
-            '⚠️ Eigene Wetterstation nur teilweise verbunden: %s; %s: keine Variable gefunden -- diese Größe löst nichts aus.%s Fehlende Variable unten von Hand wählen.',
+            $this->Translate('⚠️ Own weather station only partly connected: %s; %s: no variable found -- this quantity triggers nothing.%s Choose the missing variable below by hand.'),
             $windID !== null ? $wind : $regen,
-            $windID === null ? 'Windböe' : 'Regenrate',
+            $windID === null ? $this->Translate('Wind gust') : $this->Translate('Rain rate'),
             $grund
         );
     }
@@ -1927,25 +1931,25 @@ class WarnHub extends IPSModule
      */
     private function mobileStandorteStatusLine(?array $standorte = null): string
     {
-        $ungespeichert = $standorte !== null ? ' (Stand der offenen Tabelle, noch nicht gespeichert -- „Übernehmen“ klicken)' : '';
+        $ungespeichert = $standorte !== null ? $this->Translate(' (state of the open table, not saved yet -- click „Apply“)') : '';
         $rows = $standorte ?? $this->decodeStandorte();
         $mobil = array_values(array_filter($rows, fn ($s) => (int) ($s['QuellVarLat'] ?? 0) > 0 || (int) ($s['QuellVarLon'] ?? 0) > 0));
         if (count($mobil) === 0) {
-            return 'ℹ️ Kein mobiler Standort eingerichtet -- alle Standorte nutzen feste Koordinaten. „🔎 Fahrzeug-/Standort-Variablen suchen“ legt einen an, sobald Tessie, Geofency oder ein Fahrzeug-Modul im System vorhanden ist.';
+            return $this->Translate('ℹ️ No mobile location set up -- all locations use fixed coordinates. „🔎 Search vehicle/location variables“ creates one as soon as Tessie, Geofency or a vehicle module exists in the system.');
         }
         $teile = [];
         $alleOk = true;
         foreach ($mobil as $s) {
             $latVar = (int) ($s['QuellVarLat'] ?? 0);
             $lonVar = (int) ($s['QuellVarLon'] ?? 0);
-            $name = trim((string) ($s['Name'] ?? '')) !== '' ? (string) $s['Name'] : '(ohne Namen)';
-            $inaktiv = !empty($s['Aktiv']) ? '' : ' [inaktiv]';
+            $name = trim((string) ($s['Name'] ?? '')) !== '' ? (string) $s['Name'] : $this->Translate('(no name)');
+            $inaktiv = !empty($s['Aktiv']) ? '' : $this->Translate(' [inactive]');
             $latOk = $latVar > 0 && @IPS_VariableExists($latVar);
             $lonOk = $lonVar > 0 && @IPS_VariableExists($lonVar);
             if ($latOk && $lonOk) {
                 $quelle = (string) (@IPS_GetName((int) @IPS_GetParent($latVar)) ?: '');
                 $teile[] = sprintf(
-                    '%s%s: %s / %s (🔗 automatisch aus „%s“, Variablen #%d/#%d)',
+                    $this->Translate('%s%s: %s / %s (🔗 automatically from „%s“, variables #%d/#%d)'),
                     $name,
                     $inaktiv,
                     number_format((float) @GetValue($latVar), 4, ',', '.'),
@@ -1958,15 +1962,15 @@ class WarnHub extends IPSModule
             }
             $alleOk = false;
             $teile[] = sprintf(
-                '%s%s: Live-Variable %s -- WarnHub nutzt stattdessen die festen Koordinaten %s / %s aus der Tabelle',
+                $this->Translate('%s%s: live variable %s -- WarnHub uses the fixed coordinates %s / %s from the table instead'),
                 $name,
                 $inaktiv,
-                ($latVar > 0 xor $lonVar > 0) ? 'nur für eine Achse gesetzt' : 'fehlt oder existiert nicht mehr',
+                ($latVar > 0 xor $lonVar > 0) ? $this->Translate('set for one axis only') : $this->Translate('missing or no longer exists'),
                 number_format((float) ($s['Lat'] ?? 0), 4, ',', '.'),
                 number_format((float) ($s['Lon'] ?? 0), 4, ',', '.')
             );
         }
-        return ($alleOk ? '✅ ' : '⚠️ ') . 'Mobile Standorte: ' . implode(' · ', $teile) . '.' . $ungespeichert;
+        return ($alleOk ? '✅ ' : '⚠️ ') . $this->Translate('Mobile locations: ') . implode(' · ', $teile) . '.' . $ungespeichert;
     }
 
     private function isPushSnoozed(): bool
@@ -1977,9 +1981,9 @@ class WarnHub extends IPSModule
     private function snoozeStatusLine(): string
     {
         if (!$this->isPushSnoozed()) {
-            return 'ℹ️ Push-Benachrichtigung läuft normal (nicht pausiert).';
+            return $this->Translate('ℹ️ Push notification runs normally (not paused).');
         }
-        return sprintf('🔕 Push-Benachrichtigung pausiert bis %s Uhr -- Erkennung und Schutzaktionen laufen unverändert weiter, nur die Benachrichtigung selbst ist stumm.', date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
+        return sprintf($this->Translate('🔕 Push notification paused until %s -- detection and protective actions keep running unchanged, only the notification itself is silent.'), date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
     }
 
     /**
@@ -2007,23 +2011,23 @@ class WarnHub extends IPSModule
         }
         $count = count($restoreState);
         if ($minRemainingMinutes !== null) {
-            return sprintf('🔽 %d durch die Wetterstation geschützte Aktion(en) -- frühestens in %d Min. wieder zurückgestellt.', $count, $minRemainingMinutes);
+            return sprintf($this->Translate('🔽 %d action(s) protected by the weather station -- reset at the earliest in %d min.'), $count, $minRemainingMinutes);
         }
-        return sprintf('🔽 %d durch die Wetterstation geschützte Aktion(en) -- wartet noch auf Windberuhigung.', $count);
+        return sprintf($this->Translate('🔽 %d action(s) protected by the weather station -- still waiting for the wind to calm down.'), $count);
     }
 
     private function getPollStatusLine(): string
     {
         $lastTs = $this->ReadAttributeInteger('LastPollTs');
         if ($lastTs === 0) {
-            return 'ℹ️ Noch keine Prüfung durchgeführt.';
+            return $this->Translate('ℹ️ No check performed yet.');
         }
         $active = json_decode($this->ReadAttributeString('LastActiveWarningsJson'), true) ?: [];
         $standorte = $this->decodeStandorte();
         $activeStandorte = count(array_filter($standorte, fn ($s) => $s['Aktiv']));
         $icon = count($active) > 0 ? '⚠️' : '✅';
         return sprintf(
-            '%s %d aktive Warnung(en) an %d konfigurierten Standorten (zuletzt geprüft %s Uhr).',
+            $this->Translate('%s %d active warning(s) at %d configured locations (last checked %s).'),
             $icon,
             count($active),
             $activeStandorte,
@@ -2042,11 +2046,11 @@ class WarnHub extends IPSModule
         }
         return [
             'type' => 'ExpansionPanel', 'name' => 'PurposeIntroPanel', 'expanded' => true,
-            'caption' => '👋  Wozu dieses Modul?',
+            'caption' => $this->Translate('👋  What is this module for?'),
             'items' => [
-                ['type' => 'Label', 'caption' => 'WarnHub bündelt amtliche Warn- und Alarmmeldungen für Deutschland, Österreich und die Schweiz -- Deutschland (Unwetter, Katastrophenschutz, Hochwasser, Polizei, Pegelstände, Radioaktivität) plus europaweite Wetterwarnungen (deckt Österreich/Schweiz mit ab) und optional die eigene Wetterstation als Sicherheitsnetz -- und meldet nur das, was tatsächlich in den von dir festgelegten Umkreis um deine Standorte fällt, auch mobile Standorte im Ausland.'],
-                ['type' => 'Label', 'caption' => 'Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen WebFront-, Kachel-Visualisierung-, Telegram- und Pushover-Zielen (auch Handy) und können optional Schutzaktionen auslösen -- z. B. Raffstore hochfahren oder das Garagentor schließen, bevor der Sturm da ist.'],
-                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckPurposeIntro($id);'],
+                ['type' => 'Label', 'caption' => $this->Translate('WarnHub bundles official warning and alert messages for Germany, Austria and Switzerland -- Germany (severe weather, civil protection, floods, police, water levels, radioactivity) plus Europe-wide weather warnings (also covering Austria/Switzerland) and optionally your own weather station as a safety net -- and only reports what actually falls within the radius you set around your locations, including mobile locations abroad.')],
+                ['type' => 'Label', 'caption' => $this->Translate('Active warnings appear as push notifications on all WebFront, tile visualization, Telegram and Pushover targets (also mobile phones) and can optionally trigger protective actions -- e.g. raise external blinds or close the garage door before the storm arrives.')],
+                ['type' => 'Button', 'caption' => $this->Translate('Got it – don\'t show again'), 'onClick' => 'WHUB_AckPurposeIntro($id);'],
             ],
         ];
     }
@@ -2057,103 +2061,79 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('PurposeIntroPanel', 'visible', false);
     }
 
+    /**
+     * "Neu"-Panel nach der Verbund-Konvention NEWS_VERSIONS (SUITE.md
+     * "Einheitliche Formular-Optik" Punkt 1, Referenz NRGDashboard): zeigt
+     * alle Versionen, die neuer sind als die zuletzt bestätigte (Attribut
+     * SeenNews), gruppiert nach Version. Seit 1.20.0 -- vorher eine einzige,
+     * seit der Erstversion gewachsene Liste mit 80 Zeilen; die ältere
+     * Geschichte steht im CHANGELOG. Texte englisch, Deutsch in locale.json.
+     */
+    private const NEWS_VERSIONS = [
+        '1.18.0' => [
+            'New alert type "💨 Smoke/hazardous substances" for protective actions and window/door monitoring, plus the action type "Set variable to value" -- e.g. set the ventilation level to 0 as soon as smoke gases are reported. WarnHub does not reset the value after an all-clear.',
+        ],
+        '1.18.1' => [
+            'Fix Meteoalarm: with NINA/DWD active, a DWD warning for German locations appeared twice -- once in German and once in English from the Meteoalarm Germany feed. NINA or the DWD connection now take over Germany from Meteoalarm, as GeoSphere Austria and Alertswiss already did.',
+        ],
+        '1.18.2' => [
+            'Fix Switzerland: Alertswiss no longer replaces Meteoalarm for Swiss locations -- Alertswiss is civil protection and does not carry MeteoSwiss weather warnings.',
+            'Fix forest fire danger index (DWD): outside the fire season, a month-old station value is no longer shown as an active danger.',
+            'Tiles: matches within the radius now show the distance ("Home · 8 km away · until 18:00"), so a warning for a neighbouring municipality no longer looks like one for the location itself.',
+        ],
+        '1.19.0' => [
+            '🪟 New: choose the form layout yourself -- in the new "Form: layout" section (at the bottom, before the forum hint) you set for each section whether it opens expanded, collapsed or hidden, and its position. Hidden sections keep working.',
+        ],
+        '1.19.1' => [
+            'Fix forest fire danger index (DWD): a short outage of opendata.dwd.de no longer shows up as an error at every check. The station list is cached (reloaded at most once a week), the daily value per station at most every 6 hours.',
+        ],
+        '1.20.0' => [
+            '🌐 WarnHub now speaks English: forms, notifications, tiles and messages follow the language of your Symcon system. The warnings themselves stay in the language of their source (mostly German).',
+            'This "New" panel now shows exactly the versions you have not confirmed yet instead of one ever-growing list.',
+            'Fix ozone (Federal Environment Agency): short outages of luftdaten.umweltbundesamt.de no longer show up as an error at every check -- the station list and readings are cached like the forest fire index.',
+        ],
+    ];
+
     private function NewsBanner(): ?array
     {
-        if ($this->ReadAttributeString('SeenNews') === self::NEWS_VERSION) {
+        $seen = $this->ReadAttributeString('SeenNews');
+        $pending = [];
+        foreach (self::NEWS_VERSIONS as $ver => $lines) {
+            if ($seen === '' || version_compare($ver, $seen, '>')) {
+                $pending[$ver] = $lines;
+            }
+        }
+        if (count($pending) === 0) {
             return null;
         }
+        uksort($pending, 'version_compare');
+        $items = [];
+        $multi = count($pending) > 1;
+        foreach ($pending as $ver => $lines) {
+            if ($multi) {
+                $items[] = ['type' => 'Label', 'caption' => sprintf($this->Translate('Version %s:'), $ver)];
+            }
+            foreach ($lines as $line) {
+                $items[] = ['type' => 'Label', 'caption' => '• ' . $this->Translate($line)];
+            }
+        }
+        $items[] = ['type' => 'Button', 'caption' => $this->Translate('Got it – don\'t show again'), 'onClick' => 'WHUB_AckNews($id);'];
         return [
             'type' => 'ExpansionPanel', 'name' => 'NewsPanel', 'expanded' => true,
-            'caption' => '🆕  Neu in Version ' . self::NEWS_VERSION,
-            'items' => [
-                ['type' => 'Label', 'caption' => '🎉 WarnHub ist jetzt im Symcon Module Store als Stable-Version verfügbar (bisher nur Beta)!'],
-                ['type' => 'Label', 'caption' => 'Seit der Erstversion neu dazugekommen:'],
-                ['type' => 'Label', 'caption' => '• Zwei neue Datenquellen: Pegelstände (PEGELONLINE/WSV) und Radioaktivität (BfS Ortsdosisleistung, mit Einordnungshilfe "Was bedeutet dieser Wert?" -- Dosisleistung/Verweildauer bis zum Jahres-Vorsorgewert)'],
-                ['type' => 'Label', 'caption' => '• Meteoalarm als dritte Wetterquelle: europaweite Warnungen für 39 Länder, wichtig für mobile Standorte im Ausland'],
-                ['type' => 'Label', 'caption' => '• Mobiler Standort: statt fester Koordinaten an zwei Live-Variablen bindbar (z. B. Tessie/Geofency) -- WarnHub liest bei jeder Prüfung die aktuelle Position. Objektbaum-Suche findet passende Fahrzeug-/Standort-Variablenpaare automatisch'],
-                ['type' => 'Label', 'caption' => '• "Push nur an"-Filter je Standort -- bei mehreren Personen/Fahrzeugen bekommt nicht mehr automatisch jeder die Warnung der anderen Person'],
-                ['type' => 'Label', 'caption' => '• Neue Schutzaktionen: Fenster schließen sowie Kofferraum/Heckklappe schließen (Letzteres mit zwingender Sicherheitsprüfung gegen ein versehentliches Öffnen), beide auch über die automatische Objektbaum-Suche auffindbar'],
-                ['type' => 'Label', 'caption' => '• Schutzaktionen ohne eigenen Standort-Filter feuern jetzt automatisch nur noch von festen, nicht von mobilen Standorten aus (Sicherheitssperre)'],
-                ['type' => 'Label', 'caption' => '• Eigene Wetterstation (Froggit) als unabhängige, zusätzliche Warnquelle -- löst auch aus, wenn eine amtliche Warnung ein tatsächlich lokal auftretendes Ereignis nicht meldet. Objektbaum-Suche findet eine passende Station automatisch'],
-                ['type' => 'Label', 'caption' => '• Schutzaktionen feuern nicht mehr sofort bei Eingang einer Meldung, sondern erst kurz vor deren tatsächlichem Gültigkeitsbeginn (einstellbarer Vorlauf) -- eine morgens eintreffende, erst für den Nachmittag gültige Warnung fährt die Markise nicht mehr schon morgens ein. Die Push-Benachrichtigung bleibt weiterhin sofort'],
-                ['type' => 'Label', 'caption' => '• Meteoalarm deckt neben Deutschland auch Österreich und die Schweiz ab -- WarnHub eignet sich damit für den gesamten deutschsprachigen Raum (D-A-CH), nicht nur für Deutschland'],
-                ['type' => 'Label', 'caption' => '• Neue Datenquelle für Österreich: direkte GeoSphere-Austria-Anbindung (warnungen.zamg.at) -- koordinatengenau statt Namensabgleich, übernimmt für österreichische Standorte automatisch von Meteoalarm, sobald aktiviert'],
-                ['type' => 'Label', 'caption' => '• Neue Datenquelle für die Schweiz: amtliche Hochwasser-Gefahrenstufen (BAFU/LINDAS) -- echte behördliche Klassifikation (1-5), nicht nur ein eigener Schwellwert'],
-                ['type' => 'Label', 'caption' => '• BETA (ungetestet): eigene VKF-Hagelschutz-Signalbox (Schweiz) als Datenquelle -- eigenes Panel, Rückmeldungen willkommen'],
-                ['type' => 'Label', 'caption' => '• Mehrkanal-Push: neben WebFront/Kachel-Visualisierung jetzt auch Telegram (offizielles Symcon-Modul) und Pushover (Community-Modul) als Push-Ziele -- einfach "🔎 Push-Ziele suchen" erneut klicken, vorhandene Telegram-Bot-/Pushover-Instanzen werden automatisch gefunden'],
-                ['type' => 'Label', 'caption' => '• IPSView-tauglich: vier neue Statusvariablen (Aktive Warnungen, Höchster Schweregrad, Status, Letzte Prüfung) für ein eigenes Dashboard -- WarnHub war bisher komplett "headless" (nur Push + Konsole)'],
-                ['type' => 'Label', 'caption' => '• Schutzaktionen lassen sich jetzt je Alarmtyp einzeln testen ("🌪️ Sturm testen" usw.) -- löst sofort alle passenden aktiven Aktionen aus, unabhängig von einer echten Warnung, praktisch um z. B. die Raffstore-Ansteuerung ohne Warten auf den nächsten Sturm zu prüfen'],
-                ['type' => 'Label', 'caption' => '• Warnungs-Historie: bis zu 500 vergangene Warnungen/Entwarnungen über die neue Funktion WHUB_GetHistory() abrufbar -- für eigene Auswertungen/Skripte, auch wenn Push zwischenzeitlich ausgeschaltet war'],
-                ['type' => 'Label', 'caption' => '• Zwei fertige WebFront-Kacheln ("Kachel (kompakt)", "Kachel (Übersicht)") -- einfach im Objektbaum in den Bereich des WebFronts verlinken, kein eigenes Bauen nötig. Hell/Dunkel-adaptiv im modernen "Liquid Glass"-Stil'],
-                ['type' => 'Label', 'caption' => '• Eigene Wetterstation: zweites unterstütztes Modul (Sainlogic/ELV via Wunderground-Protokoll) sowie zwei manuelle Wind-/Regen-Auswahlfelder für JEDES andere Fabrikat (KNX, Netatmo, TFA, Homematic, ...) -- keine automatische Erkennung möglich, da diese Module/KNX keine einheitliche Benennung verwenden, aber jede beliebige Variable im System lässt sich direkt auswählen'],
-                ['type' => 'Label', 'caption' => '• Eigene Wetterstation: drittes unterstütztes Modul (Meteobridge/Meteohub, deckt als Aggregator zusätzlich weitere Marken wie DAVIS ab) sowie ein letzter Rückfall bei der Suche über das Symcon-Standardprofil (findet z. B. eine bereits profilierte KNX-Wetterstation automatisch). Wichtiger Fix: Windgeschwindigkeiten in m/s (kommt bei manchen Modulen/KNX vor) werden jetzt korrekt in km/h umgerechnet -- vorher hätte eine m/s-Variable stumm gegen den km/h-Schwellwert verglichen werden können'],
-                ['type' => 'Label', 'caption' => '• Windböe: drei Schwellwerte (Moderate/Severe/Extreme, Standard 40/65/90 km/h, an DWDs eigene Warnstufen angelehnt) statt einem pauschalen Wert -- eine Markise ist windempfindlicher als ein Raffstore. Jede Schutzaktions-Zeile wählt über ihr bestehendes "Ab Schweregrad"-Feld selbst, ab welcher Stufe sie reagiert; neu ins Popup "Welchen Schwellwert wähle ich?" im Datenquellen-Panel'],
-                ['type' => 'Label', 'caption' => '• Push-Ruhephase: Benachrichtigung für 1/4/24 Std. pausierbar (z. B. Urlaub, Feier, Nachtruhe) -- Erkennung, Warnungs-Historie und Schutzaktionen laufen unverändert weiter, nur das Handy bleibt still. Ein manueller Testklick auf "Testbenachrichtigung senden" kommt trotzdem an'],
-                ['type' => 'Label', 'caption' => '• Eine bereits gemeldete Warnung, die sich verschärft (z. B. DWD stuft von Moderate auf Severe hoch), löst jetzt eine ERNEUTE Push-Benachrichtigung aus -- vorher blieb sie nach der ersten Meldung stumm, egal wie sehr sie sich verschlimmerte. Eine Abstufung pusht bewusst nicht erneut'],
-                ['type' => 'Label', 'caption' => '• Push-Text enthält jetzt auch die Handlungsempfehlung der Quelle (CAP-Feld "instruction", z. B. "Meiden Sie den Aufenthalt im Wald"), falls vorhanden -- wurde bisher eingelesen, aber nirgends angezeigt'],
-                ['type' => 'Label', 'caption' => '• Regenrate der eigenen Wetterstation jetzt ebenfalls in drei Stufen (Moderate/Severe/Extreme, Standard 15/25/40 mm/h, DWDs eigene Starkregen-Warnstufen)'],
-                ['type' => 'Label', 'caption' => '• NEU (optional, standardmäßig AUS): Automatische Rückstellung nach Windberuhigung für durch die eigene Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-Aktionen -- stellt nach 20 Minuten durchgehender Ruhe automatisch den Wert vor dem Auslösen wieder her, prüft vorher aber, ob der Stand seitdem von Hand verändert wurde (dann keine Überschreibung). Die einzige Ausnahme von "keine automatische Rückstellung" im ganzen Modul, siehe Datenquellen-Panel'],
-                ['type' => 'Label', 'caption' => '• Eine bereits abgelaufene Warnung zählt nicht mehr als aktiv, auch wenn die Quelle sie verzögert weiterliefert -- Absicherung gegen veraltete Quelldaten'],
-                ['type' => 'Label', 'caption' => '• Auto-Rückstellung: wird jetzt zusätzlich in der Warnungs-Historie protokolliert (neuer Verlaufstyp "Rückstellung"), eine noch anstehende Rückstellung steht als eigene Statuszeile im Panel "Prüfung & Status"'],
-                ['type' => 'Label', 'caption' => '• Eigene Wetterstation sendet jetzt auch eine echte "✅ Entwarnung"-Push, sobald Windböe/Regenrate wieder unter dem Schwellwert liegen -- vorher gab es nur die "Sturm kommt"-Meldung, nie ein "Sturm vorbei" (die Quelle liefert selbst kein Cancel, WarnHub erkennt es jetzt anhand des eigenen Verlaufs)'],
-                ['type' => 'Label', 'caption' => '• GeoSphere Austria: die Warnungs-Beschreibung enthält jetzt zusätzlich die meteorologische Kurzerklärung der Quelle (z. B. "Mit einer stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis 80 km/h") vor Auswirkungen/Empfehlungen'],
-                ['type' => 'Label', 'caption' => '• "Kachel (kompakt)" und "Kachel (Übersicht)" enthalten jetzt unten drei kleine Links zu den amtlichen Warnkarten (DWD, ZAMG, MeteoSchweiz)'],
-                ['type' => 'Label', 'caption' => '• NEU: zwei weitere fertige WebFront-Kacheln. "Kachel (Karte)" zeigt eine OpenStreetMap-Karte, zentriert auf einen frei wählbaren Standort (auch mobile -- folgt der Live-Position), Markerfarbe nach höchstem aktivem Schweregrad. "Kachel (ZAMG-Warnkarte, Österreich)" bettet die offizielle ZAMG-Warnkarte direkt ein -- speziell für österreichische Nutzer. Beide laden anders als die bisherigen zwei Kacheln bewusst externe Ressourcen (Leaflet.js/OpenStreetMap bzw. die ZAMG-Seite selbst); eine Einbettung der DWD-/MeteoSchweiz-Warnkarten war technisch nicht möglich, beide verbieten das per X-Frame-Options'],
-                ['type' => 'Label', 'caption' => '• NEU: E-Mail als fünfter Push-Kanal (über eine bereits eingerichtete SMTP-Instanz, offizielles Symcon-Modul) -- einfach "🔎 Push-Ziele suchen" erneut klicken, eine gefundene SMTP-Instanz wird zunächst inaktiv angelegt (kennt nur den Versandweg, nicht den Empfänger), erst Zieladresse eintragen und dann aktivieren'],
-                ['type' => 'Label', 'caption' => '• NEU: Fenster-/Tür-Überwachung (eigenes Panel) -- WarnHub kann ein Fenster nicht selbst schließen, erkennt aber über einen Öffnungskontakt, dass eines offen ist, und warnt gezielt bei einer passenden aktiven Warnung. Findet Kontakte über ein klassisches Symcon-Profil (~Window/~Door) UND die seit Symcon 9.0 neue Variablendarstellung (herstellerunabhängig, auch Matter-Kontakte) -- einfach "🔎 Objektbaum nach Fenster-/Tür-Kontakten durchsuchen" klicken'],
-                ['type' => 'Label', 'caption' => '• NEU: Schweizer Erdbeben als weitere Datenquelle (Schweizerischer Erdbebendienst SED, ETH Zürich) -- ab Magnitude 2.5 (laut SED die Spürbarkeitsschwelle). Keine Wetterquelle, eigener Kreis um das Epizentrum statt amtlicher Warnfläche (siehe Datenquellen-Panel für Details)'],
-                ['type' => 'Label', 'caption' => '• NEU: Deutscher Waldbrandgefahrenindex (DWD) als weitere Datenquelle -- amtliche 5-stufige Skala, je Standort automatisch die nächstgelegene der 484 DWD-Messstationen'],
-                ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": lud bei manchen Nutzern (Firefox) keine Kartenkacheln (HTTP 403) -- OpenStreetMaps eigene Tile-Server verlangen für eingebettete Widgets einen Referer-Header, der je nach Browser fehlen kann. Zeigt jetzt Kartenkacheln von Esri (referer-frei). Außerdem füllt die Kachel jetzt auch in der Höhe den verfügbaren Platz, nicht nur in der Breite'],
-                ['type' => 'Label', 'caption' => '• "Kachel (Karte)": automatische Höhenanpassung funktioniert nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration zuverlässig -- neues Feld im Panel "Prüfung & Status" erlaubt jetzt ersatzweise eine feste Höhe in Pixel'],
-                ['type' => 'Label', 'caption' => '• NEU: Deutsche Ozonbelastung (Umweltbundesamt) als weitere Datenquelle -- amtlicher Luftqualitätsindex, ausdrücklich nur Ozon/Sommersmog, kein allgemeines Luftgüte-Monitoring'],
-                ['type' => 'Label', 'caption' => '• "Kachel (Karte)": eine manuell gewählte Zoomstufe geht jetzt nicht mehr bei jeder Prüfung verloren -- wird je Browser/Gerät gemerkt, die Kartenmitte folgt weiterhin immer dem aktuellen Standort'],
-                ['type' => 'Label', 'caption' => '• Fix "Kachel (Karte)": das Zoom-Merken von eben konnte die Karte bei manchen Nutzern komplett leer lassen -- wenn der Browser den Zugriff auf localStorage verweigert (z. B. eingebettete WebFront-Ansicht), brach das Lesen der gemerkten Zoomstufe unabgesichert die ganze Kartenerstellung ab. Jetzt robust gegen einen solchen Fehler'],
-                ['type' => 'Label', 'caption' => '• Fix "Kachel (ZAMG-Warnkarte, Österreich)": derselbe Höhen-Fund wie bei "Kachel (Karte)" -- eine fest genagelte Pixelzahl skalierte nicht in jeder WebFront-/Kachel-Visualisierung-Konfiguration. Füllt jetzt ebenfalls automatisch die verfügbare Höhe, mit neuem eigenen Feld "ZamgKachelHoehePx" als feste Alternative'],
-                ['type' => 'Label', 'caption' => '• "Kachel (Karte)" komplett neu: zeigt jetzt ALLE aktiven Standorte gleichzeitig als eigene, farbige Pins plus eine klickbare Legende, statt nur einen fest in der Konsole ausgewählten. Grund: dieselbe Kachel-Variable geht an jeden WebFront-Betrachter gleich -- stelltest du unterwegs auf deinen eigenen Standort um, sah der Rest der Familie zuhause zwangsläufig denselben, nicht mehr den eigenen (Dietmars Fund 07.09.2026). Welcher Standort fokussiert ist, merkt sich jetzt jeder Browser für sich, die Startansicht zeigt immer alle gemeinsam. Das Feld "Standort für Kachel (Karte)" entfällt damit'],
-                ['type' => 'Label', 'caption' => '• Fix: mehrere eng beieinanderliegende Standorte (z. B. mehrere mobile Standorte am selben Ort) konnten bei Waldbrandgefahr und österreichischen GeoSphere-Warnungen dieselbe Meldung mehrfach zeigen/verschicken statt einmal je Standort -- Praxis-Fund ruan/Andreas, Symcon-Forum ("1 Warnung + 3 Standorte -> 9 statt 3 Einträge")'],
-                ['type' => 'Label', 'caption' => '• Fix "Kachel (Übersicht)": bei mehr als 8 aktiven Warnungen werden die angezeigten 8 Karten jetzt nach Schweregrad sortiert, statt einfach die ersten 8 in Ankunftsreihenfolge zu nehmen -- vorher hätte ausgerechnet die wichtigste Warnung hinter "+N weitere" verschwinden können, nur weil sie zufällig weiter hinten stand'],
-                ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" -- wie "Kachel (Übersicht)", aber ohne 8er-Deckel: scrollbare Liste ALLER aktiven Warnungen, nach Schweregrad sortiert. Jede Karte hat einen eigenen "✕"-Button zum Ausblenden, dazu eine Filterleiste je Ereignistyp ("🚫 Waldbrandgefahr" etc.) -- beides rein im jeweiligen Browser gemerkt, betrifft nur die Anzeige, nicht Push/Historie/Schutzaktionen'],
-                ['type' => 'Label', 'caption' => '• "🔎 Objektbaum nach Schutzaktionen durchsuchen" findet jetzt auch Raffstore-/Jalousie-Steuerungen, deren Name selbst keinen Hinweis darauf gibt -- über Symcons eingebaute Rollladen-Variablendarstellung, unabhängig von Sprache/Eigennamen'],
-                ['type' => 'Label', 'caption' => '• Fix "🔎 Wetterstation suchen": meldete bisher pauschal "keine unterstützte Instanz gefunden", selbst wenn tatsächlich eine (z. B. Froggit-)Instanz im Baum stand, ihr aber die Windböe-/Regenrate-Felder fehlten (z. B. ein reiner Temperatur-Außensensor ohne Wind-/Regenmesser). Nennt jetzt ehrlich die gefundene, aber ungeeignete Instanz -- Praxis-Fund ralf, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix eigene Wetterstation: neuere Ecowitt-Gateways mit Piezo-Regensensor (z. B. WS90) melden Regen nur noch über das Feld "rrain_piezo" statt des klassischen "rainratein" -- wird jetzt zusätzlich erkannt, sowohl bei der Objektbaum-Suche als auch beim eigentlichen Auslesen. Praxis-Fund ralf, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Schutzaktionen: neuer, unübersehbarer Sicherheitshinweis ganz oben im Panel zu "Fenster schließen"/"Kofferraum/Heckklappe schließen" -- weder Fahrzeug noch WarnHub können erkennen, ob sich eine Person im Bewegungsbereich der Scheibe/Klappe befindet, vorher nur versteckt im Hilfe-Popup'],
-                ['type' => 'Label', 'caption' => '• NEU: mobiler Standort erkennt jetzt auch Stellantis-, Smartcar-, BMW ConnectedDrive-, Hyundai/Kia-Bluelink- und OVMS-native-Fahrzeuge automatisch -- über stabile Idents statt Namensabgleich. Bewusst OHNE Schutzaktions-Anbindung (Fenster/Kofferraum): keines der fünf community Module bietet dafür eine Fernbefehls-Funktion -- Fenster-/Kofferraum-Fernsteuerung bleibt ein Tesla-/Tessie-Spezifikum'],
-                ['type' => 'Label', 'caption' => '• Fix Push-/Schutzaktions-Schwall: der DWD vergibt bei "Vorabinformationen vor Unwetter" für dieselbe andauernde Gefahr alle 15-30 Minuten eine NEUE Meldungs-ID statt eines Updates der alten -- das führte zu Schwärmen mehrerer Push-Benachrichtigungen für ein und dasselbe Ereignis und hätte theoretisch auch Schutzaktionen (Jalousie/Markise/Garage) wiederholt auslösen können. Push und Schutzaktionen erkennen fortlaufende Meldungen jetzt am Ereignistyp statt an der wechselnden ID und lösen pro andauerndem Ereignis nur noch einmal aus'],
-                ['type' => 'Label', 'caption' => '• Fix Sprachauswahl: eine über NINA aggregierte Meldung konnte komplett auf Englisch erscheinen, wenn deren deutschsprachiger Eintrag nicht exakt "de-DE"/"de" geschrieben war -- die Erkennung ist jetzt toleranter (Groß-/Kleinschreibung, Leerraum)'],
-                ['type' => 'Label', 'caption' => '• "Kachel (Alle Warnungen)": jede Karte lässt sich jetzt per Klick aufklappen und zeigt dann die volle Handlungsempfehlung, den genauen Gültigkeitszeitraum sowie die komplette amtliche Beschreibung -- unabgekürzt, anders als die Push-Benachrichtigung, die von WFC_PushNotification/VISU_PostNotificationEx hart auf 256 Byte begrenzt wird. Push-Texte nennen außerdem jetzt zuerst die Handlungsempfehlung und die Gültigkeit, erst danach (falls noch Platz ist) die ausführliche Beschreibung -- vorher konnte eine lange Beschreibung das ganze Byte-Budget aufbrauchen. Praxis-Wunsch kronos, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix: schaltet man NINA UND die direkten DWD-Wetterwarnungen bewusst ab (z. B. in Österreich/der Schweiz, andere Quellen decken das ab), legte das bisher die KOMPLETTE Instanz lahm, obwohl eine andere Datenquelle (z. B. GeoSphere Austria) aktiv war -- die "gibt es überhaupt eine aktive Quelle"-Prüfung kannte nur NINA/DWD und wurde bei keiner der seither dazugekommenen acht weiteren Quellen mitgezogen. Praxis-Fund hfichtinger, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• E-Mail-Push: eine Zieladresse kann jetzt mehrere Empfänger enthalten, mit Komma oder Semikolon getrennt -- jede Adresse bekommt einen eigenen Versand, unabhängig vom internen Verhalten des SMTP-Moduls bei mehreren Empfängern. Praxis-Wunsch hfichtinger, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix: die 256-Byte-Kürzung galt bisher für ALLE Push-Kanäle gleichermaßen -- dabei ist das nachweislich nur eine Grenze von WebFront/Kachel-Visualisierung. Telegram, Pushover und vor allem E-Mail (keine bekannte Längenbeschränkung) bekommen jetzt den vollen, unabgekürzten Text. Praxis-Fund hfichtinger, Symcon-Forum: "Mail kann auch mehr"'],
-                ['type' => 'Label', 'caption' => '• NEU: "Datenquellen" nach D-A-CH gruppiert -- "Allgemein" (Meteoalarm, eigene Wetterstation, Abfragetakt) bleibt immer offen, darunter je ein zuklappbares Länder-Panel (🇩🇪/🇦🇹/🇨🇭). Das Panel des über den Symcon-Systemstandort erkannten Heimatlands klappt beim allerersten Öffnen automatisch auf. Praxis-Wunsch Dietmar (angeregt durch hfichtingers Rückmeldung, dass ihn als Österreicher die deutschen Quellen gar nicht interessieren)'],
-                ['type' => 'Label', 'caption' => '• NEU: alle Panels merken sich jetzt selbst, ob sie zuletzt auf- oder zugeklappt waren -- kein "Formular scrollt sich nach jedem Speichern wieder von vorne auf" mehr. Dietmars Wunsch 09.09.2026'],
-                ['type' => 'Label', 'caption' => '• Fix "Kachel (Alle Warnungen)": der DWD reißt bei seinen "Vorabinformationen vor Unwetter" die CAP-Update-Kette faktisch ab und schickt für dieselbe andauernde Gefahr alle 15-30 Minuten eine neue Meldungs-ID -- das erschien bisher als mehrere fast identische, leicht unterschiedlich formulierte Karten für ein und dasselbe Ereignis (Push-Zustellung war seit 1.12.1 bereits korrekt, nur die Anzeige war betroffen). Es wird jetzt nur noch die jeweils aktuellste Fassung gezeigt. Praxis-Fund ruan, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• NEU: "Kachel (Alle Warnungen)" kann jetzt wahlweise alle Karten von vornherein aufgeklappt zeigen (Schalter "AlleWarnungenAufgeklappt" im Panel "Prüfung & Status"), statt jede einzeln anklicken zu müssen -- Ein-/Ausklappen per Klick bleibt trotzdem weiterhin je Karte möglich. Praxis-Wunsch ruan, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix: die Kartenlinks am Ende jeder Kachel (🇩🇪 DWD/🇦🇹 ZAMG/🇨🇭 MeteoSchweiz) zeigten bisher immer alle drei, unabhängig davon, welche Länder-Quellen tatsächlich aktiviert waren. Jetzt erscheint nur noch der Link zu einem Land, dessen direkte Quelle aktiv ist (ist gar keine aktiv, sicherheitshalber weiterhin alle drei). Praxis-Wunsch hfichtinger, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• NEU: die Kartenlinks decken jetzt 17 europäische Länder ab (bisher nur D/A/CH) und richten sich automatisch nach dem Land JEDES aktiven Standorts -- auch mobiler. Reist ein mobiler Standort ins Ausland (z. B. Frankreich, Italien, Spanien, Niederlande, Belgien, Polen, Tschechien, Dänemark, Norwegen, Schweden, Finnland, UK, Irland, Portugal), erscheint dessen amtliche Warnseite automatisch mit, sobald der nächste Abgleich gelaufen ist -- ganz ohne eigenes Zutun. Dietmars Recherchewunsch 09.09.2026'],
-                ['type' => 'Label', 'caption' => '• Härtung: Text aus externen Quellen (Beschreibung/Handlungsempfehlung) wird jetzt von HTML-Resten bereinigt, bevor er in Push/Kachel/Historie landet -- die amtliche NINA-Quelle lieferte beim bundesweiten Warntag 2026 ein rohes "<br/>" mitten im Text, das z. B. in WFC_PushNotification (kein HTML-Rendering) wörtlich sichtbar wurde. Kein WarnHub-Bug (unabhängig über zwei Push-Kanäle bestätigt), aber eine Absicherung gegen ähnliche künftige Quelldaten-Ausreißer. Praxis-Fund kronos/ralf, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix: eine Übungs-/Testmeldung einer Quelle kam bisher wie eine echte Warnung durch -- WarnHub prüfte das CAP-Standardfeld "status" (Actual/Exercise/System/Test/Draft, eigens für genau diese Unterscheidung vorgesehen) bisher an keiner Stelle. Betrifft NINA, die direkte DWD-Anbindung und Meteoalarm; wird jetzt geprüft, alles außer "Actual" (bzw. fehlendem Feld, nicht jede Quelle liefert es) wird verworfen. Praxis-Fund ralf, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• NEU: automatische Verbindungen zeigen jetzt live, ob sie stehen -- eine Statuszeile (✅ / ⚠️ / ℹ️ / ⛔) bei den Push-Zielen, beim Symcon-Systemstandort, bei der eigenen Wetterstation und bei den mobilen Live-Standorten. Sie nennt, WAS verbunden ist (Instanz, Variable, aktueller Wert) und ob es automatisch (🔗) oder von Hand (✏️) gewählt wurde. Das schließt Lücken, die vorher still blieben: ein aktives E-Mail-Ziel ohne Zieladresse, eine gelöschte Push-Instanz oder Live-Variable (WarnHub fiel dann unbemerkt auf feste Koordinaten zurück) und eine Wetterstation, die nur Wind oder nur Regen liefert. Die Wetterstation-Zeile folgt schon beim Auswählen der Auswahl, nicht erst nach dem Speichern'],
-                ['type' => 'Label', 'caption' => '• Verbindungs-Statuszeilen jetzt farbig: eine automatisch übernommene, funktionierende Verbindung (🔗) steht in Grün, ein fehlender Pflichtwert (⛔) in Rot, alles andere in der Standardfarbe -- auf einen Blick erkennbar, was von selbst läuft und wo etwas fehlt'],
-                ['type' => 'Label', 'caption' => '• NEU: Alertswiss (alert.swiss/BABS) als weitere Schweizer Datenquelle -- das Schweizer Pendant zu NINA, kantonale Feuerverbote, Waldbrand, Trockenheit, Fels-/Bergsturz und weitere Zivilschutz-Meldungen, nicht nur Wetter. Koordinatengenau (echte Polygone/Kreise je Meldung, kein Namensabgleich), übernimmt Schweizer Standorte automatisch von Meteoalarm, sobald aktiviert -- analog zur direkten DWD-/GeoSphere-Austria-Anbindung. Anfrage baslerleckerli, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• NEU: Notification Control als sechster Push-Kanal -- erreicht Geräte, die NUR über die IPSView-App registriert sind und bei KEINER WebFront- oder Kachel-Visualisierung-Instanz als Konfigurator eingetragen sind (WFC_PushNotification/VISU_PostNotificationEx erreichen so ein Gerät strukturell nie, unabhängig davon, welche WebFront-Zeile aktiviert ist). Einfach "🔎 Push-Ziele suchen" erneut klicken, eine vorhandene Notification-Control-Instanz wird automatisch gefunden. Praxis-Fund tomfes, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix Notification Control: die Suche fand die Instanz bei manchen Systemen nicht, obwohl sie unter "Kern-Instanzen" vorhanden ist. Sie prüft jetzt zusätzlich über Modulname/Präfix "NC" und verwechselt das Store-Modul "Notification" nicht mehr mit der Kerninstanz. Praxis-Fund tomfes, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Alertswiss: flächige Meldungen (kantonal/regional, z. B. "Gesamter Kanton Solothurn", Waldbrandgefahr, Feuerverbot) gelten jetzt nur noch für Standorte, die IN der Fläche liegen -- vorher bekam ein Standort in Basel auch die Solothurner Kantonsmeldung, nur weil der Kanton in Umkreisnähe beginnt. Örtliche Meldungen (Fels-/Bergsturz, Strassensperrung, Grossveranstaltung) gelten weiterhin im eingestellten Umkreis. Anfrage baslerleckerli, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix Notification Control: ein Gerät, das bei mehreren Konfiguratoren aktiv ist, bekam die Benachrichtigung je Konfigurator einmal (bei einem Anwender 3-4 Kopien je Meldung). Jetzt werden so wenige Konfiguratoren angestoßen, dass jedes Gerät genau einmal erreicht wird; schlägt einer fehl, springt ein anderer ein. Rückmeldung baslerleckerli, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• NEU: Alarmtyp "💨 Rauch/Gefahrstoffe" für Schutzaktionen und Fenster-/Tür-Überwachung (erkennt Meldungen wie "Rauchgase", "Gefahrstoff", "Gasaustritt") sowie der Aktionstyp "Variable auf Wert setzen" -- z. B. die Stufe der Wohnraumlüftung auf 0, sobald Rauchgase gemeldet werden. Vorher landeten solche Meldungen in keiner Kategorie, und ohne angekreuzte Kategorie löst eine Aktion bei JEDER Warnung aus. WarnHub stellt den Wert nach einer Entwarnung nicht zurück. Praxis-Wunsch mike256, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix Meteoalarm: war Meteoalarm zusätzlich zu NINA/DWD aktiv, erschien eine DWD-Warnung für deutsche Standorte zweimal -- einmal deutsch ("Sturmböen") und einmal englisch ("Gale-Force Gusts") aus dem Meteoalarm-Deutschland-Feed, der dieselben DWD-Warnungen nur mit englischem Ereignisnamen weiterreicht. Deutschland übernehmen jetzt NINA bzw. die DWD-Anbindung automatisch von Meteoalarm, wie schon Österreich (GeoSphere Austria) und die Schweiz (Alertswiss). Praxis-Fund hbraun, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix Schweiz: Alertswiss hatte seit 1.16.0 Meteoalarm für Schweizer Standorte ERSETZT -- Alertswiss ist aber Zivilschutz (Feuerverbot, Trockenheit, Sperrungen) und führt keine MeteoSchweiz-Wetterwarnungen. Ein Schweizer Standort mit Alertswiss verlor dadurch die eigene Sturm-/Starkregenwarnung. Alertswiss ergänzt Meteoalarm jetzt nur noch. Praxis-Fund baslerleckerli, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Fix Waldbrandgefahrenindex (DWD): außerhalb der Waldbrandsaison bleibt die Stationsdatei beim letzten Saisonwert stehen -- WarnHub zeigte so einen Monat alten Wert weiter als aktive Waldbrandgefahr. Ein Stationswert älter als 3 Tage gilt jetzt als veraltet. Praxis-Fund baslerleckerli, Symcon-Forum'],
-                ['type' => 'Label', 'caption' => '• Kacheln: Umkreis-Treffer zeigen jetzt die Entfernung ("Home · 8 km entfernt · bis 18:00 Uhr") -- so ist sichtbar, dass eine Warnung für die Nachbargemeinde (z. B. die deutsche DWD-Warnung jenseits der Grenze) gilt und nicht für den Standort selbst. Bei Standort in der Warnfläche (0 km) und beim Namensabgleich ändert sich nichts'],
-                ['type' => 'Label', 'caption' => '• 🪟 NEU: Formular-Aufbau selbst wählen -- im neuen Bereich "Formular: Aufbau" (unten, vor dem Forum-Hinweis) legst du je Fachbereich fest, ob er beim Öffnen aufgeklappt, zugeklappt oder ausgeblendet ist und an welcher Position er steht. Symcon merkt sich das Auf-/Zuklappen nicht selbst, deshalb gilt die Einstellung bei jedem Öffnen. Ausgeblendete Bereiche arbeiten weiter. Verbund-Konvention, Wunsch Dietmar'],
-                ['type' => 'Label', 'caption' => '• Fix Waldbrandgefahrenindex (DWD): ein kurzer Aussetzer von opendata.dwd.de erschien bisher bei jeder Prüfung als Fehler "WBI-Stationsliste nicht erreichbar". Die Stationsliste wird jetzt zwischengespeichert (neu geladen höchstens einmal pro Woche statt alle 10 Minuten), der Tageswert je Station höchstens alle 6 Stunden. Fällt der Abruf aus, gilt der gespeicherte Stand weiter; eine Fehlermeldung kommt nur noch, wenn es noch nie eine Liste gab, und dann höchstens alle 6 Stunden. Rein schweizerische/österreichische Standorte laden gar nichts mehr. Praxis-Fund baslerleckerli, Symcon-Forum'],
-                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckNews($id);'],
-            ],
+            'caption' => sprintf($this->Translate('🆕  New up to version %s'), (string) array_key_last($pending)),
+            'items' => $items,
         ];
     }
 
+    /** Merkt die tatsächlich installierte Bibliotheksversion (ohne Beta-/Build-Zusatz), nicht nur den letzten NEWS_VERSIONS-Schlüssel -- so erscheint das Panel nach jedem späteren Update mit Neuigkeiten sicher wieder. */
     public function AckNews()
     {
-        $this->WriteAttributeString('SeenNews', self::NEWS_VERSION);
+        $lib = @IPS_GetLibrary('{584C68EE-2104-4E89-B0A1-79250761B30D}');
+        $ver = is_array($lib) ? (string) preg_replace('/-.*$/', '', (string) ($lib['Version'] ?? '')) : '';
+        if ($ver === '') {
+            $ver = (string) array_key_last(self::NEWS_VERSIONS);
+        }
+        $this->WriteAttributeString('SeenNews', $ver);
         $this->UpdateFormField('NewsPanel', 'visible', false);
     }
 
@@ -2164,11 +2144,11 @@ class WarnHub extends IPSModule
         }
         return [
             'type' => 'ExpansionPanel', 'name' => 'ForumHintPanel', 'expanded' => false,
-            'caption' => '💬  Feedback im Symcon-Forum',
+            'caption' => $this->Translate('💬  Feedback in the Symcon forum'),
             'items' => [
-                ['type' => 'Label', 'caption' => 'Rückmeldungen, Fehler, fehlende Datenquellen oder Ideen für weitere Schutzaktionen bitte gerne hier im Thread.'],
-                ['type' => 'Button', 'caption' => 'Zum Forums-Thread', 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
-                ['type' => 'Button', 'caption' => 'Verstanden – nicht mehr anzeigen', 'onClick' => 'WHUB_AckForumHint($id);'],
+                ['type' => 'Label', 'caption' => $this->Translate('Feedback, bugs, missing data sources or ideas for further protective actions are very welcome here in the thread.')],
+                ['type' => 'Button', 'caption' => $this->Translate('To the forum thread'), 'onClick' => "echo '" . self::FORUM_THREAD_URL . "';", 'link' => true],
+                ['type' => 'Button', 'caption' => $this->Translate('Got it – don\'t show again'), 'onClick' => 'WHUB_AckForumHint($id);'],
             ],
         ];
     }
@@ -2183,15 +2163,15 @@ class WarnHub extends IPSModule
     {
         return [
             'type' => 'ExpansionPanel', 'expanded' => false,
-            'caption' => '🧡  Über dieses Modul',
+            'caption' => $this->Translate('🧡  About this module'),
             'items' => [
-                ['type' => 'Label', 'caption' => 'Entstanden aus echter Begeisterung für Heimautomatisierung -- und ein paar durchgetippten Abenden. Trotzdem: Software-Hobby hin oder her, das hier ist geistiges Eigentum und echte Arbeit steckt drin.'],
-                ['type' => 'Label', 'caption' => 'Lizenz: PolyForm Noncommercial 1.0.0 -- privat und nicht-kommerziell frei nutzbar, für den gewerblichen Einsatz braucht es eine gesonderte Lizenz vom Rechteinhaber.'],
-                ['type' => 'Button', 'caption' => 'Lizenztext ansehen', 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
-                ['type' => 'Label', 'caption' => 'Gewerbliche Nutzung oder Fragen zur Lizenz? Einfach melden: dietmar@gureth.eu'],
-                ['type' => 'Label', 'caption' => 'Gefällt dir das Modul und du möchtest trotzdem etwas dalassen? Über eine kleine Spende freue ich mich -- völlig freiwillig, keine Gegenleistung nötig.'],
-                ['type' => 'Button', 'caption' => '☕  Spenden via PayPal', 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
-                ['type' => 'Label', 'caption' => 'Gewidmet Sepp Lausch, der zeitgleich an einer eigenen Symcon-Warnmeldungs-Anbindung arbeitet -- der freundschaftliche Wetteifer hat WarnHub sichtlich gutgetan. 😉'],
+                ['type' => 'Label', 'caption' => $this->Translate('Born out of genuine enthusiasm for home automation -- and a few evenings of typing. Still: software hobby or not, this is intellectual property and real work went into it.')],
+                ['type' => 'Label', 'caption' => $this->Translate('Licence: PolyForm Noncommercial 1.0.0 -- free to use privately and non-commercially, commercial use requires a separate licence from the rights holder.')],
+                ['type' => 'Button', 'caption' => $this->Translate('View licence text'), 'onClick' => "echo '" . self::LICENSE_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => $this->Translate('Commercial use or questions about the licence? Just get in touch: dietmar@gureth.eu')],
+                ['type' => 'Label', 'caption' => $this->Translate('You like the module and would still like to leave something? I am happy about a small donation -- completely voluntary, nothing required in return.')],
+                ['type' => 'Button', 'caption' => $this->Translate('☕  Donate via PayPal'), 'onClick' => "echo '" . self::PAYPAL_URL . "';", 'link' => true],
+                ['type' => 'Label', 'caption' => $this->Translate('Dedicated to Sepp Lausch, who is working on his own Symcon warning connection at the same time -- the friendly rivalry has clearly done WarnHub good. 😉')],
             ],
         ];
     }
@@ -2676,10 +2656,10 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Schutzaktionen', 'values', json_encode($rows));
         $this->UpdateFormField('Schutzaktionen', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Treffer für Raffstore/Jalousie/Markise/Garage/Fenster schließen/Heckklappe/Sirene im Objektbaum gefunden.';
+            return $this->Translate('ℹ️ No new matches for external blind/blind/awning/garage/close windows/tailgate/siren found in the object tree.');
         }
         return sprintf(
-            '✅ %d neue Schutzaktion(en) gefunden (Schweregrad "Hoch"/"Extrem" als vorsichtiger Standard) -- WICHTIG: Zielwert je Zeile prüfen (Richtung je Hersteller unterschiedlich, siehe Hilfe-Knopf oben), dann unten „Übernehmen" klicken. Kofferraum/Heckklappe-Treffer ohne automatisch gefundene Zustands-Variable bleiben aus Sicherheitsgründen INAKTIV -- Zustands-Variable von Hand ergänzen und dann aktivieren.',
+            $this->Translate('✅ %d new protective action(s) found (severity "High"/"Extreme" as a cautious default) -- IMPORTANT: check the target value of each row (direction differs by manufacturer, see help button above), then click „Apply" below. Boot/tailgate matches without an automatically found state variable stay INACTIVE for safety reasons -- add the state variable by hand and then activate them.'),
             $added
         );
     }
@@ -2729,10 +2709,10 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Fensterkontakte', 'rowCount', $this->listRowCount(count($rows)));
         if ($added === 0) {
             return count($rows) > 0
-                ? sprintf('ℹ️ Keine neuen Fenster-/Tür-Kontakte gefunden (%d bereits bekannt). Bitte unten „Übernehmen" klicken, falls noch nicht gespeichert.', count($rows))
-                : 'ℹ️ Keine Fenster-/Tür-Kontakte gefunden -- weder über ein klassisches Profil (~Window/~Door) noch über die neue Variablendarstellung mit einer "Geöffnet"/"Offen"-Option.';
+                ? sprintf($this->Translate('ℹ️ No new window/door contacts found (%d already known). Please click „Apply" below if not saved yet.'), count($rows))
+                : $this->Translate('ℹ️ No window/door contacts found -- neither via a classic profile (~Window/~Door) nor via the new variable presentation with an "Opened"/"Open" option.');
         }
-        return sprintf('✅ %d neue(n) Fenster-/Tür-Kontakt(e) gefunden und aktiviert (insgesamt %d) -- bitte unten „Übernehmen" klicken, um zu speichern.', $added, count($rows));
+        return sprintf($this->Translate('✅ %d new window/door contact(s) found and activated (%d in total) -- please click „Apply" below to save.'), $added, count($rows));
     }
 
     /** Einmalige Abfrage, kein Formular-Feld wird automatisch befüllt -- siehe SUITE.md-Muster "nur in die offene Maske, Übernehmen bleibt bewusster letzter Schritt" (hier: gar nicht erst schreiben, nur anzeigen). */
@@ -2740,21 +2720,21 @@ class WarnHub extends IPSModule
     {
         $ort = trim($Ort);
         if ($ort === '') {
-            return 'ℹ️ Bitte zuerst eine PLZ oder einen Ort eingeben.';
+            return $this->Translate('ℹ️ Please enter a postcode or a place first.');
         }
         $url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q=' . rawurlencode($ort);
         $body = $this->httpGet($url, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         if ($body === null) {
-            return '⚠️ Nominatim war nicht erreichbar -- bitte später erneut versuchen oder Koordinaten manuell eintragen.';
+            return $this->Translate('⚠️ Nominatim was not reachable -- please try again later or enter coordinates manually.');
         }
         $json = json_decode($body, true);
         if (!is_array($json) || count($json) === 0) {
-            return '⚠️ Kein Treffer für "' . $ort . '".';
+            return sprintf($this->Translate('⚠️ No match for "%s".'), $ort);
         }
         $lat = round((float) $json[0]['lat'], 5);
         $lon = round((float) $json[0]['lon'], 5);
         $name = (string) ($json[0]['display_name'] ?? $ort);
-        return sprintf('✅ %s → Lat %s / Lon %s -- bitte in die Standorte-Tabelle oben übertragen.', $name, $lat, $lon);
+        return sprintf($this->Translate('✅ %s → lat %s / lon %s -- please transfer into the locations table above.'), $name, $lat, $lon);
     }
 
     // Symcon-Kernmodul "Standort" (Kern-Instanzen > Standort) -- GUID gegen die
@@ -2863,11 +2843,11 @@ class WarnHub extends IPSModule
     {
         $loc = $this->getSystemLocation();
         if ($loc === null) {
-            return '⚠️ Kein konfigurierter Symcon-Standort gefunden (Kern-Instanzen > Standort anlegen/ausfüllen, oder Koordinaten hier manuell eintragen).';
+            return $this->Translate('⚠️ No configured Symcon location found (create/fill in core instances > Location, or enter coordinates here manually).');
         }
         $rows = $this->decodeStandorte();
         $rows[] = [
-            'Name' => 'Mein Standort (aus Symcon)',
+            'Name' => $this->Translate('My location (from Symcon)'),
             'Ort' => '',
             'Lat' => round($loc['lat'], 5),
             'Lon' => round($loc['lon'], 5),
@@ -2877,7 +2857,7 @@ class WarnHub extends IPSModule
         ];
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
-        return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($loc['lat'], 5), round($loc['lon'], 5));
+        return sprintf($this->Translate('✅ Location taken over (lat %s / lon %s) -- please click „Apply" below to save.'), round($loc['lat'], 5), round($loc['lon'], 5));
     }
 
     /**
@@ -2965,7 +2945,7 @@ class WarnHub extends IPSModule
                 continue;
             }
             [$parentID] = explode('|', $key);
-            $name = (string) (@IPS_GetName((int) $parentID) ?: 'Mobiler Standort');
+            $name = (string) (@IPS_GetName((int) $parentID) ?: $this->Translate('Mobile location'));
             $lat = (float) @GetValue($latID);
             $lon = (float) @GetValue($lonID);
             $rows[] = [
@@ -2988,9 +2968,9 @@ class WarnHub extends IPSModule
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
         $this->setStatusLabel('MobileStandorteStatusLabel', $this->mobileStandorteStatusLine($rows));
         if ($added === 0) {
-            return 'ℹ️ Keine neuen Fahrzeug-/Standort-Variablenpaare gefunden (gesucht: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink, OVMS native).';
+            return $this->Translate('ℹ️ No new vehicle/location variable pairs found (searched: Tessie "Fahrzeugposition", Geofency "Current Latitude/Longitude", Stellantis, Smartcar, BMW ConnectedDrive, Hyundai/Kia Bluelink, OVMS native).');
         }
-        return sprintf('✅ %d mobile(r) Standort(e) gefunden und mit den Live-Variablen verknüpft -- bitte Umkreis/Schweregrad prüfen, dann unten „Übernehmen" klicken.', $added);
+        return sprintf($this->Translate('✅ %d mobile location(s) found and linked to the live variables -- please check radius/severity, then click „Apply" below.'), $added);
     }
 
     /**
@@ -3062,7 +3042,7 @@ class WarnHub extends IPSModule
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
             $this->refreshWetterstationStatus($instanceID);
-            return sprintf('✅ Wetterstation "%s" gefunden (Froggit, Windböe/Regenrate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+            return sprintf($this->Translate('✅ Weather station "%s" found (Froggit, wind gust/rain rate present) -- please click „Apply" below to save.'), @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
         $candidatesWu = $this->findInstancesByModuleNameSubstring(self::WEATHERSTATION_WU_GUID, 'weatherstation');
@@ -3075,7 +3055,7 @@ class WarnHub extends IPSModule
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
             $this->refreshWetterstationStatus($instanceID);
-            return sprintf('✅ Wetterstation "%s" gefunden (Sainlogic/ELV, Windgust/rainin vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+            return sprintf($this->Translate('✅ Weather station "%s" found (Sainlogic/ELV, Windgust/rainin present) -- please click „Apply" below to save.'), @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
         $candidatesMhs = $this->findInstancesByModuleNameSubstring(self::METEOBRIDGE_GUID, 'meteobridge');
@@ -3088,7 +3068,7 @@ class WarnHub extends IPSModule
             }
             $this->UpdateFormField('WetterstationInstanceID', 'value', $instanceID);
             $this->refreshWetterstationStatus($instanceID);
-            return sprintf('✅ Wetterstation "%s" gefunden (Meteobridge/Meteohub, Wind_Gust_KmH/Rain_Rate vorhanden) -- bitte unten „Übernehmen" klicken, um zu speichern.', @IPS_GetName($instanceID) ?: ('#' . $instanceID));
+            return sprintf($this->Translate('✅ Weather station "%s" found (Meteobridge/Meteohub, Wind_Gust_KmH/Rain_Rate present) -- please click „Apply" below to save.'), @IPS_GetName($instanceID) ?: ('#' . $instanceID));
         }
 
         // Letzter Rückfall: kein bekanntes Modul gefunden -- systemweit nach
@@ -3111,19 +3091,19 @@ class WarnHub extends IPSModule
         if ($foundWind || $foundRegen) {
             $this->refreshWetterstationStatus(null, $foundWind ? $byProfile['wind'] : null, $foundRegen ? $byProfile['regen'] : null);
             return sprintf(
-                '✅ Kein bekanntes Wetterstations-Modul, aber %s über das Standard-Profil im System gefunden und in die manuelle Auswahl übernommen -- bitte prüfen und unten „Übernehmen" klicken.',
-                $foundWind && $foundRegen ? 'Wind- UND Regen-Variable' : ($foundWind ? 'eine Wind-Variable' : 'eine Regen-Variable')
+                $this->Translate('✅ No known weather station module, but %s found in the system via the standard profile and taken over into the manual selection -- please check and click „Apply" below.'),
+                $foundWind && $foundRegen ? $this->Translate('wind AND rain variable') : ($foundWind ? $this->Translate('a wind variable') : $this->Translate('a rain variable'))
             );
         }
 
         if ($foundButIncomplete !== []) {
             return sprintf(
-                'ℹ️ Wetterstations-Instanz gefunden, aber OHNE die benötigten Windböe-/Regenrate-Felder: %s -- vermutlich misst dieses Gerät nur Temperatur/Luftfeuchte, ohne Wind-/Regensensor. Sind Wind-/Regenwerte trotzdem vorhanden (z. B. an anderer Stelle im Objektbaum), unten die Wind-/Regen-Variable manuell auswählen.',
+                $this->Translate('ℹ️ Weather station instance found, but WITHOUT the required wind gust/rain rate fields: %s -- this device probably only measures temperature/humidity, without a wind/rain sensor. If wind/rain values exist anyway (e.g. elsewhere in the object tree), select the wind/rain variable manually below.'),
                 implode(', ', $foundButIncomplete)
             );
         }
 
-        return 'ℹ️ Keine unterstützte Wetterstations-Instanz gefunden (Froggit/Sainlogic/ELV/Meteobridge) -- bei anderen Fabrikaten (z. B. KNX, Netatmo) unten die Wind-/Regen-Variable manuell auswählen.';
+        return $this->Translate('ℹ️ No supported weather station instance found (Froggit/Sainlogic/ELV/Meteobridge) -- for other makes (e.g. KNX, Netatmo) select the wind/rain variable manually below.');
     }
 
     /**
@@ -3162,16 +3142,16 @@ class WarnHub extends IPSModule
     {
         $loc = json_decode($KartenStandort, true);
         if (!is_array($loc) || !isset($loc['latitude'], $loc['longitude'])) {
-            return '⚠️ Kein Kartenpunkt ausgewählt.';
+            return $this->Translate('⚠️ No map point selected.');
         }
         $lat = (float) $loc['latitude'];
         $lon = (float) $loc['longitude'];
         if ($lat === 0.0 && $lon === 0.0) {
-            return '⚠️ Bitte zuerst einen Punkt auf der Karte auswählen.';
+            return $this->Translate('⚠️ Please select a point on the map first.');
         }
         $rows = $this->decodeStandorte();
         $rows[] = [
-            'Name' => 'Neuer Standort (Karte)',
+            'Name' => $this->Translate('New location (map)'),
             'Ort' => '',
             'Lat' => round($lat, 5),
             'Lon' => round($lon, 5),
@@ -3181,7 +3161,7 @@ class WarnHub extends IPSModule
         ];
         $this->UpdateFormField('Standorte', 'values', json_encode($rows));
         $this->UpdateFormField('Standorte', 'rowCount', $this->listRowCount(count($rows)));
-        return sprintf('✅ Standort übernommen (Lat %s / Lon %s) -- bitte unten „Übernehmen" klicken, um zu speichern.', round($lat, 5), round($lon, 5));
+        return sprintf($this->Translate('✅ Location taken over (lat %s / lon %s) -- please click „Apply" below to save.'), round($lat, 5), round($lon, 5));
     }
 
     // ----------------------------------------------------------------
@@ -3255,7 +3235,7 @@ class WarnHub extends IPSModule
     private function httpGet(string $url, int $timeout = 20, ?string $userAgent = null): ?string
     {
         if (!function_exists('curl_init')) {
-            $this->LogError('httpGet', 'cURL-Erweiterung fehlt -- kann ' . $url . ' nicht abrufen.');
+            $this->LogError('httpGet', sprintf($this->Translate('cURL extension missing -- cannot fetch %s.'), $url));
             return null;
         }
         $ch = curl_init();
@@ -3488,11 +3468,11 @@ class WarnHub extends IPSModule
     private function fetchDwdCap(): array
     {
         if (!function_exists('curl_init')) {
-            $this->LogError('fetchDwdCap', 'cURL-Erweiterung fehlt -- DWD-Direktquelle übersprungen.');
+            $this->LogError('fetchDwdCap', $this->Translate('cURL extension missing -- DWD direct source skipped.'));
             return [];
         }
         if (!class_exists('ZipArchive')) {
-            $this->LogError('fetchDwdCap', 'ZipArchive-Erweiterung fehlt -- DWD-Direktquelle übersprungen (NINA liefert DWD-Warnungen weiterhin, nur ohne dieses Zusatzdetail).');
+            $this->LogError('fetchDwdCap', $this->Translate('ZipArchive extension missing -- DWD direct source skipped (NINA still delivers DWD warnings, only without this extra detail).'));
             return [];
         }
 
@@ -3527,7 +3507,7 @@ class WarnHub extends IPSModule
             }
             $zip->close();
         } else {
-            $this->LogError('fetchDwdCap', 'ZIP konnte nicht geöffnet werden: ' . $zipUrl);
+            $this->LogError('fetchDwdCap', sprintf($this->Translate('Could not open ZIP: %s'), $zipUrl));
         }
         @unlink($tmpFile);
 
@@ -4011,20 +3991,20 @@ class WarnHub extends IPSModule
             // werden sollte.
             if (@IPS_VariableExists($variableID) && abs((float) @GetValue($variableID) - (float) $entry['FiredValue']) < 0.5) {
                 @RequestAction($variableID, $entry['RestoreValue']);
-                $actionName = $actions[$idx]['Name'] ?? ('Ziel-Variable #' . $variableID);
+                $actionName = $actions[$idx]['Name'] ?? sprintf($this->Translate('Target variable #%d'), $variableID);
                 $this->logHistory(
                     'rueckstellung',
                     $actionName,
-                    'Automatische Rückstellung',
-                    $actionName . ' automatisch zurückgestellt -- Wind/Regen war seit ' . (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60) . ' Minuten wieder ruhig.',
+                    $this->Translate('Automatic reset'),
+                    sprintf($this->Translate('%s reset automatically -- wind/rain had been calm again for %d minutes.'), $actionName, (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60)),
                     'Unknown',
                     $entry['Source'] === 'windboe' ? 'sturm' : 'starkregen',
                     'wetterstation'
                 );
                 if ($this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed()) {
                     $this->pushToAllWebfronts(
-                        '🔽 Automatisch zurückgestellt',
-                        sprintf('Wind/Regen war seit %d Minuten wieder ruhig -- Schutzaktion zurückgestellt.', (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60)),
+                        $this->Translate('🔽 Reset automatically'),
+                        sprintf($this->Translate('Wind/rain had been calm again for %d minutes -- protective action reset.'), (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60)),
                         $this->ReadPropertyString('PushSound')
                     );
                 }
@@ -4057,7 +4037,7 @@ class WarnHub extends IPSModule
         }
         $loc = $this->getSystemLocation();
         if ($loc === null) {
-            $this->LogError('fetchWetterstation', 'Kein konfigurierter Symcon-Systemstandort -- Wetterstations-Werte können nicht platziert werden (keine geratene Position).');
+            $this->LogError('fetchWetterstation', $this->Translate('No configured Symcon system location -- weather station values cannot be placed (no guessed position).'));
             return [];
         }
 
@@ -4316,7 +4296,7 @@ class WarnHub extends IPSModule
         $url = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-' . $slug;
         $body = $this->httpGet($url, 20, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         if ($body === null) {
-            $this->LogError('fetchMeteoalarmCountry', 'Meteoalarm-Feed für "' . $slug . '" nicht erreichbar.');
+            $this->LogError('fetchMeteoalarmCountry', sprintf($this->Translate('Meteoalarm feed for "%s" not reachable.'), $slug));
             return [];
         }
         return $this->parseMeteoalarmAtom($body, $slug);
@@ -4329,7 +4309,7 @@ class WarnHub extends IPSModule
         $sxml = simplexml_load_string($body);
         libxml_use_internal_errors($prevUseErrors);
         if ($sxml === false) {
-            $this->LogError('parseMeteoalarmAtom', 'Meteoalarm-Feed für "' . $slug . '" ließ sich nicht als XML parsen.');
+            $this->LogError('parseMeteoalarmAtom', sprintf($this->Translate('Meteoalarm feed for "%s" could not be parsed as XML.'), $slug));
             return [];
         }
         $entries = $sxml->entry ?? [];
@@ -4499,7 +4479,7 @@ class WarnHub extends IPSModule
         $url = self::BAFU_HYDRO_SPARQL_ENDPOINT . '?' . http_build_query(['query' => $query]);
         $body = $this->httpGet($url, 20, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         if ($body === null) {
-            $this->LogError('fetchBafuHydroCh', 'LINDAS-Abfrage nicht erreichbar.');
+            $this->LogError('fetchBafuHydroCh', $this->Translate('LINDAS query not reachable.'));
             return [];
         }
         return $this->parseBafuHydroCsv($body);
@@ -4583,7 +4563,7 @@ class WarnHub extends IPSModule
         ]);
         $body = $this->httpGet($url, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         if ($body === null) {
-            $this->LogError('fetchSedErdbebenCh', 'SED-Abfrage (eida.ethz.ch) nicht erreichbar.');
+            $this->LogError('fetchSedErdbebenCh', $this->Translate('SED query (eida.ethz.ch) not reachable.'));
             return [];
         }
         return $this->parseSedResponse($body);
@@ -4667,12 +4647,12 @@ class WarnHub extends IPSModule
     {
         $body = $this->httpGet(self::ALERTSWISS_URL, 15, 'WarnHub/' . self::DOC_VERSION . ' (Symcon-Modul; https://github.com/DG65/WarnHub)');
         if ($body === null) {
-            $this->LogError('fetchAlertSwissCh', 'Alertswiss-Abfrage (alert.swiss) nicht erreichbar.');
+            $this->LogError('fetchAlertSwissCh', $this->Translate('Alertswiss query (alert.swiss) not reachable.'));
             return [];
         }
         $json = json_decode($body, true);
         if (!is_array($json)) {
-            $this->LogError('fetchAlertSwissCh', 'Alertswiss-Antwort ließ sich nicht als JSON lesen.');
+            $this->LogError('fetchAlertSwissCh', $this->Translate('Alertswiss response could not be read as JSON.'));
             return [];
         }
         return $this->parseAlertSwissJson($json);
@@ -4853,14 +4833,14 @@ class WarnHub extends IPSModule
             return [];
         }
         if (!function_exists('gzdecode')) {
-            $this->LogError('fetchWaldbrandDe', 'zlib-Erweiterung (gzdecode) fehlt -- kann die gezippten WBI-Stationsdateien nicht lesen.');
+            $this->LogError('fetchWaldbrandDe', $this->Translate('zlib extension (gzdecode) missing -- cannot read the zipped WBI station files.'));
             return [];
         }
         $now = time();
         $stations = $this->wbiStations($now);
         if ($stations === null) {
             if ($this->wbiShouldLogFailure($now)) {
-                $this->LogError('fetchWaldbrandDe', 'WBI-Stationsliste (opendata.dwd.de) nicht erreichbar und noch keine zwischengespeicherte Liste vorhanden -- Waldbrandgefahrenindex vorerst ohne Wert, nächster Versuch bei der nächsten Prüfung. Diese Meldung erscheint höchstens alle 6 Stunden.');
+                $this->LogError('fetchWaldbrandDe', $this->Translate('WBI station list (opendata.dwd.de) not reachable and no cached list yet -- forest fire danger index stays without a value for now, next attempt at the next check. This message appears at most every 6 hours.'));
             }
             return [];
         }
@@ -5121,14 +5101,26 @@ class WarnHub extends IPSModule
 
     private function fetchOzonDe(): array
     {
-        $stations = $this->fetchUbaStations();
+        // Wie beim Waldbrandindex (1.19.1): Stationsliste und Messwerte mit
+        // Zwischenspeicher, Aussetzer nicht mehr bei jeder Prüfung als Fehler.
+        // Praxis-Fund baslerleckerli, Symcon-Forum, 04.11.2026: beide
+        // UBA-Meldungen "nicht erreichbar" zusammen 9-mal in 24 Stunden.
+        // Messwerte sind Stundenwerte: frisch geladen höchstens alle 20 Minuten,
+        // bei einem Aussetzer gilt der letzte Stand höchstens 3 Stunden weiter
+        // (älter wäre keine aktuelle Ozonbelastung mehr).
+        $now = time();
+        $stations = $this->cachedSourceData('UbaCache', 'stations', $now, self::UBA_STATION_CACHE_SEC, PHP_INT_MAX, fn () => $this->fetchUbaStations());
         if ($stations === null) {
-            $this->LogError('fetchOzonDe', 'UBA-Stationsliste (luftdaten.umweltbundesamt.de) nicht erreichbar.');
+            if ($this->shouldLogSourceFailure('UbaCache', $now)) {
+                $this->LogError('fetchOzonDe', $this->Translate('UBA station list (luftdaten.umweltbundesamt.de) not reachable and no cached list yet -- ozone stays without a value for now, next attempt at the next check. This message appears at most every 6 hours.'));
+            }
             return [];
         }
-        $readings = $this->fetchUbaOzoneReadings();
+        $readings = $this->cachedSourceData('UbaCache', 'readings', $now, self::UBA_READING_CACHE_SEC, self::UBA_READING_MAX_AGE_SEC, fn () => $this->fetchUbaOzoneReadings());
         if ($readings === null) {
-            $this->LogError('fetchOzonDe', 'UBA-Luftqualitätsdaten (luftdaten.umweltbundesamt.de) nicht erreichbar.');
+            if ($this->shouldLogSourceFailure('UbaCache', $now)) {
+                $this->LogError('fetchOzonDe', $this->Translate('UBA air quality data (luftdaten.umweltbundesamt.de) not reachable for more than 3 hours -- ozone stays without a value until the next successful check. This message appears at most every 6 hours.'));
+            }
             return [];
         }
         $schwelle = $this->ReadPropertyInteger('UbaOzonSchwelle');
@@ -5165,6 +5157,51 @@ class WarnHub extends IPSModule
             ];
         }
         return $out;
+    }
+
+    /**
+     * Allgemeiner Zwischenspeicher für Quelldaten im Attribut $attr, Fach
+     * $slot. Frisch (jünger als $freshSec) -> ohne Abruf aus dem Speicher.
+     * Sonst $fetch(); liefert der etwas Nichtleeres, wird es gespeichert.
+     * Schlägt der Abruf fehl, gilt der gespeicherte Stand weiter, solange er
+     * jünger als $maxStaleSec ist. null = weder frisch noch gespeichert.
+     * Der Abruf ist als Funktion übergeben, damit sich das ohne Netz prüfen
+     * lässt (.tools/test-ozon-de.php).
+     */
+    private function cachedSourceData(string $attr, string $slot, int $now, int $freshSec, int $maxStaleSec, callable $fetch): ?array
+    {
+        $cache = json_decode($this->ReadAttributeString($attr), true);
+        $cache = is_array($cache) ? $cache : [];
+        $entry = $cache[$slot] ?? null;
+        $hasEntry = is_array($entry) && is_array($entry['data'] ?? null) && count($entry['data']) > 0;
+        $age = $hasEntry ? $now - (int) ($entry['ts'] ?? 0) : PHP_INT_MAX;
+        if ($hasEntry && $age < $freshSec) {
+            return $entry['data'];
+        }
+        $fetched = $fetch();
+        if (is_array($fetched) && count($fetched) > 0) {
+            $cache[$slot] = ['ts' => $now, 'data' => $fetched];
+            $this->WriteAttributeString($attr, json_encode($cache));
+            return $fetched;
+        }
+        if ($hasEntry && $age < $maxStaleSec) {
+            $this->SendDebug($attr, sprintf('%s nicht erreichbar -- nutze den gespeicherten Stand vom %s.', $slot, date('d.m.Y H:i', (int) $entry['ts'])), 0);
+            return $entry['data'];
+        }
+        return null;
+    }
+
+    /** true höchstens einmal je 6 Stunden und Speicher -- ein dauerhafter Ausfall soll sichtbar sein, aber nicht bei jeder Prüfung. */
+    private function shouldLogSourceFailure(string $attr, int $now): bool
+    {
+        $cache = json_decode($this->ReadAttributeString($attr), true);
+        $cache = is_array($cache) ? $cache : [];
+        if (($now - (int) ($cache['failLogTs'] ?? 0)) < self::WBI_FAIL_LOG_SEC) {
+            return false;
+        }
+        $cache['failLogTs'] = $now;
+        $this->WriteAttributeString($attr, json_encode($cache));
+        return true;
     }
 
     private function fetchUbaStations(): ?array
@@ -5293,7 +5330,7 @@ class WarnHub extends IPSModule
         }
         $loc = $this->getSystemLocation();
         if ($loc === null) {
-            $this->LogError('fetchHagelschutzCh', 'Kein konfigurierter Symcon-Systemstandort -- Hagelwarnung kann nicht platziert werden (keine geratene Position).');
+            $this->LogError('fetchHagelschutzCh', $this->Translate('No configured Symcon system location -- hail warning cannot be placed (no guessed position).'));
             return [];
         }
         return [[
@@ -5397,7 +5434,7 @@ class WarnHub extends IPSModule
 
         $icon = $result['activeCount'] > 0 ? '⚠️' : '✅';
         $text = sprintf(
-            '%s Prüfung abgeschlossen: %d aktive Warnung(en), %d neu gemeldet, %d hochgestuft, %d Entwarnung(en), %d Schutzaktion(en) ausgelöst.',
+            $this->Translate('%s Check completed: %d active warning(s), %d newly reported, %d escalated, %d all-clear(s), %d protective action(s) triggered.'),
             $icon,
             $result['activeCount'],
             $result['newlyPushed'],
@@ -5406,7 +5443,7 @@ class WarnHub extends IPSModule
             $result['actionsTriggered']
         );
         if ($result['fensterWarnungen'] > 0) {
-            $text .= sprintf(' %d Fenster-/Tür-Warnung(en).', $result['fensterWarnungen']);
+            $text .= sprintf($this->Translate(' %d window/door warning(s).'), $result['fensterWarnungen']);
         }
         return $text;
     }
@@ -5416,17 +5453,17 @@ class WarnHub extends IPSModule
     {
         $active = array_filter($this->decodeWebFronts(), fn ($w) => $w['Aktiv']);
         if (count($active) === 0) {
-            return '⚠️ Kein aktiviertes Push-Ziel -- oben in "🔔 Benachrichtigung" mindestens eine Instanz aktivieren.';
+            return $this->Translate('⚠️ No activated push target -- activate at least one instance above in "🔔 Notification".');
         }
         $sent = $this->pushToAllWebfronts(
             $this->truncateBytes('🧪 WarnHub Test', 32),
-            $this->truncateBytes('Wenn diese Meldung ankommt, funktioniert der Zustellweg. Keine echte Warnung.', 256),
+            $this->truncateBytes($this->Translate('If this message arrives, the delivery route works. Not a real warning.'), 256),
             $this->ReadPropertyString('PushSound')
         );
         if ($sent === 0) {
-            return sprintf('⚠️ Test fehlgeschlagen -- an keines der %d aktivierten Ziele konnte zugestellt werden (siehe Systemprotokoll).', count($active));
+            return sprintf($this->Translate('⚠️ Test failed -- could not deliver to any of the %d activated targets (see system log).'), count($active));
         }
-        return sprintf('✅ Testbenachrichtigung an %d von %d aktivierten Ziel(en) gesendet.', $sent, count($active));
+        return sprintf($this->Translate('✅ Test notification sent to %d of %d activated target(s).'), $sent, count($active));
     }
 
     /**
@@ -5441,22 +5478,22 @@ class WarnHub extends IPSModule
     public function SnoozePush(int $minuten): string
     {
         if ($minuten <= 0) {
-            return '⚠️ Dauer muss größer als 0 sein.';
+            return $this->Translate('⚠️ Duration must be greater than 0.');
         }
         $bis = time() + $minuten * 60;
         $this->WriteAttributeInteger('PushSnoozeUntilTs', $bis);
         @$this->UpdateFormField('SnoozeStatusLabel', 'caption', $this->snoozeStatusLine());
-        return sprintf('🔕 Push-Benachrichtigung pausiert bis %s Uhr.', date('d.m. H:i', $bis));
+        return sprintf($this->Translate('🔕 Push notification paused until %s.'), date('d.m. H:i', $bis));
     }
 
     public function CancelSnooze(): string
     {
         if (!$this->isPushSnoozed()) {
-            return 'ℹ️ Push-Benachrichtigung war nicht pausiert.';
+            return $this->Translate('ℹ️ Push notification was not paused.');
         }
         $this->WriteAttributeInteger('PushSnoozeUntilTs', 0);
         @$this->UpdateFormField('SnoozeStatusLabel', 'caption', $this->snoozeStatusLine());
-        return '🔔 Pause aufgehoben -- Push-Benachrichtigung läuft wieder normal.';
+        return $this->Translate('🔔 Pause lifted -- push notification runs normally again.');
     }
 
     /**
@@ -5473,22 +5510,22 @@ class WarnHub extends IPSModule
     public function TestSchutzaktionen(string $kategorie): string
     {
         if (!isset(self::CATEGORY_FIELDS[$kategorie])) {
-            return '⚠️ Unbekannter Alarmtyp "' . $kategorie . '".';
+            return sprintf($this->Translate('⚠️ Unknown alert type "%s".'), $kategorie);
         }
-        $label = self::CATEGORY_FIELDS[$kategorie][1];
+        $label = $this->Translate(self::CATEGORY_FIELDS[$kategorie][1]);
         $matching = array_values(array_filter(
             $this->decodeSchutzaktionen(),
             fn ($a) => $a['Aktiv'] && (count($a['Kategorien']) === 0 || in_array($kategorie, $a['Kategorien'], true))
         ));
         if (count($matching) === 0) {
-            return sprintf('⚠️ Keine aktive Schutzaktion für "%s" gefunden.', $label);
+            return sprintf($this->Translate('⚠️ No active protective action found for "%s".'), $label);
         }
         $names = [];
         foreach ($matching as $action) {
             $this->fireProtectiveAction($action);
-            $names[] = $action['Name'] !== '' ? $action['Name'] : ('Ziel-Variable #' . $action['ZielVariableID']);
+            $names[] = $action['Name'] !== '' ? $action['Name'] : sprintf($this->Translate('Target variable #%d'), $action['ZielVariableID']);
         }
-        return sprintf('✅ %d Schutzaktion(en) für "%s" ausgelöst: %s', count($matching), $label, implode(', ', $names));
+        return sprintf($this->Translate('✅ %d protective action(s) triggered for "%s": %s'), count($matching), $label, implode(', ', $names));
     }
 
     /**
@@ -5686,8 +5723,8 @@ class WarnHub extends IPSModule
                         $this->logHistory('entwarnung', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
-                                '✅ Entwarnung',
-                                $standort['Name'] . ': ' . $w['headline'] . ' aufgehoben.',
+                                $this->Translate('✅ All-clear'),
+                                sprintf($this->Translate('%s: %s lifted.'), $standort['Name'], $w['headline']),
                                 $pushSound,
                                 $pushZiele
                             );
@@ -5854,8 +5891,8 @@ class WarnHub extends IPSModule
                     $this->logHistory('fensterwarnung', $kontakt['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
                     if ($pushAktiv) {
                         $this->pushToAllWebfronts(
-                            '⚠️ Fenster/Tür offen',
-                            $kontakt['Name'] . ' ist offen -- ' . $w['headline'] . '. Bitte schließen.',
+                            $this->Translate('⚠️ Window/door open'),
+                            sprintf($this->Translate('%s is open -- %s. Please close it.'), $kontakt['Name'], $w['headline']),
                             $pushSound
                         );
                     }
@@ -5953,7 +5990,7 @@ class WarnHub extends IPSModule
     private function buildPushTitle(string $severity, string $event): string
     {
         $icon = self::SEVERITY_ICON[$severity] ?? '⚠️';
-        $label = mb_convert_case(mb_strtolower(trim($event) !== '' ? $event : 'Warnung'), MB_CASE_TITLE);
+        $label = mb_convert_case(mb_strtolower(trim($event) !== '' ? $event : $this->Translate('Warning')), MB_CASE_TITLE);
         return $icon . ' ' . $label;
     }
 
@@ -5986,12 +6023,12 @@ class WarnHub extends IPSModule
             $text .= '. ' . $w['instruction'];
         }
         if ($w['expires'] !== null) {
-            $text .= ' Gültig bis ' . $this->formatDateDe($w['expires']) . ' Uhr.';
+            $text .= ' ' . sprintf($this->Translate('Valid until %s.'), $this->formatDateDe($w['expires']));
         }
         // Meteoalarm-Namensabgleich statt Geometrie -- Transparenz statt
         // vorgetäuschter Präzision (siehe fetchMeteoalarmCountry()).
         if ($nameMatched) {
-            $text .= ' (Namensabgleich, keine Warnfläche verfügbar.)';
+            $text .= ' ' . $this->Translate('(Name match, no warning area available.)');
         }
         if ($w['description'] !== '') {
             $text .= ' ' . $w['description'];
@@ -6020,7 +6057,7 @@ class WarnHub extends IPSModule
         }
         $d = (float) $d;
         $label = $d < 1.0 ? number_format($d, 1, ',', '') : (string) (int) round($d);
-        return ' · ' . $label . ' km entfernt';
+        return ' · ' . sprintf($this->Translate('%s km away'), $label);
     }
 
     // Apples eigene HIG-Systemfarben (macOS Tahoe/"Liquid Glass"-Optik,
@@ -6188,12 +6225,12 @@ CSS;
         if ($count === 0) {
             $icon = '✅';
             $color = self::TILE_COLOR_OK;
-            $title = 'Keine aktive Warnung';
+            $title = $this->Translate('No active warning');
         } else {
             $top = $this->highestActiveSeverity($active);
             $icon = self::SEVERITY_ICON[$top['severity']] ?? '⚠️';
             $color = self::TILE_SEVERITY_COLOR[$top['severity']] ?? self::TILE_SEVERITY_COLOR['Unknown'];
-            $title = $count === 1 ? '1 aktive Warnung' : $count . ' aktive Warnungen';
+            $title = $count === 1 ? $this->Translate('1 active warning') : sprintf($this->Translate('%d active warnings'), $count);
         }
         // Absolute Uhrzeit statt relativer Minutenangabe (Fix Praxis-Fund
         // ralf, Symcon-Forum 05.09.2026): relativeMinutesText() wurde IMMER
@@ -6205,9 +6242,9 @@ CSS;
         // Eine echte "vor X Min." Angabe bräuchte eine client-seitig
         // tickende Uhr (JS in der Kachel); die Übersichts-Kachel zeigt aus
         // demselben Grund schon länger die absolute Uhrzeit statt Relativzeit.
-        $sub = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr geprüft' : 'noch nie geprüft';
+        $sub = $lastTs > 0 ? htmlspecialchars(sprintf($this->Translate('checked at %s'), date('H:i', $lastTs))) : htmlspecialchars($this->Translate('never checked'));
         if ($snoozed) {
-            $sub .= ' · 🔕 Push pausiert';
+            $sub .= ' · ' . htmlspecialchars($this->Translate('🔕 Push paused'));
         }
 
         return $this->tileStyleBlock() . <<<HTML
@@ -6233,14 +6270,14 @@ HTML;
      */
     private function renderKachelUebersicht(array $active, int $lastTs, bool $snoozed = false): string
     {
-        $time = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr' : '--:--';
+        $time = $lastTs > 0 ? htmlspecialchars(sprintf($this->Translate('%s (time)'), date('H:i', $lastTs))) : '--:--';
         if ($snoozed) {
             $time = '🔕 ' . $time;
         }
         $body = '';
 
         if (count($active) === 0) {
-            $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">Keine aktive Warnung</div></div>';
+            $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">' . htmlspecialchars($this->Translate('No active warning')) . '</div></div>';
         } else {
             // Nach Schweregrad sortiert VOR dem Deckeln auf 8 -- sonst könnte
             // bei mehr als 8 aktiven Warnungen ausgerechnet die wichtigste
@@ -6257,12 +6294,12 @@ HTML;
                 $severity = $w['severity'] ?? 'Unknown';
                 $color = self::TILE_SEVERITY_COLOR[$severity] ?? self::TILE_SEVERITY_COLOR['Unknown'];
                 $icon = self::SEVERITY_ICON[$severity] ?? 'ℹ️';
-                $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower(trim($w['event'] ?? '') !== '' ? $w['event'] : 'Warnung'), MB_CASE_TITLE));
+                $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower(trim($w['event'] ?? '') !== '' ? $w['event'] : $this->Translate('Warning')), MB_CASE_TITLE));
                 $sub = htmlspecialchars($w['standort'] ?? '') . $this->tileDistanceSuffix($w);
                 if (!empty($w['expires'])) {
                     $expTs = strtotime((string) $w['expires']);
                     if ($expTs !== false) {
-                        $sub .= ' · bis ' . htmlspecialchars(date('H:i', $expTs)) . ' Uhr';
+                        $sub .= ' · ' . htmlspecialchars(sprintf($this->Translate('until %s'), date('H:i', $expTs)));
                     }
                 }
                 $body .= <<<HTML
@@ -6276,7 +6313,7 @@ HTML;
 HTML;
             }
             if (count($active) > 8) {
-                $body .= '<div class="whub-more">+' . (count($active) - 8) . ' weitere</div>';
+                $body .= '<div class="whub-more">' . htmlspecialchars(sprintf($this->Translate('+%d more'), count($active) - 8)) . '</div>';
             }
         }
 
@@ -6312,19 +6349,23 @@ HTML;
      */
     private function renderKachelAlleWarnungen(array $active, int $lastTs, bool $snoozed = false, bool $defaultExpanded = false): string
     {
-        $time = $lastTs > 0 ? htmlspecialchars(date('H:i', $lastTs)) . ' Uhr' : '--:--';
+        $tAll = htmlspecialchars($this->Translate('WarnHub -- all warnings'));
+        $tHide = htmlspecialchars($this->Translate('Hide'));
+        $tAllHidden = htmlspecialchars($this->Translate('All active warnings hidden'));
+        $tShowAll = htmlspecialchars($this->Translate('Show all again'));
+        $time = $lastTs > 0 ? htmlspecialchars(sprintf($this->Translate('%s (time)'), date('H:i', $lastTs))) : '--:--';
         if ($snoozed) {
             $time = '🔕 ' . $time;
         }
         $listId = 'whuballwarn' . substr(md5((string) $this->InstanceID), 0, 10);
 
         if (count($active) === 0) {
-            $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">Keine aktive Warnung</div></div>';
+            $body = '<div class="whub-empty"><div class="whub-empty-icon">✅</div><div class="whub-empty-text">' . htmlspecialchars($this->Translate('No active warning')) . '</div></div>';
             return $this->tileStyleBlock() . <<<HTML
 <div class="whub-overview">
   <div class="whub-header">
     <span class="whub-header-icon">🛡️</span>
-    <span class="whub-header-title">WarnHub -- Alle Warnungen</span>
+    <span class="whub-header-title">{$tAll}</span>
     <span class="whub-header-time">{$time}</span>
   </div>
   {$body}
@@ -6345,14 +6386,14 @@ HTML;
             $severity = $w['severity'] ?? 'Unknown';
             $color = self::TILE_SEVERITY_COLOR[$severity] ?? self::TILE_SEVERITY_COLOR['Unknown'];
             $icon = self::SEVERITY_ICON[$severity] ?? 'ℹ️';
-            $eventRaw = trim($w['event'] ?? '') !== '' ? $w['event'] : 'Warnung';
+            $eventRaw = trim($w['event'] ?? '') !== '' ? $w['event'] : $this->Translate('Warning');
             $eventLabel = htmlspecialchars(mb_convert_case(mb_strtolower($eventRaw), MB_CASE_TITLE));
             $eventTypes[$eventRaw] = true;
             $sub = htmlspecialchars($w['standort'] ?? '') . $this->tileDistanceSuffix($w);
             if (!empty($w['expires'])) {
                 $expTs = strtotime((string) $w['expires']);
                 if ($expTs !== false) {
-                    $sub .= ' · bis ' . htmlspecialchars(date('H:i', $expTs)) . ' Uhr';
+                    $sub .= ' · ' . htmlspecialchars(sprintf($this->Translate('until %s'), date('H:i', $expTs)));
                 }
             }
             // Schlüssel wie SeenWarnings/$pairKey (identifier|standort) --
@@ -6376,13 +6417,13 @@ HTML;
             if (!empty($w['effective'])) {
                 $effTs = strtotime((string) $w['effective']);
                 if ($effTs !== false) {
-                    $validity .= 'Beginn: ' . htmlspecialchars(date('d.m. H:i', $effTs)) . ' Uhr. ';
+                    $validity .= htmlspecialchars(sprintf($this->Translate('Start: %s.'), date('d.m. H:i', $effTs))) . ' ';
                 }
             }
             if (!empty($w['expires'])) {
                 $expTs = strtotime((string) $w['expires']);
                 if ($expTs !== false) {
-                    $validity .= 'Gültig bis: ' . htmlspecialchars(date('d.m. H:i', $expTs)) . ' Uhr.';
+                    $validity .= htmlspecialchars(sprintf($this->Translate('Valid until: %s.'), date('d.m. H:i', $expTs)));
                 }
             }
             if ($validity !== '') {
@@ -6410,7 +6451,7 @@ HTML;
     <div class="whub-card-sub">{$sub}</div>
     {$detailBlock}
   </div>
-  <div class="whub-card-dismiss" title="Ausblenden">✕</div>
+  <div class="whub-card-dismiss" title="{$tHide}">✕</div>
 </div>
 HTML;
         }
@@ -6428,16 +6469,16 @@ HTML;
 <div class="whub-overview">
   <div class="whub-header">
     <span class="whub-header-icon">🛡️</span>
-    <span class="whub-header-title">WarnHub -- Alle Warnungen</span>
+    <span class="whub-header-title">{$tAll}</span>
     <span class="whub-header-time">{$time}</span>
   </div>
   <div id="{$listId}filterbar" class="whub-map-legend" style="padding:0 0 10px 0;">{$filterChips}</div>
   <div id="{$listId}" class="whub-allwarn-list">{$cards}</div>
   <div id="{$listId}empty" class="whub-empty" hidden style="margin-top:8px;">
     <div class="whub-empty-icon">🙈</div>
-    <div class="whub-empty-text">Alle aktiven Warnungen ausgeblendet</div>
+    <div class="whub-empty-text">{$tAllHidden}</div>
   </div>
-  <div id="{$listId}reset" class="whub-allwarn-reset">Alle wieder einblenden</div>
+  <div id="{$listId}reset" class="whub-allwarn-reset">{$tShowAll}</div>
   {$this->officialMapLinksHtml()}
   <script>
   (function(){
@@ -6610,13 +6651,15 @@ HTML;
      */
     private function renderKachelKarte(array $active, bool $snoozed = false): string
     {
+        $tNoLoc = htmlspecialchars($this->Translate('No active location configured (see panel "Locations")'));
+        $tAllJs = json_encode($this->Translate('🌍 All'), JSON_UNESCAPED_UNICODE);
         $standorte = array_values(array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== ''));
         if ($standorte === []) {
             return $this->tileStyleBlock() . <<<HTML
 <div class="whub-status">
   <div class="whub-empty">
     <div class="whub-empty-icon">🗺️</div>
-    <div class="whub-empty-text">Kein aktiver Standort konfiguriert (siehe Panel "Standorte")</div>
+    <div class="whub-empty-text">{$tNoLoc}</div>
   </div>
 </div>
 HTML;
@@ -6707,7 +6750,7 @@ HTML;
 
     var allPill = document.createElement('div');
     allPill.className = 'whub-map-pill';
-    allPill.textContent = '🌍 Alle';
+    allPill.textContent = {$tAllJs};
     allPill.addEventListener('click', focusAll);
     legendEl.appendChild(allPill);
     pillEls['__all__'] = allPill;
@@ -6750,11 +6793,12 @@ HTML;
     private function renderKachelZamg(): string
     {
         $url = htmlspecialchars(self::ZAMG_MAP_URL);
+        $tZamg = htmlspecialchars($this->Translate('ZAMG warning map Austria'));
         $hoehePx = $this->ReadPropertyInteger('ZamgKachelHoehePx');
         $heightCss = $hoehePx > 0 ? $hoehePx . 'px' : '100%';
         return $this->tileStyleBlock() . <<<HTML
 <div class="whub-status" style="padding:0;overflow:hidden;height:{$heightCss};min-height:200px;">
-  <iframe src="{$url}" style="width:100%;height:100%;min-height:200px;border:0;border-radius:22px;" loading="lazy" title="ZAMG-Warnkarte Österreich"></iframe>
+  <iframe src="{$url}" style="width:100%;height:100%;min-height:200px;border:0;border-radius:22px;" loading="lazy" title="{$tZamg}"></iframe>
 </div>
 HTML;
     }
@@ -6799,7 +6843,7 @@ HTML;
             // für die Zustellung selbst.
             if ($w['Typ'] === 'kachel') {
                 if (!function_exists('VISU_PostNotificationEx')) {
-                    $this->LogError('pushToAllWebfronts', 'VISU_PostNotificationEx ist nicht verfügbar (keine Kachel-Visualisierung installiert).');
+                    $this->LogError('pushToAllWebfronts', $this->Translate('VISU_PostNotificationEx is not available (no tile visualization installed).'));
                     continue;
                 }
                 $ok = @VISU_PostNotificationEx($w['InstanceID'], $this->truncateBytes($title, 32), $this->truncateBytes($text, 256), 'Alert', $sound, 0);
@@ -6808,7 +6852,7 @@ HTML;
                 // kennt keinen separaten Titel -- Titel+Text deshalb zu einer
                 // Nachricht zusammengefasst.
                 if (!function_exists('TB_SendMessage')) {
-                    $this->LogError('pushToAllWebfronts', 'TB_SendMessage ist nicht verfügbar (kein Telegram-Bot-Modul installiert).');
+                    $this->LogError('pushToAllWebfronts', $this->Translate('TB_SendMessage is not available (no Telegram bot module installed).'));
                     continue;
                 }
                 $ok = @TB_SendMessage($w['InstanceID'], $title . "\n" . $text);
@@ -6818,7 +6862,7 @@ HTML;
                 // Extreme werden als "hohe Priorität" (1) markiert, alles
                 // andere als normal (0).
                 if (!function_exists('TUPO_SendMessage')) {
-                    $this->LogError('pushToAllWebfronts', 'TUPO_SendMessage ist nicht verfügbar (kein Pushover-Modul installiert).');
+                    $this->LogError('pushToAllWebfronts', $this->Translate('TUPO_SendMessage is not available (no Pushover module installed).'));
                     continue;
                 }
                 $priority = in_array($severity, ['Severe', 'Extreme'], true) ? 1 : 0;
@@ -6831,12 +6875,12 @@ HTML;
                 // escaped (falls zufällig ein "<"/">" im Warntext vorkommt)
                 // und dann mit nl2br() umgebrochen, statt roh durchzureichen.
                 if (!function_exists('SMTP_SendMailEx')) {
-                    $this->LogError('pushToAllWebfronts', 'SMTP_SendMailEx ist nicht verfügbar (kein SMTP-Modul installiert).');
+                    $this->LogError('pushToAllWebfronts', $this->Translate('SMTP_SendMailEx is not available (no SMTP module installed).'));
                     continue;
                 }
                 $empfaenger = trim($w['Zieladresse'] ?? '');
                 if ($empfaenger === '') {
-                    $this->LogError('pushToAllWebfronts', 'E-Mail-Ziel "' . $w['Name'] . '" hat keine Zieladresse -- übersprungen.');
+                    $this->LogError('pushToAllWebfronts', sprintf($this->Translate('E-mail target "%s" has no target address -- skipped.'), $w['Name']));
                     continue;
                 }
                 $body = '<html><body>' . nl2br(htmlspecialchars($text)) . '</body></html>';
@@ -6854,7 +6898,7 @@ HTML;
                     if (@SMTP_SendMailEx($w['InstanceID'], $adresse, $title, $body)) {
                         $ok = true;
                     } else {
-                        $this->LogError('pushToAllWebfronts', 'E-Mail an "' . $adresse . '" (Ziel "' . $w['Name'] . '") fehlgeschlagen.');
+                        $this->LogError('pushToAllWebfronts', sprintf($this->Translate('E-mail to "%s" (target "%s") failed.'), $adresse, $w['Name']));
                     }
                 }
             } elseif ($w['Typ'] === 'notification') {
@@ -6885,12 +6929,12 @@ HTML;
                 // "funktioniert", sobald mindestens EIN Konfigurator erreicht
                 // wurde (1 Zeile = 1 Ziel in "X von Y gesendet").
                 if (!function_exists('NC_GetDevices') || !function_exists('NC_PushNotification')) {
-                    $this->LogError('pushToAllWebfronts', 'NC_GetDevices/NC_PushNotification sind nicht verfügbar (keine Notification-Control-Instanz installiert).');
+                    $this->LogError('pushToAllWebfronts', $this->Translate('NC_GetDevices/NC_PushNotification are not available (no Notification Control instance installed).'));
                     continue;
                 }
                 $devices = @NC_GetDevices($w['InstanceID']);
                 if (!is_array($devices)) {
-                    $this->LogError('pushToAllWebfronts', 'NC_GetDevices lieferte keine Geräteliste für Instanz ' . $w['InstanceID'] . '.');
+                    $this->LogError('pushToAllWebfronts', sprintf($this->Translate('NC_GetDevices returned no device list for instance %s.'), $w['InstanceID']));
                     continue;
                 }
                 $aktiveJeGeraet = [];
@@ -6934,12 +6978,12 @@ HTML;
                         $ok = true;
                         $offeneGeraete = array_values(array_filter($offeneGeraete, fn ($deviceIndex) => !in_array($beste, $aktiveJeGeraet[$deviceIndex], true)));
                     } else {
-                        $this->LogError('pushToAllWebfronts', 'NC_PushNotification an Konfigurator ' . $beste . ' (Notification-Control-Instanz ' . $w['InstanceID'] . ') fehlgeschlagen.');
+                        $this->LogError('pushToAllWebfronts', sprintf($this->Translate('NC_PushNotification to configurator %s (Notification Control instance %s) failed.'), $beste, $w['InstanceID']));
                     }
                 }
             } else {
                 if (!function_exists('WFC_PushNotification')) {
-                    $this->LogError('pushToAllWebfronts', 'WFC_PushNotification ist nicht verfügbar (kein WebFront-Modul installiert).');
+                    $this->LogError('pushToAllWebfronts', $this->Translate('WFC_PushNotification is not available (no WebFront module installed).'));
                     continue;
                 }
                 // Letzter Parameter ist laut offizieller Doku eine TargetID zum
@@ -6954,7 +6998,7 @@ HTML;
             if ($ok) {
                 $sent++;
             } else {
-                $this->LogError('pushToAllWebfronts', 'Push an Instanz ' . $w['InstanceID'] . ' (' . $w['Typ'] . ') fehlgeschlagen.');
+                $this->LogError('pushToAllWebfronts', sprintf($this->Translate('Push to instance %s (%s) failed.'), $w['InstanceID'], $w['Typ']));
             }
         }
         return $sent;
@@ -6971,20 +7015,20 @@ HTML;
                 if ($action['ZielSkriptID'] > 0 && IPS_ScriptExists($action['ZielSkriptID'])) {
                     IPS_RunScriptEx($action['ZielSkriptID'], ['WARNHUB_ACTION' => $action['Name']]);
                 } else {
-                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '": Ziel-Skript fehlt/existiert nicht.');
+                    $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s": target script missing/does not exist.'), $action['Name']));
                 }
                 return;
             }
 
             if ($action['ZielVariableID'] <= 0 || !IPS_VariableExists($action['ZielVariableID'])) {
-                $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '": Ziel-Variable fehlt/existiert nicht.');
+                $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s": target variable missing/does not exist.'), $action['Name']));
                 return;
             }
 
             if ($action['Typ'] === 'sirene') {
                 $ok = @RequestAction($action['ZielVariableID'], true);
                 if (!$ok) {
-                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Sirene): RequestAction fehlgeschlagen.');
+                    $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s" (siren): RequestAction failed.'), $action['Name']));
                     return;
                 }
                 if ($action['AutoOffSekunden'] > 0) {
@@ -7003,7 +7047,7 @@ HTML;
             if ($action['Typ'] === 'fenster') {
                 $ok = @RequestAction($action['ZielVariableID'], true);
                 if (!$ok) {
-                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Fenster schließen): RequestAction fehlgeschlagen.');
+                    $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s" (close windows): RequestAction failed.'), $action['Name']));
                 }
                 return;
             }
@@ -7018,7 +7062,7 @@ HTML;
             // Sicherheitsgründen GAR NICHT ausgelöst, statt zu raten.
             if ($action['Typ'] === 'kofferraum') {
                 if ($action['ZustandsVariableID'] <= 0 || !IPS_VariableExists($action['ZustandsVariableID'])) {
-                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Kofferraum/Heckklappe): keine gültige Zustands-Variable konfiguriert -- kein automatisches Auslösen, da der Umschalt-Befehl sonst öffnen statt schließen könnte.');
+                    $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s" (boot/tailgate): no valid state variable configured -- no automatic triggering, as the toggle command might otherwise open instead of close.'), $action['Name']));
                     return;
                 }
                 $zustand = (string) GetValue($action['ZustandsVariableID']);
@@ -7027,7 +7071,7 @@ HTML;
                 }
                 $ok = @RequestAction($action['ZielVariableID'], true);
                 if (!$ok) {
-                    $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" (Kofferraum/Heckklappe): RequestAction fehlgeschlagen.');
+                    $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s" (boot/tailgate): RequestAction failed.'), $action['Name']));
                 }
                 return;
             }
@@ -7035,10 +7079,10 @@ HTML;
             // raffstore / markise / garage / wert: Zielwert exakt wie vom Nutzer angegeben setzen
             $ok = @RequestAction($action['ZielVariableID'], $action['ZielWert']);
             if (!$ok) {
-                $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '": RequestAction fehlgeschlagen.');
+                $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s": RequestAction failed.'), $action['Name']));
             }
         } catch (\Throwable $e) {
-            $this->LogError('fireProtectiveAction', 'Schutzaktion "' . $action['Name'] . '" warf einen Fehler: ' . $e->getMessage());
+            $this->LogError('fireProtectiveAction', sprintf($this->Translate('Protective action "%s" threw an error: %s'), $action['Name'], $e->getMessage()));
         }
     }
 
@@ -7059,7 +7103,7 @@ HTML;
             if ($p['offAtTs'] <= $now) {
                 $ok = @RequestAction($p['variableID'], false);
                 if (!$ok) {
-                    $this->LogError('CheckSirenOff', 'Auto-Aus für Variable ' . $p['variableID'] . ' fehlgeschlagen.');
+                    $this->LogError('CheckSirenOff', sprintf($this->Translate('Auto-off for variable %s failed.'), $p['variableID']));
                 }
             } else {
                 $remaining[] = $p;

@@ -2,6 +2,41 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.20.0 (2026-11-04)
+
+- Neu: **WarnHub spricht Englisch.** Formular, Rückmeldungen der Knöpfe,
+  Statuszeilen, Push-Texte, Kacheln, Variablennamen und Log-Meldungen
+  folgen der Sprache des Symcon-Systems. Nach Verbund-Regel (SUITE.md
+  Punkt 9, wie RoboHub 0.35): Quelltexte im Code englisch über
+  `$this->Translate()`, die deutsche Fassung in `WarnHub/locale.json`
+  (rund 400 Einträge) -- deutsche Systeme sehen dieselben Texte wie bisher.
+  Die **Warnungen selbst bleiben in der Sprache ihrer Quelle** (NINA, DWD
+  und die übrigen deutschen/Schweizer Behörden deutsch, Meteoalarm
+  englisch), ebenso WarnHubs Texte zu Pegel, Strahlung, Waldbrand, Ozon,
+  Erdbeben und eigener Wetterstation: an Ereignis und Überschrift hängt die
+  Kategorie-Erkennung der Schutzaktionen. Kennungen (Idents, Property-Namen,
+  Kategorie-Schlüssel, Suchwörter) bleiben deutsch. Neu `README.en.md`.
+  Prüfstand `.tools/test-locale.php`: jeder `Translate()`-Text hat eine
+  deutsche Fassung, Platzhalter stimmen überein, Formular/Kacheln/
+  Statuszeilen/Push im englischen Modus ohne deutsche Reste, auf Deutsch
+  unverändert. Alle übrigen Prüfstände übersetzen über dieselbe Tabelle
+  (`WHUB_SPRACHE=en` für Englisch).
+- "Neu"-Panel nach der Verbund-Konvention `NEWS_VERSIONS` (Referenz
+  NRGDashboard): zeigt genau die Versionen seit der zuletzt bestätigten,
+  gruppiert nach Version, und merkt beim Bestätigen die installierte
+  Bibliotheksversion. Die bisherige, seit der Erstversion gewachsene Liste
+  mit 80 Zeilen entfällt (Geschichte im CHANGELOG); Einträge ab 1.18.0.
+- Fix Ozon (Umweltbundesamt): wie beim Waldbrandindex in 1.19.1 lud WarnHub
+  Stationsliste und Messwerte bei jeder Prüfung neu und meldete jeden
+  Aussetzer als Fehler (Praxis-Fund baslerleckerli, Symcon-Forum,
+  04.11.2026: beide UBA-Meldungen zusammen 9-mal in 24 Stunden). Jetzt
+  allgemeiner Zwischenspeicher `cachedSourceData()` (Attribut `UbaCache`):
+  Stationsliste höchstens wöchentlich neu, Messwerte höchstens alle
+  20 Minuten; bei einem Aussetzer gilt der Stand weiter (Stationsliste
+  unbegrenzt, Messwerte höchstens 3 Stunden, älter wäre keine aktuelle
+  Belastung mehr). Fehlermeldung höchstens alle 6 Stunden. Prüfungen in
+  `.tools/test-ozon-de.php` (+13).
+
 ## 1.19.1 (2026-11-02)
 
 - Fix Waldbrandgefahrenindex (DWD): ein zeitweiser Aussetzer von
