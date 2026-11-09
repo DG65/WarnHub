@@ -269,6 +269,27 @@ $GLOBALS['whub_test_variablePresentations'][202] = presentationWithOptions([
 ]);
 check('neue Vorlage mit "Offen"/"Zu" statt "Geöffnet"/"Geschlossen": true bedeutet offen', callPrivate($hub, 'contactOpenRawValue', [202]) === true);
 
+// 1.20.1: Optionstexte stammen vom Fremdmodul in der Sprache des Systems -- auf
+// einem englischen Symcon "Closed"/"Opened" bzw. "Open". Bis 1.20.0 nur deutsch erkannt.
+$GLOBALS['whub_test_variableExists'][203] = true;
+$GLOBALS['whub_test_variablePresentations'][203] = presentationWithOptions([
+    ['Caption' => 'Closed', 'Value' => true],
+    ['Caption' => 'Opened', 'Value' => false],
+]);
+check('englische Vorlage "Closed"/"Opened": false bedeutet offen', callPrivate($hub, 'contactOpenRawValue', [203]) === false);
+$GLOBALS['whub_test_variableExists'][204] = true;
+$GLOBALS['whub_test_variablePresentations'][204] = presentationWithOptions([
+    ['Caption' => 'Open', 'Value' => true],
+    ['Caption' => 'Closed', 'Value' => false],
+]);
+check('englische Vorlage "Open"/"Closed": true bedeutet offen', callPrivate($hub, 'contactOpenRawValue', [204]) === true);
+$GLOBALS['whub_test_variableExists'][205] = true;
+$GLOBALS['whub_test_variablePresentations'][205] = presentationWithOptions([
+    ['Caption' => 'Geschlossen', 'Value' => false],
+    ['Caption' => 'Gekippt', 'Value' => true],
+]);
+check('nur "Geschlossen" erkennbar: Gegenrichtung -> true bedeutet offen', callPrivate($hub, 'contactOpenRawValue', [205]) === true);
+
 echo "\n== contactOpenRawValue(): kein erkennbarer Fenster-/Tür-Kontakt ==\n";
 $GLOBALS['whub_test_variableExists'][301] = true; // weder Profil noch Vorlage
 check('ohne Profil/Vorlage -> null (nicht bestimmbar, nicht geraten)', callPrivate($hub, 'contactOpenRawValue', [301]) === null);

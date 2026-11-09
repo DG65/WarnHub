@@ -207,15 +207,74 @@ foreach (['CATEGORY_FIELDS' => 1, 'FORM_PANELS' => null, 'NEWS_VERSIONS' => 'lin
         }
     }
 }
+foreach (['BAFU_HYDRO_LEVEL_LABEL', 'WBI_LEVEL_LABEL', 'UBA_LQI_LABEL', 'GEOSPHERE_AT_WARNTYPE_EVENT'] as $name) {
+    array_push($konst, ...array_values($ref->getConstant($name)));
+}
 foreach ($ref->getConstant('BFS_ODL_REFERENZWERTE') as $r) {
     if ($r['label'] !== '') {
         $konst[] = $r['label'];
     }
 }
 $fehltKonst = array_values(array_filter($konst, fn ($t) => !isset($de[$t])));
-check('jeder Text aus CATEGORY_FIELDS/FORM_PANELS/NEWS_VERSIONS/BFS_ODL_REFERENZWERTE hat eine deutsche Fassung (' . count($konst) . ')', $fehltKonst === []);
+check('jeder Text aus den Anzeige-Konstanten (Kategorien, Bereiche, Neu, Stufen, GeoSphere-Typen) hat eine deutsche Fassung (' . count($konst) . ')', $fehltKonst === []);
 if ($fehltKonst !== []) {
     echo '      fehlt: ' . implode(' | ', array_map(fn ($t) => mb_substr($t, 0, 60), array_slice($fehltKonst, 0, 8))) . "\n";
+}
+
+// Kein deutscher Text mehr im Code (SUITE.md Punkt 9). Erlaubt sind nur
+// Kennungen/Schlüssel, Adressen, Suchwörter für fremde Namen und Texte, und
+// englische Quelltexte, die deutsche Originalnamen in Anführungszeichen zitieren.
+$suchwoerter = [];
+foreach (['CATEGORY_KEYWORDS', 'DISCOVERY_KEYWORDS'] as $name) {
+    foreach ($ref->getConstant($name) as $liste) {
+        array_push($suchwoerter, ...$liste);
+    }
+}
+foreach ($ref->getConstant('DISCOVERY_LATLON_PAIRS') as $paar) {
+    array_push($suchwoerter, $paar['prefix'], $paar['lat'], $paar['lon']);
+}
+// Bewusste Ausnahmen, jeweils Logik an FREMDEN Texten, nicht an eigener Anzeige:
+//   "Windböe"  -- Name der Wetterstations-Variable, nach dem resolveWetterstationSource() sucht
+//   "geöffnet" -- Optionstext fremder Fensterkontakte (contactOpenRawValue(), dort auch englisch)
+$ausnahmen = ['Windböe', 'geöffnet'];
+$codeText = (string) file_get_contents(__DIR__ . '/../WarnHub/module.php');
+$zeilen = explode("\n", $codeText);
+$deutschImCode = [];
+$tok = token_get_all($codeText);
+for ($i = 0; $i < count($tok); $i++) {
+    if (!is_array($tok[$i]) || $tok[$i][0] !== T_CONSTANT_ENCAPSED_STRING) {
+        continue;
+    }
+    $j = $i + 1;
+    while (is_array($tok[$j] ?? null) && $tok[$j][0] === T_WHITESPACE) {
+        $j++;
+    }
+    if (is_array($tok[$j] ?? null) && $tok[$j][0] === T_DOUBLE_ARROW) {
+        continue; // Array-Schlüssel = Kennung
+    }
+    if (str_contains($zeilen[$tok[$i][2] - 1], 'SendDebug')) {
+        continue; // Debug-Ausgaben bleiben deutsch (Verbund-Regel)
+    }
+    $roh = $tok[$i][1];
+    $text = $roh[0] === "'" ? str_replace(["\\'", '\\\\'], ["'", '\\'], substr($roh, 1, -1)) : stripcslashes(substr($roh, 1, -1));
+    if (!preg_match('/[äöüÄÖÜß]|\b(der|die|das|und|nicht|bei|mit|für|wird|ist|keine?|bitte|oder|auf|aus|nach|noch|nur|auch|Warnung|Standort|Prüfung|Uhr|Stufe|Gefahr|Messstelle|Pegel|Wetterstation)\b/u', $text)) {
+        continue;
+    }
+    if (str_starts_with($text, 'http') || in_array($text, $suchwoerter, true) || in_array($text, $ausnahmen, true) || isset($de[$text])) {
+        continue; // isset($de[...]) = englischer Quelltext mit zitiertem deutschem Originalnamen
+    }
+    $deutschImCode[] = $tok[$i][2] . ': ' . mb_substr($text, 0, 70);
+}
+check('kein deutscher Text mehr im Code (außer Kennungen, Suchwörtern, Adressen, Debug)', $deutschImCode === []);
+foreach (array_slice($deutschImCode, 0, 10) as $r) {
+    echo '      Rest: ' . $r . "\n";
+}
+// Ungenutzte Einträge in locale.json (aus Umbauten übrig geblieben)
+$benutzt = array_flip(array_merge($literale, $konst));
+$ungenutzt = array_values(array_filter(array_keys($de), fn ($k) => !isset($benutzt[$k])));
+check('locale.json enthält keine ungenutzten Einträge (' . count($de) . ' Einträge)', $ungenutzt === []);
+foreach (array_slice($ungenutzt, 0, 8) as $r) {
+    echo '      ungenutzt: ' . mb_substr($r, 0, 80) . "\n";
 }
 
 $platzhalter = fn (string $t) => preg_match_all('/%(?:\d+\$)?[-+ 0]*\d*(?:\.\d+)?[sdfu]/', str_replace('%%', '', $t), $m) ? $m[0] : [];

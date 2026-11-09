@@ -227,7 +227,7 @@ for ($level = 0; $level <= 4; $level++) {
 }
 check('Stufe 4 (sehr schlecht) -> Extreme', $severityMap[4] === 'Extreme');
 check('Stufe 0 (sehr gut) -> Minor', $severityMap[0] === 'Minor');
-check('Label 3 lautet "schlecht" (amtliche UBA-Bezeichnung)', $labelMap[3] === 'schlecht');
+check('Label 3 lautet auf Deutsch "schlecht" (amtliche UBA-Bezeichnung, über locale.json)', $hub->Translate($labelMap[3]) === 'schlecht');
 
 
 echo "\n== Zwischenspeicher (Praxis-Fund baslerleckerli 04.11.2026: UBA-Aussetzer als wiederkehrender Fehler) ==\n";

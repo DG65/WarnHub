@@ -123,16 +123,18 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.20.0';
+    private const DOC_VERSION = '1.20.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
 
     // Stichwörter für die automatische Schutzaktionen-Suche im Objektbaum
     // (Instanz-/Variablenname enthält eins der Wörter -> Aktionstyp-Vorschlag).
+    // Fremde Variablennamen kommen in der Sprache des Systems, auf dem sie
+    // angelegt wurden -- deshalb seit 1.20.1 auch englische Namen.
     private const DISCOVERY_KEYWORDS = [
-        'raffstore' => ['raffstore', 'jalousie'],
-        'markise' => ['markise', 'sonnenschutz'],
+        'raffstore' => ['raffstore', 'jalousie', 'venetian blind', 'external blind'],
+        'markise' => ['markise', 'sonnenschutz', 'awning'],
         'garage' => ['garage', 'garagentor'],
         // "fenster schließen", nicht nur "fenster" -- sonst würden auch
         // reine Fenster-OFFEN-Sensoren (keine Aktion, ohnehin durch
@@ -141,14 +143,14 @@ class WarnHub extends IPSModule
         // Tessies eigene Standard-Variable "Fenster schließen"
         // (act_close_windows, sendet Teslas gerichteten close_windows-Befehl
         // -- sicher blind auslösbar, kein Umschalt-Risiko).
-        'fenster' => ['fenster schließen', 'close_windows'],
+        'fenster' => ['fenster schließen', 'close_windows', 'close windows'],
         // Trifft Tessies eigene Aktion "Heckklappe öffnen/schließen"
         // (act_rear_trunk). Anders als bei "fenster" wird zusätzlich nach
         // einer passenden Zustands-Variable UNTER DERSELBEN INSTANZ gesucht
         // (Name enthält "klappenstatus", z. B. Tessies "Tür-/Klappenstatus")
         // -- Sonderbehandlung direkt im Suchlauf unten, siehe dortigen Kommentar.
-        'kofferraum' => ['heckklappe'],
-        'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn'],
+        'kofferraum' => ['heckklappe', 'tailgate', 'rear trunk'],
+        'sirene' => ['sirene', 'hupe', 'buzzer', 'signalhorn', 'siren'],
     ];
 
     // Namensmuster für die automatische Suche nach mobilen Standort-
@@ -162,6 +164,9 @@ class WarnHub extends IPSModule
     // "breitengrad"-Substring-Treffer würde beide gleichermaßen matchen.
     private const DISCOVERY_LATLON_PAIRS = [
         ['label' => 'Tessie/Fahrzeug', 'prefix' => 'fahrzeugposition', 'lat' => 'breitengrad', 'lon' => 'längengrad'],
+        // Tessie auf einem englischen Symcon: "Location – Latitude/Longitude" (1.20.1).
+        // Mit Gedankenstrich als Präfix, damit nicht jede "Location"-Variable passt.
+        ['label' => 'Tessie/Fahrzeug', 'prefix' => 'location –', 'lat' => 'latitude', 'lon' => 'longitude'],
         // "current" grenzt Geofencys aktuelle Position von dessen zusätzlicher,
         // gleichnamiger "Latitude"/"Longitude" ab (vermutlich Geofence-Zentrum,
         // nicht die Live-Position) -- live an Dietmars System geprüft.
@@ -411,9 +416,16 @@ class WarnHub extends IPSModule
         'ie' => ['label' => '🇮🇪 Met Éireann', 'url' => 'https://www.met.ie/warnings'],
         'pt' => ['label' => '🇵🇹 IPMA', 'url' => 'https://www.ipma.pt/en/otempo/previsao.avisos/'],
     ];
+    // Ereignisname (englisch, übersetzt an der Verwendungsstelle) und fest
+    // zugeordnete Kategorie je GeoSphere-Warntyp -- dieselbe Zuordnung, die die
+    // Stichwortsuche bis 1.20.0 aus den deutschen Namen ergab (Kälte = sonstige).
     private const GEOSPHERE_AT_WARNTYPE_EVENT = [
-        1 => 'Sturm', 2 => 'Starkregen', 3 => 'Schnee', 4 => 'Glatteis',
-        5 => 'Gewitter', 6 => 'Hitze', 7 => 'Kälte',
+        1 => 'Storm', 2 => 'Heavy rain', 3 => 'Snow', 4 => 'Black ice',
+        5 => 'Thunderstorm', 6 => 'Heat', 7 => 'Cold',
+    ];
+    private const GEOSPHERE_AT_WARNTYPE_CATEGORY = [
+        1 => 'sturm', 2 => 'starkregen', 3 => 'schnee', 4 => 'schnee',
+        5 => 'gewitter', 6 => 'hitze', 7 => 'sonstige',
     ];
     private const GEOSPHERE_AT_WARNLEVEL_SEVERITY = [1 => 'Moderate', 2 => 'Severe', 3 => 'Extreme'];
 
@@ -461,8 +473,9 @@ class WarnHub extends IPSModule
     // an der gemeinsamen httpGet()-Funktion nötig (kein Custom-Header-Support).
     private const BAFU_HYDRO_SPARQL_ENDPOINT = 'https://lindas.admin.ch/query';
     private const BAFU_HYDRO_LEVEL_LABEL = [
-        1 => 'keine oder geringe Gefahr', 2 => 'mässige Gefahr', 3 => 'erhebliche Gefahr',
-        4 => 'grosse Gefahr', 5 => 'sehr grosse Gefahr',
+        // Englisch wie in den offiziellen englischen BAFU-Gefahrenstufen, Deutsch in locale.json
+        1 => 'no or minor danger', 2 => 'moderate danger', 3 => 'considerable danger',
+        4 => 'high danger', 5 => 'very high danger',
     ];
     private const BAFU_HYDRO_LEVEL_SEVERITY = [2 => 'Moderate', 3 => 'Severe', 4 => 'Severe', 5 => 'Extreme'];
 
@@ -499,8 +512,10 @@ class WarnHub extends IPSModule
     private const WBI_STATION_LIST_URL = 'https://opendata.dwd.de/climate_environment/CDC/derived_germany/fire_danger_index/woodland/recomputed/recent/derived_germany_fire_danger_index_woodland_recomputed_recent_v2-3--0_stations_list.txt';
     private const WBI_STATION_CSV_URL_TEMPLATE = 'https://opendata.dwd.de/climate_environment/CDC/derived_germany/fire_danger_index/woodland/recomputed/recent/derived_germany_fire_danger_index_woodland_recomputed_recent_%d_v2-3--0.csv.gz';
     private const WBI_LEVEL_LABEL = [
-        1 => 'sehr geringe Gefahr', 2 => 'geringe Gefahr', 3 => 'mittlere Gefahr',
-        4 => 'hohe Gefahr', 5 => 'sehr hohe Gefahr',
+        // Englisch kurz (eigene Schlüssel, nicht die BAFU-Bezeichnungen -- "high danger"
+        // heißt dort "grosse Gefahr", beim DWD "hohe Gefahr"), Deutsch in locale.json
+        1 => 'very low', 2 => 'low', 3 => 'medium',
+        4 => 'high', 5 => 'very high',
     ];
     private const WBI_LEVEL_SEVERITY = [1 => 'Minor', 2 => 'Minor', 3 => 'Moderate', 4 => 'Severe', 5 => 'Extreme'];
     // Höchstalter des letzten Stationswerts. DWD rechnet den Index nur in
@@ -541,7 +556,8 @@ class WarnHub extends IPSModule
     private const UBA_READING_MAX_AGE_SEC = 3 * 3600;
     private const UBA_OZONE_COMPONENT_ID = 3;
     private const UBA_LQI_LABEL = [
-        0 => 'sehr gut', 1 => 'gut', 2 => 'mäßig', 3 => 'schlecht', 4 => 'sehr schlecht',
+        // Englisch wie im englischen UBA-Angebot, Deutsch in locale.json
+        0 => 'very good', 1 => 'good', 2 => 'moderate', 3 => 'poor', 4 => 'very poor',
     ];
     private const UBA_LQI_SEVERITY = [0 => 'Minor', 1 => 'Minor', 2 => 'Moderate', 3 => 'Severe', 4 => 'Extreme'];
 
@@ -574,7 +590,7 @@ class WarnHub extends IPSModule
         'hagel'      => ['hagel'],
         'starkregen' => ['starkregen', 'dauerregen', 'hochwasser', 'flut', 'überflutung', 'ueberflutung'],
         'gewitter'   => ['gewitter', 'blitz'],
-        'schnee'     => ['schnee', 'glätte', 'glaette', 'glatteis', 'eis'],
+        'schnee'     => ['schnee', 'glätte', 'glaette', 'glatteis', '/(*UCP)\\beis/u'],
         'hitze'      => ['hitze'],
     ];
 
@@ -806,7 +822,7 @@ class WarnHub extends IPSModule
                 : $this->Translate('No active warning.'));
         $snoozed = $this->isPushSnoozed();
         if ($snoozed) {
-            $statusText .= sprintf($this->Translate(' 🔕 Push paused until %s.'), date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
+            $statusText .= ' ' . sprintf($this->Translate('🔕 Push paused until %s.'), date('d.m. H:i', $this->ReadAttributeInteger('PushSnoozeUntilTs')));
         }
         @$this->SetValue('AktiveWarnungen', count($active));
         @$this->SetValue('HoechsterSchweregrad', $highest);
@@ -848,7 +864,7 @@ class WarnHub extends IPSModule
             'expanded' => $expDokuHilfe,
             'onClick' => $this->rememberPanelOnClick('DokuHilfe', $expDokuHilfe),
             'items' => [
-                ['type' => 'Label', 'caption' => $this->Translate('WarnHub version ') . self::DOC_VERSION],
+                ['type' => 'Label', 'caption' => sprintf($this->Translate('WarnHub version %s'), self::DOC_VERSION)],
                 ['type' => 'Label', 'caption' => $this->Translate('Bundles warning and alert messages for Germany, Austria and Switzerland (D-A-CH) -- official sources for Germany (civil protection, weather, floods, police, water levels, radioactivity), Europe-wide weather warnings for 39 countries (also covering Austria/Switzerland) and optionally your own weather station -- and only reports what lies within the radius you define around a location (including mobile locations abroad).')],
                 ['type' => 'Label', 'caption' => $this->Translate('Data sources: NINA aggregation (officially used by the BBK app, warnung.bund.de, Germany), optionally the direct DWD weather warnings (opendata.dwd.de, Germany), optionally water levels (PEGELONLINE/WSV, Germany), optionally radioactivity readings (BfS ambient dose rate, Germany), optionally Europe-wide weather warnings (Meteoalarm, 39 countries incl. Austria and Switzerland), optionally coordinate-exact warnings for Austria (GeoSphere Austria/ZAMG), optionally coordinate-exact cantonal civil protection messages for Switzerland (Alertswiss/BABS), optionally official flood danger levels for Switzerland (BAFU/LINDAS), optionally your own weather station as an independent safety net and -- BETA, untested -- optionally your own VKF hail protection signal box (Switzerland).')],
                 ['type' => 'Label', 'caption' => $this->Translate('PEGELONLINE, BfS ODL-Info and your own weather station have no official warning level classification -- instead WarnHub reports an elevated water level (above the mean or previous highest water level), an exceedance of your own radiation threshold or an exceedance of your own wind gust/rain rate threshold. This is not an official alert level.')],
@@ -1757,7 +1773,7 @@ class WarnHub extends IPSModule
      */
     private function webfrontStatusLine(?array $rows = null): string
     {
-        $ungespeichert = $rows !== null ? $this->Translate(' (state of the open table, not saved yet -- click „Apply“)') : '';
+        $ungespeichert = $rows !== null ? ' ' . $this->Translate('(state of the open table, not saved yet -- click „Apply“)') : '';
         $rows ??= $this->decodeWebFronts();
         if (count($rows) === 0) {
             return $this->Translate('ℹ️ No push targets searched yet -- click "🔎 Search push targets" above. Without a push target no notification arrives (detection, tiles and protective actions still run).');
@@ -1791,8 +1807,8 @@ class WarnHub extends IPSModule
         }
 
         $funktioniert = count($laufen) > 0
-            ? $this->Translate(' Working: ') . implode(', ', $laufen) . '.'
-            : $this->Translate(' So currently no notification arrives anywhere.');
+            ? ' ' . sprintf($this->Translate('Working: %s.'), implode(', ', $laufen))
+            : ' ' . $this->Translate('So currently no notification arrives anywhere.');
         if ($ohneAdresse !== []) {
             return sprintf($this->Translate('⛔ E-mail target %s is active, but has no target address -- nothing goes there, enter it in the „Target address“ column below.%s%s'), implode(', ', $ohneAdresse), $funktioniert, $ungespeichert);
         }
@@ -1848,7 +1864,7 @@ class WarnHub extends IPSModule
             number_format($loc['lat'], 5, ',', '.'),
             number_format($loc['lon'], 5, ',', '.'),
             $heim !== '' ? $this->landName($heim) : $this->Translate('determined at the next check'),
-            $braucht !== [] ? $this->Translate(' and as placement for ') . implode($this->Translate(' and '), $braucht) : ''
+            $braucht !== [] ? ' ' . sprintf($this->Translate('and as placement for %s'), implode($this->Translate(' and '), $braucht)) : ''
         );
     }
 
@@ -1872,7 +1888,7 @@ class WarnHub extends IPSModule
 
         $beschreibe = function (?int $id, int $manuell, string $label, bool $istWind) use ($instanceID, $instanzName): string {
             if ($id === null) {
-                return $label . $this->Translate(': nothing found');
+                return sprintf($this->Translate('%s: nothing found'), $label);
             }
             $wert = $istWind ? $this->readWindSpeedKmh($id) : (float) @GetValue($id);
             $quelle = ($manuell > 0 && $id === $manuell)
@@ -1884,11 +1900,11 @@ class WarnHub extends IPSModule
         $regen = $beschreibe($regenID, $regenVar, $this->Translate('Rain rate'), false);
 
         if ($windID !== null && $regenID !== null) {
-            return $this->Translate('✅ Own weather station connected: ') . $wind . '; ' . $regen . '.';
+            return sprintf($this->Translate('✅ Own weather station connected: %s; %s.'), $wind, $regen);
         }
-        $grund = ($instanceID > 0 && !$instanzVorhanden) ? sprintf($this->Translate(' The entered instance #%d no longer exists.'), $instanceID) : '';
+        $grund = ($instanceID > 0 && !$instanzVorhanden) ? ' ' . sprintf($this->Translate('The entered instance #%d no longer exists.'), $instanceID) : '';
         if ($windID === null && $regenID === null) {
-            return $this->Translate('⚠️ Own weather station entered, but neither wind gust nor rain rate can be found.') . $grund . $this->Translate(' Click „🔎 Search weather station“ again or choose the variables below by hand -- until then this source counts as off.');
+            return sprintf($this->Translate('⚠️ Own weather station entered, but neither wind gust nor rain rate can be found.%s Click „🔎 Search weather station“ again or choose the variables below by hand -- until then this source counts as off.'), $grund);
         }
         return sprintf(
             $this->Translate('⚠️ Own weather station only partly connected: %s; %s: no variable found -- this quantity triggers nothing.%s Choose the missing variable below by hand.'),
@@ -1931,7 +1947,7 @@ class WarnHub extends IPSModule
      */
     private function mobileStandorteStatusLine(?array $standorte = null): string
     {
-        $ungespeichert = $standorte !== null ? $this->Translate(' (state of the open table, not saved yet -- click „Apply“)') : '';
+        $ungespeichert = $standorte !== null ? ' ' . $this->Translate('(state of the open table, not saved yet -- click „Apply“)') : '';
         $rows = $standorte ?? $this->decodeStandorte();
         $mobil = array_values(array_filter($rows, fn ($s) => (int) ($s['QuellVarLat'] ?? 0) > 0 || (int) ($s['QuellVarLon'] ?? 0) > 0));
         if (count($mobil) === 0) {
@@ -1943,7 +1959,7 @@ class WarnHub extends IPSModule
             $latVar = (int) ($s['QuellVarLat'] ?? 0);
             $lonVar = (int) ($s['QuellVarLon'] ?? 0);
             $name = trim((string) ($s['Name'] ?? '')) !== '' ? (string) $s['Name'] : $this->Translate('(no name)');
-            $inaktiv = !empty($s['Aktiv']) ? '' : $this->Translate(' [inactive]');
+            $inaktiv = !empty($s['Aktiv']) ? '' : ' ' . $this->Translate('[inactive]');
             $latOk = $latVar > 0 && @IPS_VariableExists($latVar);
             $lonOk = $lonVar > 0 && @IPS_VariableExists($lonVar);
             if ($latOk && $lonOk) {
@@ -1970,7 +1986,7 @@ class WarnHub extends IPSModule
                 number_format((float) ($s['Lon'] ?? 0), 4, ',', '.')
             );
         }
-        return ($alleOk ? '✅ ' : '⚠️ ') . $this->Translate('Mobile locations: ') . implode(' · ', $teile) . '.' . $ungespeichert;
+        return sprintf($alleOk ? $this->Translate('✅ Mobile locations: %s.%s') : $this->Translate('⚠️ Mobile locations: %s.%s'), implode(' · ', $teile), $ungespeichert);
     }
 
     private function isPushSnoozed(): bool
@@ -2091,6 +2107,12 @@ class WarnHub extends IPSModule
             '🌐 WarnHub now speaks English: forms, notifications, tiles and messages follow the language of your Symcon system. The warnings themselves stay in the language of their source (mostly German).',
             'This "New" panel now shows exactly the versions you have not confirmed yet instead of one ever-growing list.',
             'Fix ozone (Federal Environment Agency): short outages of luftdaten.umweltbundesamt.de no longer show up as an error at every check -- the station list and readings are cached like the forest fire index.',
+        ],
+        '1.20.1' => [
+            'Fix protective actions: the radioactivity warning (BfS) and NINA messages such as "large fire in the district of ..." were counted as "Snow" -- the snow keyword "eis" was hidden in German words like "Landkreis" and "Ortsdosisleistung". A snow action could therefore trigger on radiation.',
+            'Fix Meteoalarm: storm, rain, thunderstorm, snow and heat warnings now get their alert type from the standardised Meteoalarm warning type. Until now they always counted as "other", so a storm action with a ticked category never triggered on Meteoalarm (affects Swiss locations in particular).',
+            'English now also for the messages WarnHub generates itself (water levels, radioactivity, forest fire, ozone, earthquakes, BAFU floods, own weather station, hail signal box). Their alert type is fixed per source and no longer depends on the text.',
+            'On an English Symcon, the object tree searches now also find window contacts ("Opened"/"Open"), Tessie positions ("Location – Latitude") and English actuator names (awning, siren, close windows, tailgate).',
         ],
     ];
 
@@ -2379,11 +2401,23 @@ class WarnHub extends IPSModule
         if (is_string($optionsRaw) && $optionsRaw !== '') {
             $options = json_decode($optionsRaw, true);
             if (is_array($options)) {
+                // Die Optionstexte schreibt das jeweilige Fremdmodul in der
+                // Sprache des Systems, auf dem die Variable angelegt wurde --
+                // deshalb deutsch UND englisch (bis 1.20.0 nur deutsch: auf
+                // einem englischen Symcon fand die Suche keinen einzigen
+                // Kontakt). Ersatzweise die Gegenrichtung "geschlossen"/"closed".
+                $geschlossenWert = null;
                 foreach ($options as $opt) {
                     $caption = mb_strtolower(trim((string) ($opt['Caption'] ?? '')));
-                    if ($caption === 'geöffnet' || $caption === 'offen') {
+                    if (in_array($caption, ['geöffnet', 'offen', 'open', 'opened'], true)) {
                         return (bool) ($opt['Value'] ?? false);
                     }
+                    if (in_array($caption, ['geschlossen', 'zu', 'closed'], true)) {
+                        $geschlossenWert = (bool) ($opt['Value'] ?? false);
+                    }
+                }
+                if ($geschlossenWert !== null) {
+                    return !$geschlossenWert;
                 }
             }
         }
@@ -2626,7 +2660,10 @@ class WarnHub extends IPSModule
                 $zustandsVariableID = 0;
                 $rowActive = true;
                 if ($actionType === 'kofferraum') {
-                    $zustandsVariableID = $this->findSiblingVariableByNameSubstring($variableID, 'klappenstatus') ?? 0;
+                    // Tessie auf einem englischen Symcon: "DoorState" (1.20.1)
+                    $zustandsVariableID = $this->findSiblingVariableByNameSubstring($variableID, 'klappenstatus')
+                        ?? $this->findSiblingVariableByNameSubstring($variableID, 'doorstate')
+                        ?? $this->findSiblingVariableByNameSubstring($variableID, 'door state') ?? 0;
                     $rowActive = $zustandsVariableID > 0;
                 }
 
@@ -3173,7 +3210,12 @@ class WarnHub extends IPSModule
         $haystack = mb_strtolower($event . ' ' . $headline);
         foreach (self::CATEGORY_KEYWORDS as $category => $keywords) {
             foreach ($keywords as $kw) {
-                if (mb_strpos($haystack, $kw) !== false) {
+                // Stichwörter, die mit "/" beginnen, sind reguläre Ausdrücke: "eis"
+                // nur am Wortanfang (Eisglätte, Eisregen). Als reiner Teiltext traf es
+                // bis 1.20.0 "Landkreis", "Hinweis", "Ortsdosisleistung" -- eine
+                // NINA-Meldung "Großbrand im Landkreis X" oder die BfS-Strahlungswarnung
+                // landeten so unter "Schnee".
+                if ($kw[0] === '/' ? preg_match($kw, $haystack) === 1 : mb_strpos($haystack, $kw) !== false) {
                     return $category;
                 }
             }
@@ -3392,7 +3434,7 @@ class WarnHub extends IPSModule
             'source' => 'nina',
             'msgType' => (string) ($meta['msgType'] ?? 'Alert'),
             'event' => (string) ($infoDe['event'] ?? ''),
-            'headline' => (string) ($infoDe['headline'] ?? ($infoDe['event'] ?? 'Warnung')),
+            'headline' => (string) ($infoDe['headline'] ?? ($infoDe['event'] ?? $this->Translate('Warning'))),
             'description' => (string) ($infoDe['description'] ?? ''),
             'instruction' => (string) ($infoDe['instruction'] ?? ''),
             'severity' => (string) ($infoDe['severity'] ?? 'Unknown'),
@@ -3588,7 +3630,7 @@ class WarnHub extends IPSModule
             'source' => 'dwd_direct',
             'msgType' => $msgType !== '' ? $msgType : 'Alert',
             'event' => (string) $infoDe->event,
-            'headline' => (string) ($infoDe->headline ?: $infoDe->event ?: 'Warnung'),
+            'headline' => (string) ($infoDe->headline ?: $infoDe->event ?: $this->Translate('Warning')),
             'description' => (string) $infoDe->description,
             'instruction' => (string) $infoDe->instruction,
             'severity' => (string) ($infoDe->severity ?: 'Unknown'),
@@ -3664,22 +3706,22 @@ class WarnHub extends IPSModule
                 if ($mnwMhw !== 'high' && $nswHsw !== 'high') {
                     continue; // kein erhöhter Pegel -- kein Eintrag (kein "Cancel" nötig, siehe processWarnings()-Bereinigung)
                 }
-                $name = (string) ($station['longname'] ?? $station['shortname'] ?? 'Pegel');
+                $name = (string) ($station['longname'] ?? $station['shortname'] ?? $this->Translate('Gauge'));
                 $water = (string) ($station['water']['longname'] ?? '');
                 $valueCm = (float) ($cm['value'] ?? 0);
                 $severity = $nswHsw === 'high' ? 'Extreme' : 'Moderate';
                 $out[] = [
                     'identifier' => 'pegelonline-' . (string) ($station['uuid'] ?? $name),
                     'source' => 'pegelonline',
+                    'category' => 'starkregen',
                     'msgType' => 'Alert',
-                    'event' => 'Hochwasser',
-                    'headline' => sprintf('Erhöhter Pegel %s%s', $name, $water !== '' ? " ($water)" : ''),
+                    'event' => $this->Translate('Flood'),
+                    'headline' => $water !== '' ? sprintf($this->Translate('Elevated water level %s (%s)'), $name, $water) : sprintf($this->Translate('Elevated water level %s'), $name),
                     'description' => sprintf(
-                        'Aktueller Wasserstand %s cm -- %s',
-                        rtrim(rtrim(number_format($valueCm, 0, ',', '.'), '0'), ','),
                         $nswHsw === 'high'
-                            ? 'liegt auf/über dem bisherigen Höchstwert (HSW) seit Messbeginn.'
-                            : 'liegt über dem mittleren Hochwasser (MHW) -- ein für die Jahreszeit ggf. normaler Vorgang.'
+                            ? $this->Translate('Current water level %s cm -- at/above the highest level recorded since measurements began (HSW).')
+                            : $this->Translate('Current water level %s cm -- above the mean high water (MHW), possibly normal for the season.'),
+                        rtrim(rtrim(number_format($valueCm, 0, ',', '.'), '0'), ',')
                     ),
                     'instruction' => '',
                     'severity' => $severity,
@@ -3728,15 +3770,16 @@ class WarnHub extends IPSModule
             if (!is_array($coords) || count($coords) < 2) {
                 continue;
             }
-            $name = (string) ($props['name'] ?? $props['id'] ?? 'Messstelle');
+            $name = (string) ($props['name'] ?? $props['id'] ?? $this->Translate('Measuring point'));
             $out[] = [
                 'identifier' => 'bfsodl-' . (string) ($props['id'] ?? $name),
                 'source' => 'bfs_odl',
+                'category' => 'sonstige',
                 'msgType' => 'Alert',
-                'event' => 'Erhöhte Radioaktivität',
-                'headline' => sprintf('Erhöhte Ortsdosisleistung: %s', $name),
+                'event' => $this->Translate('Elevated radioactivity'),
+                'headline' => sprintf($this->Translate('Elevated ambient dose rate: %s'), $name),
                 'description' => trim(sprintf(
-                    '%s µSv/h an Messstelle %s (eigener Schwellwert %s µSv/h -- keine amtliche Alarmstufe, die Rohdaten kennen keine offizielle Meldeschwelle). %s',
+                    $this->Translate('%s µSv/h at measuring point %s (own threshold %s µSv/h -- no official alert level, the raw data has no official reporting threshold). %s'),
                     number_format($value, 3, ',', '.'),
                     $name,
                     number_format($threshold, 3, ',', '.'),
@@ -4052,11 +4095,12 @@ class WarnHub extends IPSModule
                 $out[] = [
                     'identifier' => $windIdentifier,
                     'source' => 'wetterstation',
+                    'category' => 'sturm',
                     'msgType' => 'Alert',
-                    'event' => 'Sturm (eigene Messung)',
-                    'headline' => sprintf('Eigene Wetterstation: Windböe %s km/h', number_format($windboe, 1, ',', '.')),
+                    'event' => $this->Translate('Storm (own measurement)'),
+                    'headline' => sprintf($this->Translate('Own weather station: wind gust %s km/h'), number_format($windboe, 1, ',', '.')),
                     'description' => sprintf(
-                        'Lokal gemessene Windböe %s km/h, Stufe "%s" -- unabhängig von amtlichen Warnungen, eigene Schwellwerte, keine amtliche Klassifikation.',
+                        $this->Translate('Locally measured wind gust %s km/h, level "%s" -- independent of official warnings, own thresholds, no official classification.'),
                         number_format($windboe, 1, ',', '.'),
                         $severity
                     ),
@@ -4065,7 +4109,7 @@ class WarnHub extends IPSModule
                     'effective' => null,
                     'onset' => null,
                     'expires' => null,
-                    'areaDesc' => 'Eigene Wetterstation',
+                    'areaDesc' => $this->Translate('Own weather station'),
                     'rings' => [],
                     'circles' => [$circle],
                 ];
@@ -4077,16 +4121,17 @@ class WarnHub extends IPSModule
                 $out[] = [
                     'identifier' => $windIdentifier,
                     'source' => 'wetterstation',
+                    'category' => 'sturm',
                     'msgType' => 'Cancel',
-                    'event' => 'Sturm (eigene Messung)',
-                    'headline' => 'Eigene Wetterstation: Windböe wieder unter dem Schwellwert',
+                    'event' => $this->Translate('Storm (own measurement)'),
+                    'headline' => $this->Translate('Own weather station: wind gust below the threshold again'),
                     'description' => '',
                     'instruction' => '',
                     'severity' => 'Extreme', // nur für den Standort-Schwellwert-Gate relevant, nicht angezeigt
                     'effective' => null,
                     'onset' => null,
                     'expires' => null,
-                    'areaDesc' => 'Eigene Wetterstation',
+                    'areaDesc' => $this->Translate('Own weather station'),
                     'rings' => [],
                     'circles' => [$circle],
                 ];
@@ -4100,11 +4145,12 @@ class WarnHub extends IPSModule
                 $out[] = [
                     'identifier' => $regenIdentifier,
                     'source' => 'wetterstation',
+                    'category' => 'starkregen',
                     'msgType' => 'Alert',
-                    'event' => 'Starkregen (eigene Messung)',
-                    'headline' => sprintf('Eigene Wetterstation: Regenrate %s mm/h', number_format($regenrate, 1, ',', '.')),
+                    'event' => $this->Translate('Heavy rain (own measurement)'),
+                    'headline' => sprintf($this->Translate('Own weather station: rain rate %s mm/h'), number_format($regenrate, 1, ',', '.')),
                     'description' => sprintf(
-                        'Lokal gemessene Regenrate %s mm/h, Stufe "%s" -- unabhängig von amtlichen Warnungen, eigene Schwellwerte, keine amtliche Klassifikation.',
+                        $this->Translate('Locally measured rain rate %s mm/h, level "%s" -- independent of official warnings, own thresholds, no official classification.'),
                         number_format($regenrate, 1, ',', '.'),
                         $regenSeverity
                     ),
@@ -4113,7 +4159,7 @@ class WarnHub extends IPSModule
                     'effective' => null,
                     'onset' => null,
                     'expires' => null,
-                    'areaDesc' => 'Eigene Wetterstation',
+                    'areaDesc' => $this->Translate('Own weather station'),
                     'rings' => [],
                     'circles' => [$circle],
                 ];
@@ -4121,16 +4167,17 @@ class WarnHub extends IPSModule
                 $out[] = [
                     'identifier' => $regenIdentifier,
                     'source' => 'wetterstation',
+                    'category' => 'starkregen',
                     'msgType' => 'Cancel',
-                    'event' => 'Starkregen (eigene Messung)',
-                    'headline' => 'Eigene Wetterstation: Regenrate wieder unter dem Schwellwert',
+                    'event' => $this->Translate('Heavy rain (own measurement)'),
+                    'headline' => $this->Translate('Own weather station: rain rate below the threshold again'),
                     'description' => '',
                     'instruction' => '',
                     'severity' => 'Extreme',
                     'effective' => null,
                     'onset' => null,
                     'expires' => null,
-                    'areaDesc' => 'Eigene Wetterstation',
+                    'areaDesc' => $this->Translate('Own weather station'),
                     'rings' => [],
                     'circles' => [$circle],
                 ];
@@ -4291,6 +4338,34 @@ class WarnHub extends IPSModule
         return array_keys($slugs);
     }
 
+    /**
+     * Kategorie einer Meteoalarm-Meldung aus dem genormten Meteoalarm-Warntyp im
+     * Titel ("Orange Wind Warning issued for ...", Typen laut Meteoalarm: Wind,
+     * Snow-ice, Thunderstorm, Fog, High-temperature, Low-temperature,
+     * Coastalevent, Forest-fire, Avalanches, Rain, Flooding, Rain-flood). Die
+     * Ereignisnamen selbst sind frei und englisch ("moderate wind warning",
+     * "gale-force gusts", "frost") -- bis 1.20.0 lief die Einordnung über die
+     * deutschen Stichwörter und landete deshalb immer bei "sonstige": eine
+     * Sturm-Schutzaktion mit Kategorie-Haken löste bei Meteoalarm nie aus
+     * (betrifft vor allem Schweizer Standorte, für die Meteoalarm die einzige
+     * Sturmquelle ist). Live geprüft 09.11.2026 an zehn Länder-Feeds.
+     */
+    private function meteoalarmCategory(string $title): string
+    {
+        if (!preg_match('/^\s*(?:green|yellow|orange|red)\s+(.+?)\s+warning\b/i', $title, $m)) {
+            return 'sonstige';
+        }
+        $typ = strtolower(trim($m[1]));
+        return match ($typ) {
+            'wind' => 'sturm',
+            'thunderstorm', 'thunderstorms' => 'gewitter',
+            'rain', 'rain-flood', 'flooding', 'flood' => 'starkregen',
+            'snow-ice', 'snow/ice', 'snow', 'ice' => 'schnee',
+            'high-temperature', 'high temperature' => 'hitze',
+            default => 'sonstige',
+        };
+    }
+
     private function fetchMeteoalarmCountry(string $slug): array
     {
         $url = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-' . $slug;
@@ -4329,9 +4404,10 @@ class WarnHub extends IPSModule
             $out[] = [
                 'identifier' => $identifier . '|' . $areaDesc,
                 'source' => 'meteoalarm',
+                'category' => $this->meteoalarmCategory((string) ($entry->title ?? '')),
                 'msgType' => $msgType !== '' ? $msgType : 'Alert',
                 'event' => (string) $capNs->event,
-                'headline' => (string) ($entry->title ?: $capNs->event ?: 'Warnung'),
+                'headline' => (string) ($entry->title ?: $capNs->event ?: $this->Translate('Warning')),
                 'description' => (string) ($entry->title ?? ''),
                 'instruction' => '',
                 'severity' => (string) ($capNs->severity ?: 'Unknown'),
@@ -4403,7 +4479,7 @@ class WarnHub extends IPSModule
         if (!is_array($warnings) || count($warnings) === 0) {
             return [];
         }
-        $areaName = (string) ($json['properties']['location']['properties']['name'] ?? 'Österreich');
+        $areaName = (string) ($json['properties']['location']['properties']['name'] ?? $this->Translate('Austria'));
 
         $out = [];
         foreach ($warnings as $w) {
@@ -4416,7 +4492,7 @@ class WarnHub extends IPSModule
             $wlevel = (int) ($props['rawinfo']['wlevel'] ?? 0);
             $startTs = isset($props['rawinfo']['start']) ? (int) $props['rawinfo']['start'] : null;
             $endTs = isset($props['rawinfo']['end']) ? (int) $props['rawinfo']['end'] : null;
-            $event = self::GEOSPHERE_AT_WARNTYPE_EVENT[$wtype] ?? 'Warnung';
+            $event = $this->Translate(self::GEOSPHERE_AT_WARNTYPE_EVENT[$wtype] ?? 'Warning');
             // meteotext (meteorologische Kurzerklärung, z. B. "Mit einer
             // stürmischen Nordwestströmung erreichen Sturmböen etwa 60 bis
             // 80 km/h") liefert die API zusätzlich zu auswirkungen/
@@ -4433,9 +4509,10 @@ class WarnHub extends IPSModule
             $out[] = [
                 'identifier' => 'geosphere-at-' . $warnId,
                 'source' => 'geosphere_at',
+                'category' => self::GEOSPHERE_AT_WARNTYPE_CATEGORY[$wtype] ?? 'sonstige',
                 'msgType' => 'Alert',
                 'event' => $event,
-                'headline' => (string) ($props['text'] ?? sprintf('%s-Warnung für %s', $event, $areaName)),
+                'headline' => (string) ($props['text'] ?? sprintf($this->Translate('%s warning for %s'), $event, $areaName)),
                 'description' => $description,
                 'instruction' => '',
                 'severity' => self::GEOSPHERE_AT_WARNLEVEL_SEVERITY[$wlevel] ?? 'Moderate',
@@ -4515,16 +4592,17 @@ class WarnHub extends IPSModule
             }
             $lon = (float) $m[1];
             $lat = (float) $m[2];
-            $name = (string) ($row['name'] ?? 'Messstation');
-            $label = self::BAFU_HYDRO_LEVEL_LABEL[$level] ?? ('Stufe ' . $level);
+            $name = (string) ($row['name'] ?? $this->Translate('Measuring station'));
+            $label = isset(self::BAFU_HYDRO_LEVEL_LABEL[$level]) ? $this->Translate(self::BAFU_HYDRO_LEVEL_LABEL[$level]) : sprintf($this->Translate('Level %d'), $level);
             $out[] = [
                 'identifier' => 'bafu-hydro-' . ($row['id'] ?? $name),
                 'source' => 'bafu_hydro_ch',
+                'category' => 'starkregen',
                 'msgType' => 'Alert',
-                'event' => 'Hochwasser',
-                'headline' => sprintf('Hochwassergefahr: %s (Gefahrenstufe %d)', $name, $level),
+                'event' => $this->Translate('Flood'),
+                'headline' => sprintf($this->Translate('Flood danger: %s (danger level %d)'), $name, $level),
                 'description' => sprintf(
-                    'Amtliche Gefahrenstufe %d von 5 (%s) an Messstation %s -- offizielle BAFU-Skala, keine Eigenkonstruktion.',
+                    $this->Translate('Official danger level %d of 5 (%s) at measuring station %s -- official BAFU scale, not a construct of its own.'),
                     $level,
                     $label,
                     $name
@@ -4591,14 +4669,15 @@ class WarnHub extends IPSModule
             }
             $magnitude = (float) $magnitude;
             $tier = $this->sedMagnitudeSeverity($magnitude);
-            $place = trim($placeName) !== '' ? trim($placeName) : 'Schweiz';
+            $place = trim($placeName) !== '' ? trim($placeName) : $this->Translate('Switzerland');
             $out[] = [
                 'identifier' => 'sed-' . trim($eventId),
                 'source' => 'sed_ch',
+                'category' => 'sonstige',
                 'msgType' => 'Alert',
-                'event' => 'Erdbeben',
-                'headline' => sprintf('Erdbeben Magnitude %.1f bei %s', $magnitude, $place),
-                'description' => sprintf('Tiefe %.1f km, Epizentrum %s, gemessen %s Uhr (Schweizerischer Erdbebendienst).', (float) $depth, $place, date('d.m. H:i', $ts)),
+                'event' => $this->Translate('Earthquake'),
+                'headline' => sprintf($this->Translate('Earthquake magnitude %.1f near %s'), $magnitude, $place),
+                'description' => sprintf($this->Translate('Depth %.1f km, epicentre %s, measured at %s (Swiss Seismological Service).'), (float) $depth, $place, date('d.m. H:i', $ts)),
                 'instruction' => '',
                 'severity' => $tier['severity'],
                 'effective' => date('c', $ts),
@@ -4725,7 +4804,7 @@ class WarnHub extends IPSModule
             $description = trim((string) ($a['description']['description'] ?? ''));
             $publisher = trim((string) ($a['publisherName'] ?? ''));
             if ($publisher !== '') {
-                $description = $description !== '' ? $description . ' (Quelle: ' . $publisher . ')' : 'Quelle: ' . $publisher;
+                $description = $description !== '' ? sprintf($this->Translate('%s (source: %s)'), $description, $publisher) : sprintf($this->Translate('Source: %s'), $publisher);
             }
             $instructions = [];
             foreach ((is_array($a['instructions'] ?? null) ? $a['instructions'] : []) as $instr) {
@@ -4745,8 +4824,8 @@ class WarnHub extends IPSModule
                 'identifier' => 'alertswiss-' . $identifier,
                 'source' => 'alertswiss_ch',
                 'msgType' => !empty($a['allClear']) ? 'Cancel' : 'Alert',
-                'event' => $event !== '' ? $event : 'Warnung',
-                'headline' => $title !== '' ? $title : ($event !== '' ? $event : 'Warnung'),
+                'event' => $event !== '' ? $event : $this->Translate('Warning'),
+                'headline' => $title !== '' ? $title : ($event !== '' ? $event : $this->Translate('Warning')),
                 'description' => $description,
                 'instruction' => implode("\n", $instructions),
                 'severity' => $severity,
@@ -4869,11 +4948,12 @@ class WarnHub extends IPSModule
             $out[] = [
                 'identifier' => 'waldbrand-de-' . $nearest['index'] . '-' . $reading['date'],
                 'source' => 'waldbrand_de',
+                'category' => 'sonstige',
                 'msgType' => 'Alert',
-                'event' => 'Waldbrandgefahr',
-                'headline' => sprintf('Waldbrandgefahrenindex Stufe %d von 5 (%s)', $level, self::WBI_LEVEL_LABEL[$level] ?? ''),
+                'event' => $this->Translate('Forest fire danger'),
+                'headline' => sprintf($this->Translate('Forest fire danger index level %d of 5 (%s)'), $level, isset(self::WBI_LEVEL_LABEL[$level]) ? $this->Translate(self::WBI_LEVEL_LABEL[$level]) : ''),
                 'description' => sprintf(
-                    'Amtlicher Waldbrandgefahrenindex, Stand %s. Nächstgelegene DWD-Messstation: %s (%.0f km entfernt).',
+                    $this->Translate('Official forest fire danger index, as of %s. Nearest DWD measuring station: %s (%.0f km away).'),
                     $dateLabel,
                     $nearest['name'],
                     $nearest['distanceKm']
@@ -5137,11 +5217,12 @@ class WarnHub extends IPSModule
             $out[] = [
                 'identifier' => 'ozon-de-' . $stationId . '-' . $reading['time'],
                 'source' => 'ozon_de',
+                'category' => 'sonstige',
                 'msgType' => 'Alert',
-                'event' => 'Ozonbelastung',
-                'headline' => sprintf('Ozon-Luftqualitätsindex Stufe %d von 4 (%s)', $level, self::UBA_LQI_LABEL[$level] ?? ''),
+                'event' => $this->Translate('Ozone pollution'),
+                'headline' => sprintf($this->Translate('Ozone air quality index level %d of 4 (%s)'), $level, isset(self::UBA_LQI_LABEL[$level]) ? $this->Translate(self::UBA_LQI_LABEL[$level]) : ''),
                 'description' => sprintf(
-                    'Ozonkonzentration %.0f µg/m³ (1-Stunden-Mittel) an der Messstation %s, Stand %s Uhr. Amtlicher Luftqualitätsindex des Umweltbundesamts.',
+                    $this->Translate('Ozone concentration %.0f µg/m³ (1-hour mean) at measuring station %s, as of %s. Official air quality index of the German Federal Environment Agency.'),
                     $reading['value'],
                     $station['name'],
                     substr($reading['time'], 11, 5)
@@ -5336,10 +5417,11 @@ class WarnHub extends IPSModule
         return [[
             'identifier' => 'hagelschutz-ch-' . $this->InstanceID,
             'source' => 'hagelschutz_ch',
+            'category' => 'hagel',
             'msgType' => 'Alert',
-            'event' => 'Hagel',
-            'headline' => 'Hagelschutz-Signalbox: Hagelwarnung aktiv' . ($state === 2 ? ' (Testalarm)' : ''),
-            'description' => 'Signal der eigenen VKF-Hagelschutz-Signalbox (meteo.netitservices.com) -- amtlich in dem Sinne, dass die Prognose von SRF Meteo/VKF stammt, aber ein Gerätesignal ohne eigene Warnflächen-Geometrie.',
+            'event' => $this->Translate('Hail'),
+            'headline' => $state === 2 ? $this->Translate('Hail protection signal box: hail warning active (test alarm)') : $this->Translate('Hail protection signal box: hail warning active'),
+            'description' => $this->Translate('Signal of your own VKF hail protection signal box (meteo.netitservices.com) -- official in the sense that the forecast comes from SRF Meteo/VKF, but a device signal without a warning area geometry of its own.'),
             'instruction' => '',
             'severity' => 'Severe',
             'effective' => null,
@@ -5443,7 +5525,7 @@ class WarnHub extends IPSModule
             $result['actionsTriggered']
         );
         if ($result['fensterWarnungen'] > 0) {
-            $text .= sprintf($this->Translate(' %d window/door warning(s).'), $result['fensterWarnungen']);
+            $text .= ' ' . sprintf($this->Translate('%d window/door warning(s).'), $result['fensterWarnungen']);
         }
         return $text;
     }
@@ -5655,7 +5737,12 @@ class WarnHub extends IPSModule
                 }
             }
 
-            $category = $this->classifyEventCategory($w['event'], $w['headline']);
+            // Eigene Quellen (Pegel, Strahlung, Wetterstation, Waldbrand, Ozon,
+            // Erdbeben, BAFU, Hagel-Signalbox, GeoSphere) und Meteoalarm (über
+            // den genormten Warntyp) setzen ihre Kategorie selbst -- seit 1.20.1,
+            // damit sie nicht am (übersetzten) Anzeigetext hängt (SUITE.md 9).
+            // Nur Fremdtexte (NINA, DWD, Alertswiss) laufen über die Stichwörter.
+            $category = (string) ($w['category'] ?? '') !== '' ? (string) $w['category'] : $this->classifyEventCategory($w['event'], $w['headline']);
             // Schutzaktionen sollen erst kurz VOR dem tatsächlichen Beginn
             // einer Warnung feuern, nicht schon in dem Moment, in dem die
             // Meldung selbst eintrifft (die oft Stunden im Voraus kommt) --
@@ -7066,7 +7153,13 @@ HTML;
                     return;
                 }
                 $zustand = (string) GetValue($action['ZustandsVariableID']);
-                if (mb_stripos($zustand, 'kofferraum') === false && mb_stripos($zustand, 'heckklappe') === false) {
+                // Tessie listet offene Klappen in der Systemsprache: "Kofferraum"
+                // bzw. auf Englisch "TrunkRear" (1.20.1). Frunk zählt nicht.
+                $offen = false;
+                foreach (['kofferraum', 'heckklappe', 'trunkrear', 'rear trunk', 'tailgate'] as $klappe) {
+                    $offen = $offen || mb_stripos($zustand, $klappe) !== false;
+                }
+                if (!$offen) {
                     return; // bereits geschlossen -- nichts zu tun, kein Fehler
                 }
                 $ok = @RequestAction($action['ZielVariableID'], true);

@@ -2,6 +2,54 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.20.1 (2026-11-09)
+
+Nachschliff der Zweisprachigkeit nach den neuen Verbund-Regeln (SUITE.md
+Punkt 9, Auftrag Dietmar 05.11.2026). Dabei zwei echte Fehler in der
+Kategorie-Zuordnung der Schutzaktionen gefunden:
+
+- Fix Schutzaktionen, Kategorie "Schnee": das Stichwort "eis" traf als
+  Teiltext jedes Wort mit "eis" -- "Landkreis", "Hinweis",
+  "Ortsdosisleistung". Die BfS-Strahlungswarnung ("Erhöhte
+  Ortsdosisleistung") und NINA-Meldungen wie "Großbrand im Landkreis X"
+  zählten damit als "Schnee"; eine Schutzaktion mit Haken bei "Schnee"
+  hätte bei Strahlung ausgelöst. "eis" gilt jetzt nur am Wortanfang
+  (Eisglätte, Eisregen; "Glatteis" hat ein eigenes Stichwort). Im Probelauf
+  gegen die Texte aller eigenen Quellen gefunden, nicht im Forum.
+- Fix Meteoalarm: die Ereignisnamen sind englisch und frei ("moderate wind
+  warning", "gale-force gusts", "frost") und trafen kein deutsches
+  Stichwort -- Meteoalarm-Warnungen zählten immer als "sonstige", eine
+  Sturm-Schutzaktion mit Kategorie-Haken löste bei Meteoalarm nie aus. Das
+  traf vor allem Schweizer Standorte, für die Meteoalarm die einzige
+  Sturmquelle ist. Die Kategorie kommt jetzt aus dem genormten
+  Meteoalarm-Warntyp im Titel (Wind, Thunderstorm, Rain/Rain-flood/Flooding,
+  Snow-ice, High-temperature; Fog/Low-temperature/Coastalevent u. a. =
+  sonstige), live geprüft an zehn Länder-Feeds.
+- Eigene Quellen (Pegel, BfS, Wetterstation, BAFU, SED, Waldbrand, Ozon,
+  Hagel-Signalbox, GeoSphere je Warntyp) setzen ihre Kategorie jetzt selbst
+  (Feld `category` der Warnung) -- mit genau der Zuordnung, die die
+  Stichwortsuche bisher aus ihren deutschen Texten ergab, außer BfS
+  (jetzt "sonstige" statt fälschlich "Schnee"). Damit hängt keine Logik
+  mehr am Anzeigetext, und ihre Texte (Ereignis, Überschrift,
+  Beschreibung, Stufenbezeichnungen) sind übersetzt. Auf deutschen Systemen
+  bleiben die Texte wortgleich, laufende Warnungen behalten ihre Episode.
+  Fremdtexte (NINA, DWD, Alertswiss) laufen weiter über die Stichwörter.
+- Objektbaum-Suchen auf einem englischen Symcon: Fensterkontakte über die
+  Variablendarstellung erkennen jetzt auch "Opened"/"Open"/"Closed" (bisher
+  nur deutsche Optionstexte -- auf Englisch fand die Suche keinen Kontakt),
+  Tessie-Position "Location – Latitude/Longitude", Tessie-Zustand
+  "DoorState" mit "TrunkRear" für die Kofferraum-Sicherheitsprüfung,
+  englische Aktor-Namen (Awning, Siren, Close windows, Tailgate, Venetian
+  blind).
+- Ganze Sätze statt geklebter Satzteile in den Statuszeilen (Push-Ziele,
+  Systemstandort, Wetterstation, mobile Standorte, Version).
+- README.en.md ist jetzt die vollständige englische Fassung.
+- Prüfstände: neu `.tools/test-kategorien.php` (33); `test-locale.php`
+  prüft zusätzlich "kein deutscher Text mehr im Code" (Ausnahmen nur
+  Kennungen, Suchwörter für fremde Namen, Adressen, Debug) und
+  "keine ungenutzten Einträge in locale.json"; `test-fensterkontakte.php`
+  +3 englische Fälle.
+
 ## 1.20.0 (2026-11-04)
 
 - Neu: **WarnHub spricht Englisch.** Formular, Rückmeldungen der Knöpfe,
