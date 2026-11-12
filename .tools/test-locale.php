@@ -225,7 +225,7 @@ if ($fehltKonst !== []) {
 // Kennungen/Schlüssel, Adressen, Suchwörter für fremde Namen und Texte, und
 // englische Quelltexte, die deutsche Originalnamen in Anführungszeichen zitieren.
 $suchwoerter = [];
-foreach (['CATEGORY_KEYWORDS', 'DISCOVERY_KEYWORDS'] as $name) {
+foreach (['CATEGORY_KEYWORDS', 'HAZARD_KEYWORDS', 'DISCOVERY_KEYWORDS'] as $name) {
     foreach ($ref->getConstant($name) as $liste) {
         array_push($suchwoerter, ...$liste);
     }
@@ -236,7 +236,8 @@ foreach ($ref->getConstant('DISCOVERY_LATLON_PAIRS') as $paar) {
 // Bewusste Ausnahmen, jeweils Logik an FREMDEN Texten, nicht an eigener Anzeige:
 //   "Windböe"  -- Name der Wetterstations-Variable, nach dem resolveWetterstationSource() sucht
 //   "geöffnet" -- Optionstext fremder Fensterkontakte (contactOpenRawValue(), dort auch englisch)
-$ausnahmen = ['Windböe', 'geöffnet'];
+//   Glätte-Muster -- DWD-Ereignisname in dwdGroupHazard()
+$ausnahmen = ['Windböe', 'geöffnet', '/gl(?:ä|ae)tte|glatteis|eisregen/iu'];
 $codeText = (string) file_get_contents(__DIR__ . '/../WarnHub/module.php');
 $zeilen = explode("\n", $codeText);
 $deutschImCode = [];

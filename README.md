@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.20.1-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.21.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -227,8 +227,8 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
 
 - `WHUB_Poll($id): string` -- löst eine sofortige Prüfung aus, liefert eine
   menschenlesbare Zusammenfassung.
-- `WHUB_GetActiveWarnings($id): string` -- JSON-Liste der aktuell zutreffenden Warnungen je
-  Standort (für eigene Auswertungen/Kacheln).
+- `WHUB_GetActiveWarnings($id): string` -- JSON der aktuell zutreffenden Warnungen je
+  Standort (für eigene Auswertungen/Kacheln), Warnungs-Vertrag 1.0 (siehe unten).
 - `WHUB_TestSchutzaktionen($id, $kategorie): string` -- löst zu Testzwecken sofort alle
   aktiven Schutzaktionen des angegebenen Alarmtyps aus (`sturm`/`hagel`/`starkregen`/
   `gewitter`/`schnee`/`hitze`), unabhängig von einer echten Warnung, vom Standort-Filter und
@@ -236,13 +236,48 @@ diese Zeilen bleiben ohne automatisch gefundene Zustands-Variable ausnahmsweise 
   Schutzaktionen-Panel verfügbar.
 - `WHUB_GetHistory($id, $limit = 100): string` -- JSON-Liste der zuletzt gepushten
   Warnungen UND Entwarnungen (newest first, bis zu 500 Einträge gespeichert, unabhängig
-  davon, ob Push gerade aktiv war) -- für eigene Auswertungen/Skripte.
+  davon, ob Push gerade aktiv war) -- für eigene Auswertungen/Skripte. Bleibt eine reine
+  Liste; die Einträge tragen seit 1.21.0 zusätzlich die Vertragsfelder.
+- `WHUB_GetWarningHistory($id, $limit = 100, $sinceTs = 0): string` -- dieselbe Historie als
+  Warnungs-Vertrag 1.0, optional nur Einträge ab `$sinceTs` (Unix-Zeit).
 - `WHUB_SnoozePush($id, $minuten): string` -- pausiert die Push-Benachrichtigung für die
   angegebene Dauer (z. B. Urlaub, Feier, Nachtruhe). Erkennung, Warnungs-Historie und
   Schutzaktionen laufen unverändert weiter -- nur die Zustellung selbst pausiert.
   `WHUB_TestPush()` bleibt davon ausgenommen. Im Formular als Schaltflächen (1/4/24 Std.)
   verfügbar.
 - `WHUB_CancelSnooze($id): string` -- hebt eine laufende Push-Pause vorzeitig auf.
+
+### Warnungs-Vertrag 1.0 (für Skripte und andere Module)
+
+Seit 1.21.0, rein lesend und additiv -- bestehende Felder bleiben unverändert.
+
+`WHUB_GetActiveWarnings()` liefert
+`{contractVersion: "1.0", generatedAt, standorte: [...], warnings: [...]}`,
+`WHUB_GetWarningHistory()` liefert `{contractVersion: "1.0", generatedAt, standorte: [...], entries: [...]}`.
+
+- **`standorte`**: je Standortzeile `standortKey`, `name`, `active`, `mobile` und
+  `isSystemLocation`. Systemstandort ist der feste Standort, der dem Symcon-Standort
+  (Kern-Instanzen › Standort) am nächsten liegt, höchstens 1 km entfernt. Ein mobiler Standort
+  ist das nie.
+- **`standortKey`** (z. B. `loc-3fa2c91b`): fester Schlüssel je Standortzeile. Er bleibt beim
+  Umbenennen gleich (Abgleich über Koordinaten bzw. Live-Variablen) und beim Verschieben unter
+  gleichem Namen. Nur wer Name und Ort zugleich ändert, bekommt einen neuen.
+- **`hazard`**: Gefahrencode `frost`, `ice`, `snow`, `wind`, `thunderstorm`, `heavy_rain`,
+  `hail`, `heat`, `fog`, `flood`, `smoke` oder `other`. Er ist feiner als die Kategorie der
+  Schutzaktionen (`category` bleibt erhalten) und sprachunabhängig. Herkunft:
+  - DWD-eventCode `GROUP` (DWD direkt und NINA-DWD-Kanal),
+  - Warntyp bei GeoSphere Austria und Meteoalarm,
+  - fester Code bei den eigenen Quellen (Pegel und BAFU = `flood`, Hagel-Signalbox = `hail`),
+  - sonst Stichwörter im Meldungstext.
+- Je Warnung zusätzlich: `standortKey`, `onset` (Text), `onsetTs` und `expiresTs`
+  (Unix-Zeit, `null` = unbekannt; `onsetTs` ersatzweise aus `effective`).
+- Historien-Einträge tragen `standortKey`, `hazard`, `onsetTs` und `expiresTs`.
+  Neue Art **`ende`**: Eine Warnung ist ohne Entwarnung zu Ende gegangen. `endReason` ist
+  `expired` (abgelaufen) oder `gone` (von der Quelle zurückgezogen). Ein Push gibt es dafür
+  nicht.
+- Ist eine Quelle beim Abruf nicht erreichbar, gelten ihre Warnungen als unbekannt, nicht als
+  beendet. Bis zu 6 Stunden lang gibt es dann weder einen `ende`-Eintrag noch einen erneuten
+  Push nach der Störung. Läuft die Warnung in dieser Zeit ab, endet sie trotzdem.
 
 ## IPSView & eigene Dashboards
 

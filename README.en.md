@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModule-blue)
-![Module version](https://img.shields.io/badge/Module-1.20.1-informational)
+![Module version](https://img.shields.io/badge/Module-1.21.0-informational)
 ![Symcon version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -194,16 +194,19 @@ automatically found state variable (safety lock, see "Limitations" below).
 ## Public functions
 
 - `WHUB_Poll($id): string` -- triggers an immediate check, returns a readable summary.
-- `WHUB_GetActiveWarnings($id): string` -- JSON list of the currently matching warnings per
+- `WHUB_GetActiveWarnings($id): string` -- JSON of the currently matching warnings per
   location (for your own evaluations/tiles), including `standort`, `distanceKm`, `source` and
-  `category`.
+  `category`; warning contract 1.0 (see below).
 - `WHUB_TestSchutzaktionen($id, $category): string` -- immediately triggers all active protective
   actions of the given alert type for testing (`sturm` storm, `hagel` hail, `starkregen` heavy
   rain, `gewitter` thunderstorm, `schnee` snow, `hitze` heat, `rauch` smoke), independent of a
   real warning, the location filter and the minimum severity -- a pure actuator test. Available
   in the form as one button per alert type.
 - `WHUB_GetHistory($id, $limit = 100): string` -- JSON list of the most recently pushed warnings
-  AND all-clears (newest first, up to 500 entries stored).
+  AND all-clears (newest first, up to 500 entries stored). Stays a plain list; since 1.21.0 the
+  entries also carry the contract fields.
+- `WHUB_GetWarningHistory($id, $limit = 100, $sinceTs = 0): string` -- the same history as
+  warning contract 1.0, optionally only entries from `$sinceTs` (Unix time) on.
 - `WHUB_SnoozePush($id, $minutes): string` -- pauses push notifications for the given duration.
   Detection, warning history and protective actions keep running unchanged. `WHUB_TestPush()` is
   exempt. Available in the form as buttons (1/4/24 h).
@@ -211,6 +214,37 @@ automatically found state variable (safety lock, see "Limitations" below).
 - `WHUB_TestPush($id): string` -- sends a test notification to all activated push targets.
 
 The alert type keys (`sturm`, `hagel`, ...) are identifiers and stay German in every language.
+
+### Warning contract 1.0 (for scripts and other modules)
+
+Since 1.21.0, read-only and additive -- existing fields stay unchanged.
+
+`WHUB_GetActiveWarnings()` returns
+`{contractVersion: "1.0", generatedAt, standorte: [...], warnings: [...]}`,
+`WHUB_GetWarningHistory()` returns `{contractVersion: "1.0", generatedAt, standorte: [...], entries: [...]}`.
+
+- **`standorte`** (locations): per location row `standortKey`, `name`, `active`, `mobile` and
+  `isSystemLocation`. The system location is the fixed location closest to the Symcon location
+  (core instances › Location), at most 1 km away. A mobile location never is.
+- **`standortKey`** (e.g. `loc-3fa2c91b`): fixed key per location row. It stays the same when you
+  rename the location (matched by coordinates or live variables) and when you move it under the
+  same name. Only changing name and place at the same time gives a new key.
+- **`hazard`**: hazard code `frost`, `ice`, `snow`, `wind`, `thunderstorm`, `heavy_rain`, `hail`,
+  `heat`, `fog`, `flood`, `smoke` or `other`. It is finer than the protective-action category
+  (`category` is kept) and language-independent. Where it comes from:
+  - the DWD eventCode `GROUP` (DWD direct and the NINA DWD channel),
+  - the warning type of GeoSphere Austria and Meteoalarm,
+  - a fixed code for WarnHub's own sources (water levels and BAFU = `flood`, hail signal box =
+    `hail`),
+  - otherwise keywords in the message text.
+- Per warning additionally: `standortKey`, `onset` (text), `onsetTs` and `expiresTs` (Unix time,
+  `null` = unknown; `onsetTs` falls back to `effective`).
+- History entries carry `standortKey`, `hazard`, `onsetTs` and `expiresTs`. New kind **`ende`**:
+  a warning ended without an all-clear. `endReason` is `expired` or `gone` (withdrawn by the
+  source). No push is sent for it.
+- If a source cannot be reached, its warnings count as unknown, not as ended. For up to 6 hours
+  there is then neither an `ende` entry nor a second push after the outage. If the warning
+  expires in that time, it ends anyway.
 
 ## IPSView & your own dashboards
 

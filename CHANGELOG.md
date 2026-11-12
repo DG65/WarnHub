@@ -2,6 +2,47 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.21.0 (2026-11-12)
+
+Warnungs-Vertrag 1.0 für Skripte und andere Module, erster Abnehmer ist
+FrigateHub (Selbstkalibrierung der Umweltbeobachtung, Konzept 9.1,
+abgestimmt 10.11.2026). Alles additiv, bestehende Felder bleiben.
+
+- Neu: `contractVersion` "1.0" und ein Standort-Katalog `standorte` in
+  `WHUB_GetActiveWarnings()`. Neue Funktion
+  `WHUB_GetWarningHistory($id, $limit, $sinceTs)` mit derselben Hülle.
+  `WHUB_GetHistory()` bleibt eine reine Liste, weil Skripte daran hängen.
+- Neu: Gefahrencode `hazard` je Warnung (frost, ice, snow, wind,
+  thunderstorm, heavy_rain, hail, heat, fog, flood, smoke, other). Er ist
+  feiner als `category`, die Glätte und Schnee zusammenfasst und Frost und
+  Nebel unter "sonstige" führt. Herkunft:
+  - DWD-eventCode GROUP, live geprüft: FROST, FOG; Glätte geht vor FROST;
+  - GeoSphere-Warntyp: Glatteis = ice, Kälte = frost;
+  - Meteoalarm-Warntyp, Snow-ice entscheidet dann der Ereignisname;
+  - fester Code der eigenen Quellen;
+  - sonst Stichwörter Deutsch/Englisch, Rauch vor Wind, Sturmflut vor Sturm.
+- Neu: `onsetTs`/`expiresTs` (Unix) und `onset` je aktiver Warnung,
+  `onsetTs`/`expiresTs`/`hazard`/`standortKey` je Historien-Eintrag.
+- Neu: Historien-Art `ende` (`endReason` expired/gone). Bisher verschwanden
+  still abgelaufene Episoden, also der Normalfall, ohne Spur aus dem Verlauf.
+  Der gemerkte Episoden-Eintrag (SeenWarnings) trägt dafür jetzt Ereignis,
+  Standort, Quelle und Code. Einträge aus älteren Versionen werden beim
+  nächsten Treffer ergänzt und enden ohne Phantom-Eintrag.
+- Neu: fester `standortKey` je Standortzeile (Attribut StandortKeys).
+  - Zuordnung zuerst über den Namen, dann über Koordinaten,
+    Live-Variablen oder Ortsname; Umbenennen behält den Schlüssel.
+  - `isSystemLocation`: der feste Standort, der dem Symcon-Standort am
+    nächsten liegt, höchstens 1 km entfernt.
+- Fix: Fiel eine Quelle beim Abruf aus, verschwanden ihre Warnungen aus
+  dem Merkspeicher. Nach der Störung wurde dieselbe Warnung erneut gepusht,
+  eine Schutzaktion konnte ein zweites Mal auslösen. Jetzt merkt sich jeder
+  Poll, welche Quelle einen Abruffehler hatte. Deren fehlende Warnungen
+  gelten als unbekannt, nicht als beendet, höchstens 6 Stunden lang;
+  abgelaufene enden trotzdem.
+- Prüfstand: neu `.tools/test-vertrag.php` mit 78 Prüfungen. 15
+  Gegenproben, bei denen absichtlich Fehler eingebaut werden, werden alle
+  erkannt.
+
 ## 1.20.1 (2026-11-09)
 
 Nachschliff der Zweisprachigkeit nach den neuen Verbund-Regeln (SUITE.md

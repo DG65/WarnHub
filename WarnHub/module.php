@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.20.1';
+    private const DOC_VERSION = '1.21.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -428,6 +428,72 @@ class WarnHub extends IPSModule
         5 => 'gewitter', 6 => 'hitze', 7 => 'sonstige',
     ];
     private const GEOSPHERE_AT_WARNLEVEL_SEVERITY = [1 => 'Moderate', 2 => 'Severe', 3 => 'Extreme'];
+    // GeoSphere-Warntyp -> Gefahrencode (Vertrag 1.0, siehe HAZARD_CODES):
+    // anders als die Kategorie trennt der Code Schnee (3) von Glatteis (4) und
+    // ordnet Kälte (7) als Frost ein.
+    private const GEOSPHERE_AT_WARNTYPE_HAZARD = [
+        1 => 'wind', 2 => 'heavy_rain', 3 => 'snow', 4 => 'ice',
+        5 => 'thunderstorm', 6 => 'heat', 7 => 'frost',
+    ];
+
+    // ----------------------------------------------------------------
+    //  Warnungs-Vertrag 1.0 (WHUB_GetActiveWarnings / WHUB_GetWarningHistory)
+    // ----------------------------------------------------------------
+    // Erster Abnehmer: FrigateHub (Selbstkalibrierung der Umweltbeobachtung,
+    // Konzept FrigateHub-Umweltbeobachtung 9.1, abgestimmt 10.11.2026). Alles
+    // additiv -- bestehende Felder bleiben unverändert, GetHistory() bleibt
+    // eine reine Liste.
+    private const CONTRACT_VERSION = '1.0';
+    // Gefahrencode: feiner als die Kategorie der Schutzaktionen (die Glätte
+    // und Schnee zusammenfasst, Frost/Nebel unter "sonstige" führt) und
+    // sprachunabhängig -- Abnehmer ordnen über diesen Code zu, nie über Texte
+    // (SUITE.md Stolperstein 26).
+    private const HAZARD_CODES = ['frost', 'ice', 'snow', 'wind', 'thunderstorm', 'heavy_rain', 'hail', 'heat', 'fog', 'flood', 'smoke', 'other'];
+    // Rückfall, wenn weder Quelle noch Stichwort einen Code liefert.
+    private const CATEGORY_HAZARD = [
+        'sturm' => 'wind', 'hagel' => 'hail', 'starkregen' => 'heavy_rain', 'gewitter' => 'thunderstorm',
+        'schnee' => 'snow', 'hitze' => 'heat', 'rauch' => 'smoke', 'sonstige' => 'other',
+    ];
+    // Eigene Quellen mit festem Gefahrencode (Wetterstation läuft über ihre
+    // feste Kategorie: Wind -> wind, Regenrate -> heavy_rain).
+    private const SOURCE_HAZARD = [
+        'pegelonline' => 'flood', 'bafu_hydro_ch' => 'flood', 'hagelschutz_ch' => 'hail',
+        'bfs_odl' => 'other', 'sed_ch' => 'other', 'waldbrand_de' => 'other', 'ozon_de' => 'other',
+    ];
+    // DWD-CAP eventCode GROUP (DWD-CAP-Dokumentation; live geprüft 10.11.2026:
+    // FROST -> "FROST", NEBEL -> "FOG"). Eine Warnung kann mehrere GROUP-Werte
+    // tragen (Gewitter mit HAIL/RAIN/WIND) -- die Reihenfolge hier ist der
+    // Vorrang, der erste Treffer gewinnt.
+    private const DWD_GROUP_HAZARD = [
+        'THUNDERSTORM' => 'thunderstorm', 'HAIL' => 'hail', 'GLAZE' => 'ice',
+        'SNOWFALL' => 'snow', 'SNOWDRIFT' => 'snow', 'FROST' => 'frost', 'FOG' => 'fog',
+        'RAIN' => 'heavy_rain', 'TORNADO' => 'wind', 'WIND' => 'wind', 'HEAT' => 'heat',
+    ];
+    // Stichwörter (Deutsch und Englisch) für Fremdtexte ohne strukturierten
+    // Code (NINA-MoWaS/KATWARN/BIWAPP/Polizei/Hochwasser, Alertswiss). Wie bei
+    // CATEGORY_KEYWORDS: erster Treffer gewinnt, "/..." = regulärer Ausdruck.
+    // Rauch zuerst (Gefahrstoff-Meldungen erwähnen oft die Windrichtung),
+    // Sturmflut vor Sturm, Gewitter vor Hagel/Regen, Glätte vor Schnee/Frost.
+    private const HAZARD_KEYWORDS = [
+        'smoke'        => ['rauch', 'smoke', 'brandgas', 'gefahrstoff', 'schadstoff', 'gasaustritt', 'gaswolke', 'chemieunfall', 'chemikalien', 'giftig', 'toxic'],
+        'flood'        => ['sturmflut', 'hochwasser', 'überflutung', 'ueberflutung', 'überschwemmung', 'ueberschwemmung', 'flood', 'storm surge'],
+        'thunderstorm' => ['gewitter', 'thunderstorm', 'blitz', 'lightning'],
+        'hail'         => ['hagel', 'hail'],
+        'ice'          => ['glätte', 'glaette', 'glatteis', 'eisregen', 'black ice', 'glaze', 'freezing rain', 'slippery', '/(*UCP)\\beis/u'],
+        'snow'         => ['schnee', 'snow', 'verwehung'],
+        'frost'        => ['frost', 'kälte', 'kaelte', 'cold', 'low temperature', 'low-temperature'],
+        'fog'          => ['nebel', 'fog'],
+        'heavy_rain'   => ['starkregen', 'dauerregen', 'heavy rain', 'rainfall', '/(*UCP)\\b(?:regen|rain)\\b/u'],
+        'wind'         => ['sturm', 'orkan', 'böen', 'boeen', 'wind', 'storm', 'gust', 'tornado', 'gale'],
+        'heat'         => ['hitze', 'heat', 'high temperature', 'high-temperature'],
+    ];
+    // Fester Standort gilt als Systemstandort, wenn er höchstens so weit vom
+    // Symcon-Standort (Kern-Instanz) entfernt liegt -- der nächstgelegene gewinnt.
+    private const SYSTEM_LOCATION_MATCH_KM = 1.0;
+    // Fällt eine Quelle beim Abruf aus, gilt ihre zuvor gemeldete Warnung als
+    // "unbekannt", nicht als beendet: kein "ende"-Eintrag, kein erneuter Push
+    // nach der Störung -- höchstens so lange, danach wird sie doch beendet.
+    private const SOURCE_OUTAGE_HOLD_SEC = 6 * 3600;
 
     // Alertswiss (alert.swiss, Bundesamt für Bevölkerungsschutz BABS) --
     // Schweizer Pendant zu NINA: kantonale Feuerverbote, Waldbrand,
@@ -669,6 +735,8 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeInteger('LastPollTs', 0);
         $this->RegisterAttributeString('LastActiveWarningsJson', '[]');
         $this->RegisterAttributeString('WarnHistory', '[]');
+        // Fester Schlüssel je Standortzeile (Vertrag 1.0, siehe syncStandortKeys()).
+        $this->RegisterAttributeString('StandortKeys', '[]');
         $this->RegisterAttributeInteger('PushSnoozeUntilTs', 0);
         $this->RegisterAttributeString('WetterstationRestoreState', '{}');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
@@ -730,6 +798,9 @@ class WarnHub extends IPSModule
         $this->MaintainVariable('KachelKarte', $this->Translate('Tile (map)'), VARIABLETYPE_STRING, '~HTMLBox', 7, true);
         $this->MaintainVariable('KachelZamg', $this->Translate('Tile (ZAMG warning map, Austria)'), VARIABLETYPE_STRING, '~HTMLBox', 8, true);
         $this->MaintainVariable('KachelAlle', $this->Translate('Tile (all warnings)'), VARIABLETYPE_STRING, '~HTMLBox', 9, true);
+        // Direkt nach dem Übernehmen: eine umbenannte Standortzeile behält so
+        // ihren Schlüssel (Abgleich über Koordinaten, siehe syncStandortKeys()).
+        $this->syncStandortKeys();
         $this->refreshStatusVariables();
 
         if (!$this->hasAnyActiveSource()) {
@@ -2114,6 +2185,10 @@ class WarnHub extends IPSModule
             'English now also for the messages WarnHub generates itself (water levels, radioactivity, forest fire, ozone, earthquakes, BAFU floods, own weather station, hail signal box). Their alert type is fixed per source and no longer depends on the text.',
             'On an English Symcon, the object tree searches now also find window contacts ("Opened"/"Open"), Tessie positions ("Location – Latitude") and English actuator names (awning, siren, close windows, tailgate).',
         ],
+        '1.21.0' => [
+            'For scripts and other modules: warning contract 1.0 -- WHUB_GetActiveWarnings() now also returns a hazard code per warning (frost, ice, snow, wind, thunderstorm, heavy_rain, hail, heat, fog, flood, smoke, other), start and end as Unix time and a fixed key per location (stays the same when you rename the location). New WHUB_GetWarningHistory($id, $limit, $sinceTs) with the same fields. WHUB_GetHistory() stays unchanged.',
+            'The warning history now also records the end of a warning that expires without an all-clear (type "ende"). If a source cannot be reached, its warnings count as unknown, not as ended -- so after a short outage the same warning is no longer pushed a second time.',
+        ],
     ];
 
     private function NewsBanner(): ?array
@@ -3223,6 +3298,71 @@ class WarnHub extends IPSModule
         return 'sonstige';
     }
 
+    /**
+     * Gefahrencode einer Warnung (Vertrag 1.0, HAZARD_CODES). Vorrang:
+     * 1. Code aus den strukturierten Quelldaten ('hazard' im Datensatz: DWD
+     *    eventCode GROUP, GeoSphere-Warntyp, Meteoalarm-Warntyp),
+     * 2. fester Code der eigenen Quelle (SOURCE_HAZARD; Wetterstation über
+     *    ihre feste Kategorie),
+     * 3. Stichwörter in Ereignis/Überschrift (Fremdtexte, HAZARD_KEYWORDS),
+     * 4. Rückfall aus der Kategorie.
+     */
+    private function deriveHazard(array $w, string $category): string
+    {
+        $explicit = (string) ($w['hazard'] ?? '');
+        if (in_array($explicit, self::HAZARD_CODES, true)) {
+            return $explicit;
+        }
+        $source = (string) ($w['source'] ?? '');
+        if (isset(self::SOURCE_HAZARD[$source])) {
+            return self::SOURCE_HAZARD[$source];
+        }
+        if ($source !== 'wetterstation') {
+            $haystack = mb_strtolower(($w['event'] ?? '') . ' ' . ($w['headline'] ?? ''));
+            foreach (self::HAZARD_KEYWORDS as $hazard => $keywords) {
+                foreach ($keywords as $kw) {
+                    if ($kw[0] === '/' ? preg_match($kw, $haystack) === 1 : mb_strpos($haystack, $kw) !== false) {
+                        return $hazard;
+                    }
+                }
+            }
+        }
+        return self::CATEGORY_HAZARD[$category] ?? 'other';
+    }
+
+    /**
+     * Gefahrencode aus den DWD-eventCode-GROUP-Werten (DWD direkt und der
+     * NINA-DWD-Kanal). "Glätte"/"Glatteis" im Ereignisnamen geht vor -- ob der
+     * DWD Reifglätte unter FROST oder GLAZE führt, ist nicht live belegt, für
+     * die Abnehmer ist es in jedem Fall Glätte. Leer = kein Code (Rückfall in
+     * deriveHazard()).
+     *
+     * @param array<int,string> $groups
+     */
+    private function dwdGroupHazard(array $groups, string $event): string
+    {
+        if (preg_match('/gl(?:ä|ae)tte|glatteis|eisregen/iu', $event) === 1) {
+            return 'ice';
+        }
+        $groups = array_map(fn ($g) => strtoupper(trim((string) $g)), $groups);
+        foreach (self::DWD_GROUP_HAZARD as $group => $hazard) {
+            if (in_array($group, $groups, true)) {
+                return $hazard;
+            }
+        }
+        return '';
+    }
+
+    /** Unix-Zeit aus einem CAP-Zeitstempel, null bei fehlend/unlesbar. */
+    private function capTimestamp($raw): ?int
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        $ts = strtotime((string) $raw);
+        return $ts === false ? null : $ts;
+    }
+
     private function severityRank(string $severity): int
     {
         return self::SEVERITY_RANK[$severity] ?? 0;
@@ -3274,6 +3414,9 @@ class WarnHub extends IPSModule
     //  HTTP-Helfer
     // ----------------------------------------------------------------
 
+    /** Fehlgeschlagene Abrufe im laufenden Poll -- Poll() erkennt daran ausgefallene Quellen (SOURCE_OUTAGE_HOLD_SEC). */
+    private int $httpFailures = 0;
+
     private function httpGet(string $url, int $timeout = 20, ?string $userAgent = null): ?string
     {
         if (!function_exists('curl_init')) {
@@ -3294,10 +3437,12 @@ class WarnHub extends IPSModule
 
         if ($resp === false) {
             $this->SendDebug('httpGet', $url . ' -- cURL-Fehler: ' . $err, 0);
+            $this->httpFailures++;
             return null;
         }
         if ($code >= 400) {
             $this->SendDebug('httpGet', $url . ' -- HTTP ' . $code, 0);
+            $this->httpFailures++;
             return null;
         }
         return (string) $resp;
@@ -3429,9 +3574,20 @@ class WarnHub extends IPSModule
             }
         }
 
+        // DWD-Meldungen über NINA tragen (wie das CAP-Original) eventCode GROUP;
+        // MoWaS & Co. haben keinen solchen Code -- dann bleibt 'hazard' leer und
+        // deriveHazard() fällt auf die Stichwörter zurück.
+        $groups = [];
+        foreach (($infoDe['eventCode'] ?? []) as $code) {
+            if (is_array($code) && strtoupper((string) ($code['valueName'] ?? '')) === 'GROUP') {
+                $groups[] = (string) ($code['value'] ?? '');
+            }
+        }
+
         return [
             'identifier' => (string) ($meta['identifier'] ?? $id),
             'source' => 'nina',
+            'hazard' => count($groups) > 0 ? $this->dwdGroupHazard($groups, (string) ($infoDe['event'] ?? '')) : '',
             'msgType' => (string) ($meta['msgType'] ?? 'Alert'),
             'event' => (string) ($infoDe['event'] ?? ''),
             'headline' => (string) ($infoDe['headline'] ?? ($infoDe['event'] ?? $this->Translate('Warning'))),
@@ -3625,9 +3781,17 @@ class WarnHub extends IPSModule
             }
         }
 
+        $groups = [];
+        foreach ($infoDe->eventCode as $code) {
+            if (strtoupper((string) $code->valueName) === 'GROUP') {
+                $groups[] = (string) $code->value;
+            }
+        }
+
         return [
             'identifier' => $identifier,
             'source' => 'dwd_direct',
+            'hazard' => $this->dwdGroupHazard($groups, (string) $infoDe->event),
             'msgType' => $msgType !== '' ? $msgType : 'Alert',
             'event' => (string) $infoDe->event,
             'headline' => (string) ($infoDe->headline ?: $infoDe->event ?: $this->Translate('Warning')),
@@ -4366,6 +4530,33 @@ class WarnHub extends IPSModule
         };
     }
 
+    /**
+     * Gefahrencode (Vertrag 1.0) aus demselben genormten Meteoalarm-Warntyp wie
+     * meteoalarmCategory() -- feiner: Frost (Low-temperature), Nebel, Hochwasser
+     * und Waldbrand bekommen eigene Codes statt "sonstige". "Snow-ice" bleibt
+     * Schnee: der Typ trennt Schnee und Glätte nicht, der freie Ereignisname
+     * entscheidet (deriveHazard() sieht ihn bei leerem Code über die Stichwörter).
+     */
+    private function meteoalarmHazard(string $title): string
+    {
+        if (!preg_match('/^\s*(?:green|yellow|orange|red)\s+(.+?)\s+warning\b/i', $title, $m)) {
+            return '';
+        }
+        return match (strtolower(trim($m[1]))) {
+            'wind' => 'wind',
+            'thunderstorm', 'thunderstorms' => 'thunderstorm',
+            'rain' => 'heavy_rain',
+            'rain-flood', 'flooding', 'flood', 'coastalevent', 'coastal event' => 'flood',
+            'snow-ice', 'snow/ice' => '',
+            'snow' => 'snow',
+            'ice' => 'ice',
+            'fog' => 'fog',
+            'high-temperature', 'high temperature' => 'heat',
+            'low-temperature', 'low temperature' => 'frost',
+            default => 'other',
+        };
+    }
+
     private function fetchMeteoalarmCountry(string $slug): array
     {
         $url = 'https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-' . $slug;
@@ -4405,6 +4596,7 @@ class WarnHub extends IPSModule
                 'identifier' => $identifier . '|' . $areaDesc,
                 'source' => 'meteoalarm',
                 'category' => $this->meteoalarmCategory((string) ($entry->title ?? '')),
+                'hazard' => $this->meteoalarmHazard((string) ($entry->title ?? '')),
                 'msgType' => $msgType !== '' ? $msgType : 'Alert',
                 'event' => (string) $capNs->event,
                 'headline' => (string) ($entry->title ?: $capNs->event ?: $this->Translate('Warning')),
@@ -4510,6 +4702,7 @@ class WarnHub extends IPSModule
                 'identifier' => 'geosphere-at-' . $warnId,
                 'source' => 'geosphere_at',
                 'category' => self::GEOSPHERE_AT_WARNTYPE_CATEGORY[$wtype] ?? 'sonstige',
+                'hazard' => self::GEOSPHERE_AT_WARNTYPE_HAZARD[$wtype] ?? 'other',
                 'msgType' => 'Alert',
                 'event' => $event,
                 'headline' => (string) ($props['text'] ?? sprintf($this->Translate('%s warning for %s'), $event, $areaName)),
@@ -5437,6 +5630,24 @@ class WarnHub extends IPSModule
     //  Abfragezyklus: Poll, Matching, Push, Schutzaktionen
     // ----------------------------------------------------------------
 
+    /**
+     * Ruft eine Quelle ab und merkt sie in $failedSources (Schlüssel = 'source'
+     * der Datensätze), wenn dabei ein Abruf scheiterte -- ihr Ergebnis ist dann
+     * unvollständig, eine fehlende Warnung heißt nicht "vorbei".
+     *
+     * @param array<string,bool> $failedSources
+     */
+    private function fetchFromSource(string $source, callable $fetch, array &$failedSources): array
+    {
+        $before = $this->httpFailures;
+        $out = $fetch();
+        if ($this->httpFailures > $before) {
+            $failedSources[$source] = true;
+            $this->SendDebug('Poll', 'Quelle ' . $source . ': Abruf unvollständig -- gemeldete Warnungen gelten als unbekannt, nicht als beendet.', 0);
+        }
+        return $out;
+    }
+
     public function Poll(): string
     {
         // Live gegengeprüft (04.09.2026, .tools/test-live-fetch.php): DWD
@@ -5452,47 +5663,48 @@ class WarnHub extends IPSModule
         }
 
         $warnings = [];
+        $failedSources = [];
         if ($this->ReadPropertyBoolean('QuelleNina')) {
-            $warnings = $this->fetchNina($ninaChannels);
+            $warnings = $this->fetchFromSource('nina', fn () => $this->fetchNina($ninaChannels), $failedSources);
         }
         if ($dwdDirectActive) {
-            $warnings = array_merge($warnings, $this->fetchDwdCap());
+            $warnings = array_merge($warnings, $this->fetchFromSource('dwd_direct', fn () => $this->fetchDwdCap(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuellePegelonline')) {
-            $warnings = array_merge($warnings, $this->fetchPegelonline());
+            $warnings = array_merge($warnings, $this->fetchFromSource('pegelonline', fn () => $this->fetchPegelonline(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleBfsOdl')) {
-            $warnings = array_merge($warnings, $this->fetchBfsOdl());
+            $warnings = array_merge($warnings, $this->fetchFromSource('bfs_odl', fn () => $this->fetchBfsOdl(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleMeteoalarm')) {
-            $warnings = array_merge($warnings, $this->fetchMeteoalarm());
+            $warnings = array_merge($warnings, $this->fetchFromSource('meteoalarm', fn () => $this->fetchMeteoalarm(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleGeosphereAt')) {
-            $warnings = array_merge($warnings, $this->fetchGeosphereAt());
+            $warnings = array_merge($warnings, $this->fetchFromSource('geosphere_at', fn () => $this->fetchGeosphereAt(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleBafuHydroCh')) {
-            $warnings = array_merge($warnings, $this->fetchBafuHydroCh());
+            $warnings = array_merge($warnings, $this->fetchFromSource('bafu_hydro_ch', fn () => $this->fetchBafuHydroCh(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleSedErdbebenCh')) {
-            $warnings = array_merge($warnings, $this->fetchSedErdbebenCh());
+            $warnings = array_merge($warnings, $this->fetchFromSource('sed_ch', fn () => $this->fetchSedErdbebenCh(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleAlertSwissCh')) {
-            $warnings = array_merge($warnings, $this->fetchAlertSwissCh());
+            $warnings = array_merge($warnings, $this->fetchFromSource('alertswiss_ch', fn () => $this->fetchAlertSwissCh(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleWaldbrandDe')) {
-            $warnings = array_merge($warnings, $this->fetchWaldbrandDe());
+            $warnings = array_merge($warnings, $this->fetchFromSource('waldbrand_de', fn () => $this->fetchWaldbrandDe(), $failedSources));
         }
         if ($this->ReadPropertyBoolean('QuelleOzonDe')) {
-            $warnings = array_merge($warnings, $this->fetchOzonDe());
+            $warnings = array_merge($warnings, $this->fetchFromSource('ozon_de', fn () => $this->fetchOzonDe(), $failedSources));
         }
         if ($this->ReadPropertyString('HagelschutzPollUrl') !== '') {
-            $warnings = array_merge($warnings, $this->fetchHagelschutzCh());
+            $warnings = array_merge($warnings, $this->fetchFromSource('hagelschutz_ch', fn () => $this->fetchHagelschutzCh(), $failedSources));
         }
         if ($this->hasWetterstationConfigured()) {
-            $warnings = array_merge($warnings, $this->fetchWetterstation());
+            $warnings = array_merge($warnings, $this->fetchFromSource('wetterstation', fn () => $this->fetchWetterstation(), $failedSources));
         }
 
-        $result = $this->processWarnings($warnings);
+        $result = $this->processWarnings($warnings, $failedSources);
         if ($this->ReadPropertyBoolean('WetterstationAutoRueckstellung')) {
             $this->checkWetterstationAutoRestore();
         }
@@ -5671,9 +5883,12 @@ class WarnHub extends IPSModule
         return trim($text);
     }
 
-    private function processWarnings(array $warnings): array
+    /** @param array<string,bool> $failedSources Quellen mit gescheitertem Abruf in diesem Poll (siehe fetchFromSource()) */
+    private function processWarnings(array $warnings, array $failedSources = []): array
     {
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
+        $standortKeys = $this->syncStandortKeys();
+        $now = time();
         $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
         $fired = json_decode($this->ReadAttributeString('FiredActions'), true) ?: [];
         $actions = array_filter($this->decodeSchutzaktionen(), fn ($a) => $a['Aktiv']);
@@ -5743,6 +5958,10 @@ class WarnHub extends IPSModule
             // damit sie nicht am (übersetzten) Anzeigetext hängt (SUITE.md 9).
             // Nur Fremdtexte (NINA, DWD, Alertswiss) laufen über die Stichwörter.
             $category = (string) ($w['category'] ?? '') !== '' ? (string) $w['category'] : $this->classifyEventCategory($w['event'], $w['headline']);
+            // Gefahrencode und Zeitstempel für den Vertrag 1.0 (GetActiveWarnings/GetWarningHistory).
+            $hazard = $this->deriveHazard($w, $category);
+            $onsetTs = $this->capTimestamp($w['onset'] ?? null) ?? $this->capTimestamp($w['effective'] ?? null);
+            $expiresTs = $this->capTimestamp($w['expires'] ?? null);
             // Schutzaktionen sollen erst kurz VOR dem tatsächlichen Beginn
             // einer Warnung feuern, nicht schon in dem Moment, in dem die
             // Meldung selbst eintrifft (die oft Stunden im Voraus kommt) --
@@ -5766,6 +5985,8 @@ class WarnHub extends IPSModule
                     continue;
                 }
                 $episodeKey = $this->warningEpisodeKey($w, $standort['Name']);
+                $standortKey = $standortKeys[$standort['Name']] ?? '';
+                $vertrag = ['standortKey' => $standortKey, 'hazard' => $hazard, 'onsetTs' => $onsetTs, 'expiresTs' => $expiresTs];
                 $coords = $this->resolveStandortCoords($standort);
                 $pushZiele = $this->parsePushZielNames($standort['PushZielFilter']);
 
@@ -5807,7 +6028,7 @@ class WarnHub extends IPSModule
                 if ($w['msgType'] === 'Cancel') {
                     if (isset($seen[$episodeKey])) {
                         unset($seen[$episodeKey]);
-                        $this->logHistory('entwarnung', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
+                        $this->logHistory('entwarnung', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source'], $vertrag);
                         if ($pushAktiv) {
                             $this->pushToAllWebfronts(
                                 $this->Translate('✅ All-clear'),
@@ -5830,11 +6051,16 @@ class WarnHub extends IPSModule
                     'instruction' => $w['instruction'] ?? '',
                     'severity' => $w['severity'],
                     'category' => $category,
+                    'hazard' => $hazard,
+                    'standortKey' => $standortKey,
                     'source' => $w['source'],
                     'distanceKm' => $distanceKm !== null ? round($distanceKm, 1) : null,
                     'nameMatched' => $nameMatched,
                     'effective' => $w['effective'],
                     'expires' => $w['expires'],
+                    'onset' => $w['onset'] ?? null,
+                    'onsetTs' => $onsetTs,
+                    'expiresTs' => $expiresTs,
                 ];
                 $activeByEpisode[$episodeKey] = isset($activeByEpisode[$episodeKey])
                     ? $this->pickMoreCurrentActiveEntry($activeByEpisode[$episodeKey], $activeEntry)
@@ -5862,8 +6088,15 @@ class WarnHub extends IPSModule
                 $isNewWarning = $seenEntry === null || $isGenuineGap;
                 $isEscalation = !$isNewWarning && $this->severityRank($w['severity']) > $this->severityRank($seenEntry['severity'] ?? 'Unknown');
                 if ($isNewWarning || $isEscalation) {
-                    $seen[$episodeKey] = ['identifier' => $w['identifier'], 'msgType' => $w['msgType'], 'pushedAt' => time(), 'severity' => $w['severity'], 'expires' => $w['expires']];
-                    $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
+                    if ($isGenuineGap && isset($seenEntry['event'])) {
+                        // Die vorige Episode war schon abgelaufen, bevor diese begann.
+                        $this->logEpisodeEnd($seenEntry, 'expired');
+                    }
+                    // Seit 1.21.0 trägt der Eintrag alles, was der "ende"-Historieneintrag
+                    // braucht, wenn die Episode später still verschwindet.
+                    $seen[$episodeKey] = ['identifier' => $w['identifier'], 'msgType' => $w['msgType'], 'pushedAt' => $now, 'severity' => $w['severity'], 'expires' => $w['expires'],
+                        'lastSeenTs' => $now, 'standort' => $standort['Name'], 'event' => $w['event'], 'headline' => $w['headline'], 'category' => $category, 'source' => $w['source']] + $vertrag;
+                    $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source'], $vertrag);
                     if ($pushAktiv) {
                         $text = $this->buildPushText($standort['Name'], $w, $nameMatched);
                         if ($isEscalation) {
@@ -5886,6 +6119,16 @@ class WarnHub extends IPSModule
                     $seen[$episodeKey]['severity'] = $w['severity'];
                     $seen[$episodeKey]['identifier'] = $w['identifier'];
                     $seen[$episodeKey]['expires'] = $w['expires'] ?? $seenEntry['expires'] ?? null;
+                    $seen[$episodeKey]['lastSeenTs'] = $now;
+                    if (isset($seenEntry['event'])) {
+                        // Folgemeldung derselben Episode: Text, Code und Ende nachziehen.
+                        $seen[$episodeKey]['headline'] = $w['headline'];
+                        $seen[$episodeKey]['hazard'] = $hazard;
+                        $seen[$episodeKey]['expiresTs'] = $expiresTs ?? ($seenEntry['expiresTs'] ?? null);
+                    } else {
+                        // Eintrag aus der Zeit vor 1.21.0: einmalig vervollständigen.
+                        $seen[$episodeKey] += ['standort' => $standort['Name'], 'event' => $w['event'], 'headline' => $w['headline'], 'category' => $category, 'source' => $w['source']] + $vertrag;
+                    }
                 }
 
                 foreach ($actions as $idx => $action) {
@@ -5975,7 +6218,7 @@ class WarnHub extends IPSModule
                         continue;
                     }
                     $seenFenster[$fensterKey] = true;
-                    $this->logHistory('fensterwarnung', $kontakt['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source']);
+                    $this->logHistory('fensterwarnung', $kontakt['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source'], $vertrag);
                     if ($pushAktiv) {
                         $this->pushToAllWebfronts(
                             $this->Translate('⚠️ Window/door open'),
@@ -6011,11 +6254,30 @@ class WarnHub extends IPSModule
         // aus der Quelle entfernt), still aus dem "gesehen"-/"ausgelöst"-
         // Speicher nehmen -- kein Cancel-Ereignis vorhanden, daher keine
         // Entwarnungs-Push, nur Bereinigung, damit der Zustand nicht
-        // dauerhaft "aktiv" bleibt.
-        foreach (array_keys($seen) as $episodeKey) {
-            if (!isset($stillPresentEpisodes[$episodeKey])) {
-                unset($seen[$episodeKey]);
+        // dauerhaft "aktiv" bleibt. Seit 1.21.0 mit Historien-Eintrag "ende"
+        // (Vertrag 1.0: Abnehmer wie FrigateHub brauchen das tatsächliche
+        // Ende, nicht nur den Meldezeitpunkt). Ausnahme: Ist die Quelle in
+        // diesem Poll ausgefallen, ist die Warnung nur unbekannt, nicht vorbei
+        // -- sie bleibt gemerkt (kein "ende", kein erneuter Push nach der
+        // Störung), solange sie nicht abgelaufen ist und höchstens
+        // SOURCE_OUTAGE_HOLD_SEC lang.
+        $heldEpisodes = [];
+        foreach ($seen as $episodeKey => $entry) {
+            if (isset($stillPresentEpisodes[$episodeKey])) {
+                continue;
             }
+            $expiresTs = $entry['expiresTs'] ?? $this->capTimestamp($entry['expires'] ?? null);
+            $expired = $expiresTs !== null && $expiresTs <= $now;
+            $source = (string) ($entry['source'] ?? strstr((string) $episodeKey, '|', true));
+            $lastSeenTs = (int) ($entry['lastSeenTs'] ?? $entry['pushedAt'] ?? 0);
+            if (!$expired && isset($failedSources[$source]) && $now - $lastSeenTs < self::SOURCE_OUTAGE_HOLD_SEC) {
+                $heldEpisodes[$episodeKey] = true;
+                continue;
+            }
+            if (isset($entry['event'])) {
+                $this->logEpisodeEnd($entry, $expired ? 'expired' : 'gone');
+            }
+            unset($seen[$episodeKey]);
         }
         foreach (array_keys($fired) as $fireKey) {
             // $fireKey = episodeKey . '|' . $idx -- der Aktions-Index hängt
@@ -6024,7 +6286,7 @@ class WarnHub extends IPSModule
             // Standort).
             $lastPipe = strrpos($fireKey, '|');
             $episodeKey = $lastPipe !== false ? substr($fireKey, 0, $lastPipe) : $fireKey;
-            if (!isset($stillPresentEpisodes[$episodeKey])) {
+            if (!isset($stillPresentEpisodes[$episodeKey]) && !isset($heldEpisodes[$episodeKey])) {
                 unset($fired[$fireKey]);
             }
         }
@@ -7210,13 +7472,161 @@ HTML;
     //  Öffentlicher Vertrag
     // ----------------------------------------------------------------
 
+    /**
+     * Aktuell aktive Warnungen je Standort. Vertrag 1.0 (seit 1.21.0, additiv):
+     * contractVersion, Standort-Katalog 'standorte' und je Warnung 'hazard',
+     * 'standortKey', 'onset', 'onsetTs', 'expiresTs' (Unix, null = unbekannt).
+     */
     public function GetActiveWarnings(): string
     {
         $active = json_decode($this->ReadAttributeString('LastActiveWarningsJson'), true) ?: [];
         return json_encode([
+            'contractVersion' => self::CONTRACT_VERSION,
             'generatedAt' => $this->ReadAttributeInteger('LastPollTs'),
+            'standorte' => $this->standortCatalog(),
             'warnings' => $active,
         ]);
+    }
+
+    /**
+     * Warnungs-Historie als Vertrag 1.0: {contractVersion, generatedAt,
+     * standorte, entries} -- entries wie GetHistory() (newest first), dazu
+     * nur Einträge ab $SinceTs (Unix, 0 = alle). Eigene Funktion, weil
+     * GetHistory() seit jeher eine reine Liste liefert und Skripte daran
+     * hängen.
+     */
+    public function GetWarningHistory(int $Limit = 100, int $SinceTs = 0): string
+    {
+        $log = json_decode($this->ReadAttributeString('WarnHistory'), true) ?: [];
+        $log = array_reverse($log);
+        if ($SinceTs > 0) {
+            $log = array_values(array_filter($log, fn ($e) => (int) ($e['ts'] ?? 0) >= $SinceTs));
+        }
+        if ($Limit > 0) {
+            $log = array_slice($log, 0, $Limit);
+        }
+        return json_encode([
+            'contractVersion' => self::CONTRACT_VERSION,
+            'generatedAt' => time(),
+            'standorte' => $this->standortCatalog(),
+            'entries' => $log,
+        ]);
+    }
+
+    /**
+     * Standort-Katalog des Vertrags: je Zeile fester Schlüssel, Name, aktiv,
+     * mobil (Live-Position gebunden) und ob es der Symcon-Systemstandort ist
+     * (fester Standort, nächstgelegener innerhalb SYSTEM_LOCATION_MATCH_KM).
+     * FrigateHub filtert damit die Warnungen am Kamerastandort heraus.
+     */
+    private function standortCatalog(): array
+    {
+        $keys = $this->syncStandortKeys();
+        $rows = array_values(array_filter($this->decodeStandorte(), fn ($s) => $s['Name'] !== ''));
+        $system = $this->getSystemLocation();
+        $systemIdx = null;
+        if ($system !== null) {
+            $best = null;
+            foreach ($rows as $i => $row) {
+                if ($this->isStandortMobil($row) || ($row['Lat'] == 0 && $row['Lon'] == 0)) {
+                    continue;
+                }
+                $d = WHUB_Geo::haversineKm($system['lat'], $system['lon'], $row['Lat'], $row['Lon']);
+                if ($d <= self::SYSTEM_LOCATION_MATCH_KM && ($best === null || $d < $best)) {
+                    $best = $d;
+                    $systemIdx = $i;
+                }
+            }
+        }
+        $out = [];
+        foreach ($rows as $i => $row) {
+            $out[] = [
+                'standortKey' => $keys[$row['Name']] ?? '',
+                'name' => $row['Name'],
+                'active' => $row['Aktiv'],
+                'mobile' => $this->isStandortMobil($row),
+                'isSystemLocation' => $i === $systemIdx,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Fester Schlüssel je Standortzeile ("loc-" + 8 Hex-Zeichen), gemerkt im
+     * Attribut StandortKeys. Zuordnung bei jedem Aufruf: zuerst über den Namen,
+     * dann über den Ort (Koordinaten bzw. gebundene Live-Variablen bzw.
+     * Ortsname) -- eine umbenannte Zeile behält so ihren Schlüssel. Nur wenn
+     * Name UND Ort zugleich geändert werden, gibt es einen neuen. Schlüssel
+     * entfernter Zeilen bleiben (bis 50) gemerkt, falls die Zeile zurückkommt.
+     *
+     * @return array<string,string> Standortname => Schlüssel
+     */
+    private function syncStandortKeys(): array
+    {
+        $known = json_decode($this->ReadAttributeString('StandortKeys'), true);
+        $known = is_array($known) ? array_values(array_filter($known, fn ($k) => is_array($k) && !empty($k['key']))) : [];
+        $rows = array_values(array_filter($this->decodeStandorte(), fn ($s) => $s['Name'] !== ''));
+        $used = [];
+        $assigned = [];
+        foreach ($rows as $i => $row) {
+            foreach ($known as $j => $k) {
+                if (!isset($used[$j]) && ($k['name'] ?? null) === $row['Name']) {
+                    $used[$j] = true;
+                    $assigned[$i] = $k['key'];
+                    break;
+                }
+            }
+        }
+        foreach ($rows as $i => $row) {
+            $fp = $this->standortFingerprint($row);
+            if (isset($assigned[$i]) || $fp === null) {
+                continue;
+            }
+            foreach ($known as $j => $k) {
+                if (!isset($used[$j]) && ($k['fp'] ?? null) === $fp) {
+                    $used[$j] = true;
+                    $assigned[$i] = $k['key'];
+                    break;
+                }
+            }
+        }
+        $taken = array_column($known, 'key');
+        $next = [];
+        $map = [];
+        foreach ($rows as $i => $row) {
+            if (!isset($assigned[$i])) {
+                do {
+                    $key = 'loc-' . bin2hex(random_bytes(4));
+                } while (in_array($key, $taken, true));
+                $taken[] = $key;
+                $assigned[$i] = $key;
+            }
+            $next[] = ['key' => $assigned[$i], 'name' => $row['Name'], 'fp' => $this->standortFingerprint($row)];
+            $map[$row['Name']] ??= $assigned[$i];
+        }
+        foreach ($known as $j => $k) {
+            if (!isset($used[$j]) && count($next) < 50) {
+                $next[] = $k;
+            }
+        }
+        $encoded = json_encode($next);
+        if ($encoded !== $this->ReadAttributeString('StandortKeys')) {
+            $this->WriteAttributeString('StandortKeys', $encoded);
+        }
+        return $map;
+    }
+
+    /** Ort einer Standortzeile unabhängig vom Namen (für syncStandortKeys()), null = nicht bestimmbar. */
+    private function standortFingerprint(array $row): ?string
+    {
+        if ($this->isStandortMobil($row)) {
+            return 'var:' . $row['QuellVarLat'] . ':' . $row['QuellVarLon'];
+        }
+        if ($row['Lat'] != 0 || $row['Lon'] != 0) {
+            return sprintf('pos:%.4f,%.4f', $row['Lat'], $row['Lon']);
+        }
+        $ort = mb_strtolower(trim($row['Ort']));
+        return $ort !== '' ? 'ort:' . $ort : null;
     }
 
     /**
@@ -7244,22 +7654,57 @@ HTML;
      * ausgeschaltet war). Deckel bei 500 Einträgen, älteste zuerst raus
      * (identisches Prinzip wie EMS' SpecialEventsLog).
      */
-    private function logHistory(string $kind, string $standortName, string $event, string $headline, string $severity, string $category, string $source): void
+    /**
+     * @param array{standortKey?:string,hazard?:string,onsetTs?:?int,expiresTs?:?int,endReason?:string} $vertrag
+     *        Felder des Vertrags 1.0 (seit 1.21.0); 'hazard' fällt ohne Angabe
+     *        auf die Kategorie zurück.
+     */
+    private function logHistory(string $kind, string $standortName, string $event, string $headline, string $severity, string $category, string $source, array $vertrag = []): void
     {
         $log = json_decode($this->ReadAttributeString('WarnHistory'), true) ?: [];
         $log[] = [
             'ts' => time(),
-            'kind' => $kind, // 'warnung', 'entwarnung', 'eskalation', 'rueckstellung' oder 'fensterwarnung'
+            'kind' => $kind, // 'warnung', 'entwarnung', 'eskalation', 'ende', 'rueckstellung' oder 'fensterwarnung'
             'standort' => $standortName,
             'event' => $event,
             'headline' => $headline,
             'severity' => $severity,
             'category' => $category,
             'source' => $source,
-        ];
+            'standortKey' => (string) ($vertrag['standortKey'] ?? ''),
+            'hazard' => (string) ($vertrag['hazard'] ?? (self::CATEGORY_HAZARD[$category] ?? 'other')),
+            'onsetTs' => $vertrag['onsetTs'] ?? null,
+            'expiresTs' => $vertrag['expiresTs'] ?? null,
+        ] + (isset($vertrag['endReason']) ? ['endReason' => $vertrag['endReason']] : []);
         if (count($log) > 500) {
             $log = array_slice($log, count($log) - 500);
         }
         $this->WriteAttributeString('WarnHistory', json_encode($log));
+    }
+
+    /**
+     * Historien-Eintrag "ende" für eine Episode, die ohne Entwarnung endet
+     * (abgelaufen: 'expired', aus der Quelle verschwunden: 'gone'). Kein Push --
+     * nur der Verlauf, damit Abnehmer das tatsächliche Ende kennen. Daten aus
+     * dem gemerkten Eintrag (SeenWarnings, seit 1.21.0 vollständig).
+     */
+    private function logEpisodeEnd(array $entry, string $reason): void
+    {
+        $this->logHistory(
+            'ende',
+            (string) ($entry['standort'] ?? ''),
+            (string) ($entry['event'] ?? ''),
+            (string) ($entry['headline'] ?? ''),
+            (string) ($entry['severity'] ?? 'Unknown'),
+            (string) ($entry['category'] ?? 'sonstige'),
+            (string) ($entry['source'] ?? ''),
+            [
+                'standortKey' => (string) ($entry['standortKey'] ?? ''),
+                'hazard' => (string) ($entry['hazard'] ?? ''),
+                'onsetTs' => $entry['onsetTs'] ?? null,
+                'expiresTs' => $entry['expiresTs'] ?? null,
+                'endReason' => $reason,
+            ]
+        );
     }
 }
