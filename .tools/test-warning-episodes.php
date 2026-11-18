@@ -320,7 +320,9 @@ $hub5->SetProp('WebFronts', json_encode($webfronts));
 $hub5->SetProp('PushAktiv', true);
 $GLOBALS['whub_test_pushCalls'] = [];
 $rBeide = callPrivate($hub5, 'processWarnings', [[machReissue('dwd-pvw-multi', -60, 1800)]]);
-check('dieselbe Meldung an 2 Standorten: 2 separate Pushes (je Standort eine eigene Episode)', $rBeide['newlyPushed'] === 2 && count($GLOBALS['whub_test_pushCalls']) === 2);
+// Seit 1.21.0: zwei eigene Episoden, aber EIN gebündelter Push mit beiden Namen
+// (Live-Fund Privat 18.11.2026, drei Standorte am selben Ort = dreifache Pushes).
+check('dieselbe Meldung an 2 Standorten: 2 eigene Episoden, aber 1 gebündelter Push mit beiden Namen', $rBeide['newlyPushed'] === 2 && count($GLOBALS['whub_test_pushCalls']) === 1 && str_contains($GLOBALS['whub_test_pushCalls'][0][3], $standort['Name']) && str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Zweitwohnsitz'));
 
 echo "\n== 'active'-Liste (Kachel 'Alle Warnungen'): mehrere GLEICHZEITIG im selben Poll vorliegende Reissues derselben Episode erscheinen NUR EINMAL, nicht als mehrere fast identische Karten (Praxis-Fund ruan, Symcon-Forum, 09.09.2026: DWD zeigt auf seiner eigenen Seite und ein drittes Symcon-Modul zeigen ebenfalls nur EINEN Eintrag) ==\n";
 $hub6 = new WarnHub();

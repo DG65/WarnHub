@@ -393,7 +393,9 @@ $GLOBALS['whub_test_pushCalls'] = [];
 $r1 = callPrivate($hub3, 'processWarnings', [[$machWarnung()]]);
 check('genau eine Fenster-Warnung gemeldet', $r1['fensterWarnungen'] === 1);
 check('genau ein zusätzlicher Push wurde tatsächlich zugestellt (Warnung + Fensterwarnung = 2 insgesamt)', count($GLOBALS['whub_test_pushCalls']) === 2);
-$fensterCall = $GLOBALS['whub_test_pushCalls'][1];
+// Seit 1.21.0 gehen Warnungs-Pushes gesammelt am Ende des Abrufs raus, die
+// Fenster-Meldung sofort -- deshalb über den Titel suchen, nicht über die Position.
+$fensterCall = array_values(array_filter($GLOBALS['whub_test_pushCalls'], fn ($c) => str_contains((string) $c[2], 'Fenster')))[0] ?? [null, null, '', ''];
 check('Push-Titel ist "⚠️ Fenster/Tür offen"', $fensterCall[2] === '⚠️ Fenster/Tür offen');
 check('Push-Text nennt den Kontakt-Namen', str_contains($fensterCall[3], 'Küche Fenster'));
 

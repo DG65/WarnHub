@@ -717,6 +717,15 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyInteger('PollIntervalMinutes', 10);
         $this->RegisterPropertyBoolean('PushAktiv', true);
         $this->RegisterPropertyString('PushSound', 'alarm');
+        // Ruhezeit (seit 1.21.0): nachts nur Meldungen ab RuhezeitMinSeverity,
+        // leichtere morgens als Sammelmeldung. Symcon kennt keinen lautlosen
+        // Push (WFC_PushNotification "explizit ohne Sound": geht nicht, paresy
+        // 2016) -- deshalb zurückhalten statt leise zustellen.
+        $this->RegisterPropertyBoolean('RuhezeitAktiv', false);
+        $this->RegisterPropertyInteger('RuhezeitVon', 22);
+        $this->RegisterPropertyInteger('RuhezeitBis', 7);
+        $this->RegisterPropertyInteger('RuhezeitMinSeverity', 3);
+        $this->RegisterPropertyBoolean('RuhezeitSammelmeldung', true);
         $this->RegisterPropertyString('Schutzaktionen', '[]');
         $this->RegisterPropertyString('Fensterkontakte', '[]');
         $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
@@ -737,6 +746,8 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeString('WarnHistory', '[]');
         // Fester Schlüssel je Standortzeile (Vertrag 1.0, siehe syncStandortKeys()).
         $this->RegisterAttributeString('StandortKeys', '[]');
+        // In der Ruhezeit zurückgehaltene Warnungen für die Morgen-Sammelmeldung.
+        $this->RegisterAttributeString('RuhezeitZurueckgehalten', '[]');
         $this->RegisterAttributeInteger('PushSnoozeUntilTs', 0);
         $this->RegisterAttributeString('WetterstationRestoreState', '{}');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
@@ -1229,6 +1240,18 @@ class WarnHub extends IPSModule
                         ['type' => 'Button', 'caption' => $this->Translate('🔔 Resume notifications'), 'onClick' => 'echo WHUB_CancelSnooze($id);'],
                     ],
                 ],
+                ['type' => 'CheckBox', 'name' => 'RuhezeitAktiv', 'caption' => $this->Translate('🌙 Quiet hours')],
+                ['type' => 'Label', 'name' => 'RuhezeitAktivHint', 'caption' => $this->Translate('Every night in this time window, only warnings from the chosen severity on are pushed. Lighter warnings are held back and still on record in the history and tiles; protective actions keep running. A truly silent push does not exist in Symcon, so holding back is the only way to keep the night quiet.')],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'NumberSpinner', 'name' => 'RuhezeitVon', 'caption' => $this->Translate('From (hour)'), 'minimum' => 0, 'maximum' => 23, 'suffix' => ':00'],
+                        ['type' => 'NumberSpinner', 'name' => 'RuhezeitBis', 'caption' => $this->Translate('Until (hour)'), 'minimum' => 0, 'maximum' => 23, 'suffix' => ':00'],
+                        ['type' => 'Select', 'name' => 'RuhezeitMinSeverity', 'caption' => $this->Translate('Push at night from'), 'options' => $this->severityOptions()],
+                    ],
+                ],
+                ['type' => 'CheckBox', 'name' => 'RuhezeitSammelmeldung', 'caption' => $this->Translate('Morning summary')],
+                ['type' => 'Label', 'name' => 'RuhezeitSammelmeldungHint', 'caption' => $this->Translate('After the quiet hours: one push with the held-back warnings that are still active then.')],
             ],
         ];
 
@@ -1627,7 +1650,13 @@ class WarnHub extends IPSModule
     {
         $sounds = ['alarm', 'bell', 'boom', 'buzzer', 'connected', 'dark', 'digital', 'drums', 'duck', 'full',
             'happy', 'horn', 'inception', 'kazoo', 'roll', 'siren', 'space', 'trickling', 'turn'];
-        return array_map(fn ($s) => ['caption' => $s, 'value' => $s], $sounds);
+        // Leer = Standardton des Handys: die offizielle Doku nennt nur die
+        // Namen oben, ein leerer oder unbekannter Name spielt laut mehreren
+        // Forenberichten den Standardton (meist leiser als "alarm").
+        return array_merge(
+            [['caption' => $this->Translate('Phone default sound'), 'value' => '']],
+            array_map(fn ($s) => ['caption' => $s, 'value' => $s], $sounds)
+        );
     }
 
     /**
@@ -4208,7 +4237,8 @@ class WarnHub extends IPSModule
                     $entry['Source'] === 'windboe' ? 'sturm' : 'starkregen',
                     'wetterstation'
                 );
-                if ($this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed()) {
+                // Rückstellungs-Hinweis ist keine Warnung -- in der Ruhezeit still.
+                if ($this->ReadPropertyBoolean('PushAktiv') && !$this->isPushSnoozed() && !$this->quietHoursBlocks('Unknown', time())) {
                     $this->pushToAllWebfronts(
                         $this->Translate('🔽 Reset automatically'),
                         sprintf($this->Translate('Wind/rain had been calm again for %d minutes -- protective action reset.'), (int) round(self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN / 60)),
@@ -5918,6 +5948,19 @@ class WarnHub extends IPSModule
         $actionsTriggered = 0;
         $fensterWarnungen = 0;
         $standortGeoNamesCache = [];
+        // Pushes werden gesammelt und erst am Ende verschickt (flushPushQueue()):
+        // dieselbe Meldung für mehrere Standorte geht als EIN Push mit allen
+        // Standortnamen raus, und die Ruhezeit greift an einer Stelle.
+        $pushQueue = [];
+        // Je Episode: höchster Schweregrad und spätestes Ende aller Warnungen
+        // dieses Abrufs -- erst am Ende in $seen übernommen (siehe unten).
+        $pollAgg = [];
+
+        // Höchster Schweregrad zuerst: liegen für dieselbe Episode mehrere
+        // Warnungen gleichzeitig vor, wird die schwerste als "neu" gemeldet und
+        // die leichteren gelten als Teil davon -- sonst erst "neu" und im
+        // selben Abruf gleich noch "hochgestuft".
+        usort($warnings, fn ($x, $y) => $this->severityRank((string) ($y['severity'] ?? '')) <=> $this->severityRank((string) ($x['severity'] ?? '')));
 
         foreach ($warnings as $w) {
             // Härtung gegen HTML-Reste in Texten externer Quellen -- kein
@@ -6030,12 +6073,7 @@ class WarnHub extends IPSModule
                         unset($seen[$episodeKey]);
                         $this->logHistory('entwarnung', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source'], $vertrag);
                         if ($pushAktiv) {
-                            $this->pushToAllWebfronts(
-                                $this->Translate('✅ All-clear'),
-                                sprintf($this->Translate('%s: %s lifted.'), $standort['Name'], $w['headline']),
-                                $pushSound,
-                                $pushZiele
-                            );
+                            $this->queuePush($pushQueue, 'entwarnung', $standort['Name'], $episodeKey, $w, $pushZiele, false);
                         }
                         $cancelled++;
                     }
@@ -6081,10 +6119,33 @@ class WarnHub extends IPSModule
                 // NICHT erneut (keine dringende Nachricht), hält die
                 // gespeicherte Severity aber aktuell, damit ein SPÄTERES
                 // erneutes Ansteigen auf denselben Wert wieder zählt.
+                //
+                // Echte Lücke heißt: die gemerkte Warnung ist SCHON ABGELAUFEN.
+                // Bis 1.20.1 reichte "endet vor dem Beginn der neuen" -- lagen
+                // für dieselbe Episode zwei Warnungen gleichzeitig vor (jetzt
+                // bis 03:00 und später ab 04:00), verkürzte die eine das gemerkte
+                // Ende, die andere galt dann wieder als neu, bei JEDEM Abruf.
+                // Live-Fund Privat 18.11.2026: STURMBÖEN 0-5 Uhr alle 10 Minuten
+                // erneut gepusht, das Push-Tageslimit (250) der Anlage war
+                // erschöpft. Schweregrad und Ende übernimmt die Episode deshalb
+                // erst am Ende des Abrufs aus allen ihren Warnungen ($pollAgg).
+                $agg = $pollAgg[$episodeKey] ?? ['rank' => -1, 'severity' => 'Unknown', 'expiresTs' => null, 'expires' => null, 'openEnd' => false];
+                if ($this->severityRank($w['severity']) > $agg['rank']) {
+                    $agg['rank'] = $this->severityRank($w['severity']);
+                    $agg['severity'] = $w['severity'];
+                }
+                if ($expiresTs === null) {
+                    $agg['openEnd'] = true;
+                } elseif ($agg['expiresTs'] === null || $expiresTs > $agg['expiresTs']) {
+                    $agg['expiresTs'] = $expiresTs;
+                    $agg['expires'] = $w['expires'];
+                }
+                $pollAgg[$episodeKey] = $agg;
+
                 $seenEntry = $seen[$episodeKey] ?? null;
                 $prevExpiresTs = $seenEntry !== null && !empty($seenEntry['expires']) ? strtotime((string) $seenEntry['expires']) : false;
                 $currentStartTs = !empty($w['onset']) ? strtotime((string) $w['onset']) : (!empty($w['effective']) ? strtotime((string) $w['effective']) : false);
-                $isGenuineGap = $seenEntry !== null && $prevExpiresTs !== false && $currentStartTs !== false && $prevExpiresTs < $currentStartTs;
+                $isGenuineGap = $seenEntry !== null && $prevExpiresTs !== false && $currentStartTs !== false && $prevExpiresTs < $currentStartTs && $prevExpiresTs < $now;
                 $isNewWarning = $seenEntry === null || $isGenuineGap;
                 $isEscalation = !$isNewWarning && $this->severityRank($w['severity']) > $this->severityRank($seenEntry['severity'] ?? 'Unknown');
                 if ($isNewWarning || $isEscalation) {
@@ -6098,17 +6159,7 @@ class WarnHub extends IPSModule
                         'lastSeenTs' => $now, 'standort' => $standort['Name'], 'event' => $w['event'], 'headline' => $w['headline'], 'category' => $category, 'source' => $w['source']] + $vertrag;
                     $this->logHistory($isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source'], $vertrag);
                     if ($pushAktiv) {
-                        $text = $this->buildPushText($standort['Name'], $w, $nameMatched);
-                        if ($isEscalation) {
-                            $text = '⬆️ Hochgestuft (' . $w['severity'] . '): ' . $text;
-                        }
-                        $this->pushToAllWebfronts(
-                            $this->buildPushTitle($w['severity'], $w['event']),
-                            $text,
-                            $pushSound,
-                            $pushZiele,
-                            $w['severity']
-                        );
+                        $this->queuePush($pushQueue, $isNewWarning ? 'warnung' : 'eskalation', $standort['Name'], $episodeKey, $w, $pushZiele, $nameMatched);
                     }
                     if ($isNewWarning) {
                         $newlyPushed++;
@@ -6116,15 +6167,15 @@ class WarnHub extends IPSModule
                         $escalated++;
                     }
                 } elseif ($seenEntry !== null) {
-                    $seen[$episodeKey]['severity'] = $w['severity'];
+                    // Schweregrad und Ende NICHT hier (das kippte bei zwei
+                    // gleichzeitigen Warnungen bei jedem Abruf hin und her),
+                    // sondern am Ende des Abrufs aus $pollAgg.
                     $seen[$episodeKey]['identifier'] = $w['identifier'];
-                    $seen[$episodeKey]['expires'] = $w['expires'] ?? $seenEntry['expires'] ?? null;
                     $seen[$episodeKey]['lastSeenTs'] = $now;
                     if (isset($seenEntry['event'])) {
-                        // Folgemeldung derselben Episode: Text, Code und Ende nachziehen.
+                        // Folgemeldung derselben Episode: Text und Code nachziehen.
                         $seen[$episodeKey]['headline'] = $w['headline'];
                         $seen[$episodeKey]['hazard'] = $hazard;
-                        $seen[$episodeKey]['expiresTs'] = $expiresTs ?? ($seenEntry['expiresTs'] ?? null);
                     } else {
                         // Eintrag aus der Zeit vor 1.21.0: einmalig vervollständigen.
                         $seen[$episodeKey] += ['standort' => $standort['Name'], 'event' => $w['event'], 'headline' => $w['headline'], 'category' => $category, 'source' => $w['source']] + $vertrag;
@@ -6217,6 +6268,11 @@ class WarnHub extends IPSModule
                     if (isset($seenFenster[$fensterKey])) {
                         continue;
                     }
+                    // Ruhezeit: noch nicht als gemeldet merken -- steht das
+                    // Fenster nach der Ruhezeit noch offen, kommt die Meldung dann.
+                    if ($pushAktiv && $this->quietHoursBlocks($w['severity'], $now)) {
+                        continue;
+                    }
                     $seenFenster[$fensterKey] = true;
                     $this->logHistory('fensterwarnung', $kontakt['Name'], $w['event'], $w['headline'], $w['severity'], $category, $w['source'], $vertrag);
                     if ($pushAktiv) {
@@ -6249,6 +6305,24 @@ class WarnHub extends IPSModule
             }
         }
         $this->WriteAttributeString('SeenFensterWarnungen', json_encode($seenFenster));
+
+        // Schweregrad und Ende je Episode aus ALLEN Warnungen dieses Abrufs
+        // (siehe $pollAgg oben): höchster Schweregrad, spätestes Ende. Eine
+        // echte Abstufung (nur noch leichtere Warnungen) wird so weiterhin
+        // übernommen, ein späteres Wieder-Ansteigen zählt als Hochstufung.
+        foreach ($pollAgg as $episodeKey => $agg) {
+            if (!isset($seen[$episodeKey])) {
+                continue; // Entwarnung im selben Abruf
+            }
+            $seen[$episodeKey]['severity'] = $agg['severity'];
+            if ($agg['openEnd']) {
+                $seen[$episodeKey]['expires'] = null;
+                $seen[$episodeKey]['expiresTs'] = null;
+            } elseif ($agg['expiresTs'] !== null) {
+                $seen[$episodeKey]['expires'] = $agg['expires'];
+                $seen[$episodeKey]['expiresTs'] = $agg['expiresTs'];
+            }
+        }
 
         // Episoden, die im aktuellen Abruf nicht mehr auftauchen (abgelaufen/
         // aus der Quelle entfernt), still aus dem "gesehen"-/"ausgelöst"-
@@ -6294,6 +6368,11 @@ class WarnHub extends IPSModule
         $this->WriteAttributeString('SeenWarnings', json_encode($seen));
         $this->WriteAttributeString('FiredActions', json_encode($fired));
 
+        $this->flushPushQueue($pushQueue, $pushSound, $now);
+        if ($pushAktiv) {
+            $this->sendQuietHoursSummary($seen, $pushSound, $now);
+        }
+
         $active = array_values($activeByEpisode);
 
         return [
@@ -6305,6 +6384,169 @@ class WarnHub extends IPSModule
             'actionsTriggered' => $actionsTriggered,
             'fensterWarnungen' => $fensterWarnungen,
         ];
+    }
+
+    /**
+     * Merkt einen Push für flushPushQueue() vor. Gleiche Meldung (Art,
+     * Ereignis, Überschrift, Schweregrad, Ende, Push-Ziele) für mehrere
+     * Standorte = EIN Push mit allen Standortnamen. Live-Fund Privat
+     * 18.11.2026: drei Standorte am selben Ort (Haus und zwei Autos) machten
+     * aus jeder Warnung drei Pushes je Ziel.
+     *
+     * @param array<string,array<string,mixed>> $queue
+     * @param array<int,string> $ziele "Push nur an"-Filter des Standorts
+     */
+    private function queuePush(array &$queue, string $kind, string $standortName, string $episodeKey, array $w, array $ziele, bool $nameMatched): void
+    {
+        $zieleSortiert = $ziele;
+        sort($zieleSortiert);
+        $key = implode("\x1f", [$kind, $w['event'] ?? '', $w['headline'] ?? '', $w['severity'] ?? '', (string) ($w['expires'] ?? ''), $w['instruction'] ?? '', json_encode($zieleSortiert), $nameMatched ? '1' : '0']);
+        if (!isset($queue[$key])) {
+            $queue[$key] = ['kind' => $kind, 'w' => $w, 'ziele' => $ziele, 'nameMatched' => $nameMatched, 'standorte' => [], 'episodeKeys' => []];
+        }
+        if (!in_array($standortName, $queue[$key]['standorte'], true)) {
+            $queue[$key]['standorte'][] = $standortName;
+        }
+        $queue[$key]['episodeKeys'][] = $episodeKey;
+    }
+
+    /**
+     * Verschickt die gesammelten Pushes eines Abrufs. In der Ruhezeit gehen
+     * nur Meldungen ab dem eingestellten Schweregrad raus; leichtere Warnungen
+     * werden für die Morgen-Sammelmeldung gemerkt, leichtere Entwarnungen
+     * entfallen (und streichen ihre gemerkte Warnung).
+     *
+     * @param array<string,array<string,mixed>> $queue
+     */
+    private function flushPushQueue(array $queue, string $sound, int $now): void
+    {
+        foreach ($queue as $item) {
+            $w = $item['w'];
+            $severity = (string) ($w['severity'] ?? 'Unknown');
+            $namen = implode(', ', $item['standorte']);
+            if ($this->quietHoursBlocks($severity, $now)) {
+                if ($item['kind'] === 'entwarnung') {
+                    $this->forgetQuietHoursItems($item['episodeKeys']);
+                } elseif ($this->ReadPropertyBoolean('RuhezeitSammelmeldung')) {
+                    $this->holdForQuietHoursSummary($item, $namen);
+                }
+                $this->SendDebug('Ruhezeit', 'Push zurückgehalten: ' . $namen . ': ' . ($w['headline'] ?? ''), 0);
+                continue;
+            }
+            if ($item['kind'] === 'entwarnung') {
+                $this->pushToAllWebfronts(
+                    $this->Translate('✅ All-clear'),
+                    sprintf($this->Translate('%s: %s lifted.'), $namen, $w['headline']),
+                    $sound,
+                    $item['ziele']
+                );
+                continue;
+            }
+            $text = $this->buildPushText($namen, $w, $item['nameMatched']);
+            if ($item['kind'] === 'eskalation') {
+                $text = sprintf($this->Translate('⬆️ Upgraded (%s): '), $severity) . $text;
+            }
+            $this->pushToAllWebfronts($this->buildPushTitle($severity, (string) ($w['event'] ?? '')), $text, $sound, $item['ziele'], $severity);
+        }
+    }
+
+    /** Ruhezeit aktiv und gerade innerhalb des Zeitfensters (volle Stunden, auch über Mitternacht). */
+    private function isQuietHours(int $now): bool
+    {
+        if (!$this->ReadPropertyBoolean('RuhezeitAktiv')) {
+            return false;
+        }
+        $von = $this->ReadPropertyInteger('RuhezeitVon');
+        $bis = $this->ReadPropertyInteger('RuhezeitBis');
+        if ($von === $bis) {
+            return false;
+        }
+        $stunde = (int) date('G', $now);
+        return $von < $bis ? ($stunde >= $von && $stunde < $bis) : ($stunde >= $von || $stunde < $bis);
+    }
+
+    /** true = diese Meldung wird in der Ruhezeit nicht gepusht (Schweregrad unter der Ruhezeit-Grenze). */
+    private function quietHoursBlocks(string $severity, int $now): bool
+    {
+        return $this->isQuietHours($now) && $this->severityRank($severity) < $this->ReadPropertyInteger('RuhezeitMinSeverity');
+    }
+
+    private function holdForQuietHoursSummary(array $item, string $namen): void
+    {
+        $held = json_decode($this->ReadAttributeString('RuhezeitZurueckgehalten'), true) ?: [];
+        $held[] = [
+            'standorte' => $namen,
+            'headline' => (string) ($item['w']['headline'] ?? ''),
+            'severity' => (string) ($item['w']['severity'] ?? 'Unknown'),
+            'expires' => $item['w']['expires'] ?? null,
+            'episodeKeys' => array_values(array_unique($item['episodeKeys'])),
+            'ziele' => $item['ziele'],
+        ];
+        $this->WriteAttributeString('RuhezeitZurueckgehalten', json_encode(array_slice($held, -50)));
+    }
+
+    /** @param array<int,string> $episodeKeys */
+    private function forgetQuietHoursItems(array $episodeKeys): void
+    {
+        $held = json_decode($this->ReadAttributeString('RuhezeitZurueckgehalten'), true) ?: [];
+        $rest = array_values(array_filter($held, fn ($h) => count(array_intersect($h['episodeKeys'] ?? [], $episodeKeys)) === 0));
+        if (count($rest) !== count($held)) {
+            $this->WriteAttributeString('RuhezeitZurueckgehalten', json_encode($rest));
+        }
+    }
+
+    /**
+     * Nach der Ruhezeit EINE Sammelmeldung mit den nachts zurückgehaltenen
+     * Warnungen, die jetzt noch aktiv sind -- längst vorbei gibt es nichts
+     * mehr zu melden.
+     *
+     * @param array<string,array<string,mixed>> $seen gemerkte Episoden nach der Bereinigung
+     */
+    private function sendQuietHoursSummary(array $seen, string $sound, int $now): void
+    {
+        if ($this->isQuietHours($now)) {
+            return;
+        }
+        $held = json_decode($this->ReadAttributeString('RuhezeitZurueckgehalten'), true) ?: [];
+        if (count($held) === 0) {
+            return;
+        }
+        $this->WriteAttributeString('RuhezeitZurueckgehalten', '[]');
+        $zeilen = [];
+        $maxSeverity = 'Unknown';
+        $ziele = [];
+        $alleZiele = false;
+        foreach ($held as $h) {
+            $nochAktiv = count(array_filter($h['episodeKeys'] ?? [], fn ($k) => isset($seen[$k]))) > 0;
+            if (!$nochAktiv) {
+                continue;
+            }
+            $zeile = $h['standorte'] . ': ' . $h['headline'];
+            if (!empty($h['expires'])) {
+                $zeile .= ' ' . sprintf($this->Translate('(until %s)'), $this->formatDateDe((string) $h['expires']));
+            }
+            if (!in_array($zeile, $zeilen, true)) {
+                $zeilen[] = $zeile;
+            }
+            if ($this->severityRank($h['severity']) > $this->severityRank($maxSeverity)) {
+                $maxSeverity = $h['severity'];
+            }
+            if (count($h['ziele'] ?? []) === 0) {
+                $alleZiele = true;
+            } else {
+                $ziele = array_merge($ziele, $h['ziele']);
+            }
+        }
+        if (count($zeilen) === 0) {
+            return;
+        }
+        $this->pushToAllWebfronts(
+            $this->Translate('🌙 Warnings of the night'),
+            $this->Translate('Still active:') . ' ' . implode('; ', $zeilen),
+            $sound,
+            $alleZiele ? [] : array_values(array_unique($ziele)),
+            $maxSeverity
+        );
     }
 
     /**
