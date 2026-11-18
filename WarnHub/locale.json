@@ -492,7 +492,9 @@
             "⬆️ Upgraded (%s): ": "⬆️ Hochgestuft (%s): ",
             "(until %s)": "(bis %s)",
             "🌙 Warnings of the night": "🌙 Warnungen der Nacht",
-            "Still active:": "Noch aktiv:"
+            "Still active:": "Noch aktiv:",
+            "Fix push flood: if the DWD had two warnings of the same kind at once (one now, one later), the later one was pushed again at every check -- at night every 10 minutes, which could use up the daily push limit of the whole system. The same warning for several locations now also comes as one push naming all of them.": "Fix Push-Flut: Hatte der DWD zwei Warnungen derselben Art gleichzeitig (eine jetzt, eine später), wurde die spätere bei jeder Prüfung erneut gepusht -- nachts alle 10 Minuten, was das tägliche Push-Limit der ganzen Anlage aufbrauchen konnte. Dieselbe Warnung für mehrere Standorte kommt jetzt außerdem als ein Push mit allen Namen.",
+            "🌙 New quiet hours (section \"Notification\"): at night only warnings from the chosen severity on are pushed, lighter ones come as one summary in the morning if still active. New sound option \"Phone default sound\", usually quieter than \"alarm\".": "🌙 Neu: Ruhezeit (Bereich „Benachrichtigung“): nachts werden nur Warnungen ab dem gewählten Schweregrad gepusht, leichtere kommen morgens als eine Sammelmeldung, falls noch aktiv. Neue Ton-Auswahl „Standardton des Handys“, meist leiser als „alarm“."
         },
         "en": {}
     }

@@ -2215,6 +2215,8 @@ class WarnHub extends IPSModule
             'On an English Symcon, the object tree searches now also find window contacts ("Opened"/"Open"), Tessie positions ("Location – Latitude") and English actuator names (awning, siren, close windows, tailgate).',
         ],
         '1.21.0' => [
+            'Fix push flood: if the DWD had two warnings of the same kind at once (one now, one later), the later one was pushed again at every check -- at night every 10 minutes, which could use up the daily push limit of the whole system. The same warning for several locations now also comes as one push naming all of them.',
+            '🌙 New quiet hours (section "Notification"): at night only warnings from the chosen severity on are pushed, lighter ones come as one summary in the morning if still active. New sound option "Phone default sound", usually quieter than "alarm".',
             'For scripts and other modules: warning contract 1.0 -- WHUB_GetActiveWarnings() now also returns a hazard code per warning (frost, ice, snow, wind, thunderstorm, heavy_rain, hail, heat, fog, flood, smoke, other), start and end as Unix time and a fixed key per location (stays the same when you rename the location). New WHUB_GetWarningHistory($id, $limit, $sinceTs) with the same fields. WHUB_GetHistory() stays unchanged.',
             'The warning history now also records the end of a warning that expires without an all-clear (type "ende"). If a source cannot be reached, its warnings count as unknown, not as ended -- so after a short outage the same warning is no longer pushed a second time.',
         ],

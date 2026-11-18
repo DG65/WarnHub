@@ -2,11 +2,50 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
-## 1.21.0 (2026-11-12)
+## 1.21.0 (2026-11-18)
 
-Warnungs-Vertrag 1.0 für Skripte und andere Module, erster Abnehmer ist
-FrigateHub (Selbstkalibrierung der Umweltbeobachtung, Konzept 9.1,
-abgestimmt 10.11.2026). Alles additiv, bestehende Felder bleiben.
+Push-Flut behoben, Ruhezeit, gebündelte Pushes -- und der Warnungs-Vertrag
+1.0 für Skripte und andere Module (erster Abnehmer FrigateHub).
+
+**Push-Flut, Live-Fund auf Dietmars Anlage, 18.11.2026.** STURMBÖEN wurde
+zwischen 0 und 5 Uhr bei jeder Prüfung (alle 10 Minuten) erneut gepusht: an
+drei Standorte am selben Ort, je an zwei Ziele. Das tägliche Push-Limit der
+Anlage (250, Notification Control) war damit erschöpft, auch andere
+Module kamen nicht mehr durch (Hinweis der EMS-Sitzung).
+
+- Fix: Lagen für dieselbe Episode zwei DWD-Warnungen gleichzeitig vor (eine
+  jetzt, eine später mit Lücke), verkürzte die eine das gemerkte Ende. Die
+  andere galt dann als "neu nach Lücke", bei jedem Abruf. Eine echte Lücke
+  verlangt jetzt, dass die gemerkte Warnung schon abgelaufen ist.
+  Schweregrad und Ende der Episode kommen am Ende des Abrufs aus allen ihren
+  Warnungen (höchster Schweregrad, spätestes Ende). Die schwerste Warnung
+  wird zuerst behandelt, deshalb gibt es auch kein Hochstufen-Pingpong bei
+  gleichzeitig Moderate und Severe.
+- Neu: Dieselbe Meldung für mehrere Standorte mit denselben Push-Zielen geht
+  als **ein** Push mit allen Standortnamen raus. Historie und Episoden
+  bleiben je Standort. Pushes werden dafür gesammelt und am Ende des Abrufs
+  verschickt.
+- Neu: **Ruhezeit** (Bereich "Benachrichtigung", Standard aus).
+  - Zeitfenster in vollen Stunden, auch über Mitternacht, Standard 22 bis 7 Uhr.
+  - Nachts werden nur Meldungen ab einem Schweregrad gepusht, Standard
+    Severe (Dietmars Wahl).
+  - Leichtere Warnungen werden für eine Sammelmeldung nach der Ruhezeit
+    gemerkt. Sie nennt nur noch aktive Warnungen. Gemerkte Warnungen, die
+    nachts entwarnt werden, fallen weg.
+  - Leichtere Entwarnungen, Fenster-Meldungen und Rückstellungs-Hinweise
+    bleiben nachts still. Ein offenes Fenster wird nach der Ruhezeit
+    gemeldet, falls es noch offen ist.
+  - Einen lautlosen Symcon-Push gibt es nicht (paresy, Forum 2016), deshalb
+    wird zurückgehalten statt leise zugestellt.
+- Neu: Ton-Auswahl "Standardton des Handys" (leerer Ton-Name), meist leiser
+  als "alarm". Voreinstellung bleibt "alarm".
+- Prüfstand: neu `.tools/test-push-flut.php` (35 Prüfungen, 8 Gegenproben
+  alle erkannt). `test-warning-episodes` und `test-fensterkontakte` erwarten
+  jetzt gebündelte Pushes und eine andere Reihenfolge.
+
+**Warnungs-Vertrag 1.0.** Erster Abnehmer ist FrigateHub
+(Selbstkalibrierung der Umweltbeobachtung, Konzept 9.1, abgestimmt
+10.11.2026). Alles additiv, bestehende Felder bleiben.
 
 - Neu: `contractVersion` "1.0" und ein Standort-Katalog `standorte` in
   `WHUB_GetActiveWarnings()`. Neue Funktion

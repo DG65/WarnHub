@@ -176,6 +176,18 @@ unverändert weiter, nur die Zustellung selbst ist stumm; ein manueller Testklic
 trotzdem an. Eine bereits abgelaufene Warnung zählt außerdem nicht mehr als aktiv, auch
 wenn die Quelle sie verzögert oder fehlerhaft weiterliefert.
 
+**Ruhezeit (seit 1.21.0):** Jede Nacht im eingestellten Zeitfenster (Standard 22 bis 7 Uhr,
+im Bereich "Benachrichtigung" einschalten) werden nur Warnungen ab dem gewählten Schweregrad
+gepusht (Standard "Hoch (Severe)"). Leichtere Warnungen, Entwarnungen und Rückstellungs-Hinweise
+bleiben still, stehen aber in Historie und Kacheln; Schutzaktionen laufen unverändert. Nach der
+Ruhezeit kommt auf Wunsch eine Sammelmeldung mit den zurückgehaltenen Warnungen, die dann noch
+aktiv sind. Einen wirklich lautlosen Push gibt es in Symcon nicht, deshalb hält WarnHub zurück
+statt leise zuzustellen. Für den Tag gibt es beim Ton die Auswahl "Standardton des Handys",
+meist leiser als "alarm".
+
+Dieselbe Warnung für mehrere Standorte (z. B. Haus und Auto in der Garage) kommt seit 1.21.0
+als **ein** Push mit allen Standortnamen, solange die Standorte dieselben Push-Ziele haben.
+
 ## Installation
 
 Über die Symcon-Modulverwaltung als eigene Bibliotheks-URL hinzufügen:

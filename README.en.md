@@ -156,6 +156,17 @@ detection, warning history and protective actions keep running unchanged, only t
 itself is silent; a manual test click still arrives. A warning that has already expired no
 longer counts as active, even if the source keeps delivering it late or incorrectly.
 
+**Quiet hours (since 1.21.0):** every night in the configured time window (default 22:00 to
+07:00, switch on in the "Notification" section) only warnings from the chosen severity on are
+pushed (default "High (Severe)"). Lighter warnings, all-clears and reset notices stay silent but
+remain in the history and tiles; protective actions keep running. After the quiet hours an
+optional summary push lists the held-back warnings that are still active then. Symcon has no
+truly silent push, so WarnHub holds back instead of delivering quietly. For daytime, the sound
+selection offers "Phone default sound", usually quieter than "alarm".
+
+Since 1.21.0 the same warning for several locations (e.g. house and car in the garage) arrives as
+**one** push naming all locations, as long as those locations have the same push targets.
+
 ## Installation
 
 Install **WarnHub** from the Symcon Module Store (or add `https://github.com/DG65/WarnHub` as a
