@@ -2,6 +2,30 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.21.1 (2026-11-20)
+
+Ein Alarm für Autos zuhause (Dietmars Wunsch 20.11.2026: „Wenn die Autos
+zuhause oder z. B. 1 km von zuhause entfernt sind, genügt ein Alarm“).
+
+- Neu: Einstellung „Ein Alarm, wenn mobil näher als (km)“ im Bereich
+  Standorte. Standard 1 km, 0 = aus.
+  - Steht ein mobiler Standort (Live-Position, z. B. Tesla über Tessie) so
+    nah am nächstgelegenen festen Standort, wird er aus dem Push genommen,
+    sobald der feste Standort im selben Abruf dieselbe Warnung hat
+    (gleiche Quelle und gleiches Ereignis). Das gilt auch für Entwarnungen.
+  - Hat der feste Standort die Warnung nicht (z. B. eigene
+    Schweregrad-Schwelle), bekommt das Auto weiter seinen Alarm.
+  - Historie, Episoden, Schutzaktionen und Vertrag bleiben je Standort
+    unverändert.
+- Ergänzt die Bündelung aus 1.21.0, die nur bei wortgleicher Meldung griff.
+  Ein Auto im Nachbarort bekommt oft eine eigene DWD-Meldung mit anderem
+  Gültigkeitsende.
+- Live-Kontrolle Privat 20.11.: Seit dem Update auf 1.21.0 gab es keine
+  wiederholten Pushes mehr. Die Einträge am 18.11. bis 23:01 Uhr stammen
+  noch von 1.20.1 (ohne Vertragsfelder).
+- Prüfstand: `test-push-flut.php` jetzt 45 Prüfungen. Gegenproben erkannt;
+  eine überflüssige 0/0-Abfrage ist dabei herausgefallen.
+
 ## 1.21.0 (2026-11-18)
 
 Push-Flut behoben, Ruhezeit, gebündelte Pushes -- und der Warnungs-Vertrag

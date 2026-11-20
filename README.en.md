@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModule-blue)
-![Module version](https://img.shields.io/badge/Module-1.21.0-informational)
+![Module version](https://img.shields.io/badge/Module-1.21.1-informational)
 ![Symcon version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -120,7 +120,9 @@ Bluelink or OVMS native vehicle) -- WarnHub then reads the current position at e
 object tree search finds matching vehicle/location variable pairs automatically (in German and
 English variable names) and creates directly linked, activated locations. A "Push only to" name
 filter lets a location notify only certain push targets (e.g. one person/vehicle each when
-several locations are used at the same time).
+several locations are used at the same time). If a mobile location (e.g. the car) is closer than
+a configurable distance to a fixed location (default 1 km, 0 = off, since 1.21.1), it counts as
+"at home": a warning the fixed location also has then arrives only once.
 
 Active warnings appear as push notifications on all **activated** push targets -- WebFront and
 tile visualization instances as well as, if installed, Telegram bot (official Symcon module),

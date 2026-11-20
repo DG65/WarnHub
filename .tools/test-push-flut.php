@@ -380,5 +380,61 @@ $opt = callPrivate($hub, 'soundOptions');
 check('Auswahl "Standardton des Handys" (leer) steht vorn', ($opt[0]['value'] ?? null) === '');
 check('Voreinstellung bleibt "alarm" (keine stille Änderung für Bestandsnutzer)', (new ReflectionMethod($hub, 'Create')) && str_contains((string) file_get_contents(__DIR__ . '/../WarnHub/module.php'), "RegisterPropertyString('PushSound', 'alarm')"));
 
+echo "\n== Ein Alarm für Autos zuhause (MobilZusammenfassenKm, Dietmars Wunsch 20.11.2026) ==\n";
+// Auto mit Live-Position: Variablen 301/302 (lat/lon). Zuhause 48.4785/7.9448.
+function auto(string $name, int $varLat, int $varLon): array
+{
+    global $standort;
+    return ['Name' => $name, 'QuellVarLat' => $varLat, 'QuellVarLon' => $varLon] + $standort;
+}
+function autoPosition(int $varLat, int $varLon, float $lat, float $lon): void
+{
+    $GLOBALS['whub_test_variableValues'][$varLat] = $lat;
+    $GLOBALS['whub_test_variableValues'][$varLon] = $lon;
+}
+autoPosition(301, 302, 48.4800, 7.9450); // ca. 170 m von zuhause
+autoPosition(303, 304, 48.5200, 7.9448); // ca. 4,6 km von zuhause
+$hub = neuerHub([$standort, auto('Schneeflocke', 301, 302)]);
+$GLOBALS['whub_test_pushCalls'] = [];
+$r = callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600)]]);
+check('Auto zuhause (170 m, Radius Standard 1 km): 1 Push nur für Zuhause', pushes() === 1 && str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Zuhause:') && !str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Schneeflocke'));
+check('… Historie und Episoden weiter für beide', $r['newlyPushed'] === 2 && count(json_decode($hub->GetHistory(0), true)) === 2);
+$hub = neuerHub([$standort, auto('Kohlekasten', 303, 304)]);
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600)]]);
+check('Auto 4,6 km weg: eigener Name im (gebündelten) Push', pushes() === 1 && str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Zuhause, Kohlekasten'));
+$hub = neuerHub([$standort, auto('Kohlekasten', 303, 304)], ['MobilZusammenfassenKm' => 5.0]);
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600)]]);
+check('Radius 5 km: Auto in 4,6 km zählt als zuhause', pushes() === 1 && !str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Kohlekasten'));
+$hub = neuerHub([$standort, auto('Schneeflocke', 301, 302)], ['MobilZusammenfassenKm' => 0.0]);
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600)]]);
+check('Radius 0 = aus: Auto wieder genannt', pushes() === 1 && str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Schneeflocke'));
+$hub = neuerHub([['MinSeverity' => 3] + $standort, auto('Schneeflocke', 301, 302)]);
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600, 'Moderate')]]);
+check('Zuhause hat die Warnung nicht (eigene Schwelle): Auto bekommt seinen Alarm', pushes() === 1 && str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Schneeflocke:'));
+$ohne = ['Lat' => 0.0, 'Lon' => 0.0] + auto('Ohne Position', 305, 306);
+$hub = neuerHub([$standort, $ohne, auto('Schneeflocke', 301, 302)]);
+$zuordnung = callPrivate($hub, 'mobileAtFixedLocations', [[$standort, $ohne, auto('Schneeflocke', 301, 302)]]);
+check('Auto ohne Live-Position (0/0) gilt nicht als zuhause, Schneeflocke schon', !isset($zuordnung['Ohne Position']) && ($zuordnung['Schneeflocke'] ?? null) === 'Zuhause');
+$fernFest = ['Name' => 'Büro', 'Lat' => 48.5200, 'Lon' => 7.9448] + $standort;
+$hub->SetProp('MobilZusammenfassenKm', 5.0);
+$zuordnung = callPrivate($hub, 'mobileAtFixedLocations', [[$fernFest, $standort, auto('Kohlekasten', 303, 304)]]);
+check('nächstgelegener fester Standort gewinnt (Büro 0 km statt Zuhause 4,6 km, Radius 5)', ($zuordnung['Kohlekasten'] ?? null) === 'Büro');
+$hub = neuerHub([$standort, auto('Schneeflocke', 301, 302)]);
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600)]]);
+$GLOBALS['whub_test_pushCalls'] = [];
+$c = sturm('A', -3600, 3600);
+$c['msgType'] = 'Cancel';
+callPrivate($hub, 'processWarnings', [[$c]]);
+check('Entwarnung: ebenfalls nur ein Push für Zuhause', pushes() === 1 && !str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Schneeflocke'));
+$hub = neuerHub([$standort, auto('Schneeflocke', 301, 302)]);
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600)]]);
+$GLOBALS['whub_test_pushCalls'] = [];
+callPrivate($hub, 'processWarnings', [[sturm('A', -3600, 3600), ['event' => 'GLÄTTE', 'headline' => 'Amtliche WARNUNG vor GLÄTTE'] + sturm('G', -60, 3600)]]);
+check('neue Warnung im selben Abruf für beide: 1 Push, nur Zuhause', pushes() === 1 && str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'GLÄTTE') && !str_contains($GLOBALS['whub_test_pushCalls'][0][3], 'Schneeflocke'));
+
 echo "\n" . ($failures === 0 ? "✅ Alle $checks Prüfungen bestanden.\n" : "❌ $failures von $checks Prüfungen fehlgeschlagen.\n");
 exit($failures === 0 ? 0 : 1);

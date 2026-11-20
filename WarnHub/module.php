@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.21.0';
+    private const DOC_VERSION = '1.21.1';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -726,6 +726,11 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyInteger('RuhezeitBis', 7);
         $this->RegisterPropertyInteger('RuhezeitMinSeverity', 3);
         $this->RegisterPropertyBoolean('RuhezeitSammelmeldung', true);
+        // Mobiler Standort (Auto) näher als so viele km an einem festen
+        // Standort: seine Warnungen pushen nicht extra, wenn der feste
+        // Standort dieselbe Warnung hat (Dietmars Wunsch 20.11.2026: "dann
+        // genügt ein Alarm"). 0 = aus.
+        $this->RegisterPropertyFloat('MobilZusammenfassenKm', 1.0);
         $this->RegisterPropertyString('Schutzaktionen', '[]');
         $this->RegisterPropertyString('Fensterkontakte', '[]');
         $this->RegisterPropertyInteger('SchutzaktionVorlaufMinuten', 30);
@@ -983,6 +988,8 @@ class WarnHub extends IPSModule
                 ['type' => 'Label', 'caption' => $this->Translate('Which modules exactly: "Tessie" (DG65 module for Tesla), "Geofency" (bridge for the geofencing app of the same name), as well as four community modules installable from the Symcon Module Store or GitHub -- search the store for the respective name: "Stellantis Vehicles" (Opel and other former PSA brands, github.com/slausch/Symcon-Stellantis-Vehicles), "Smartcar" (40+ vehicle brands via the Smartcar platform, github.com/mb-stern/Smartcar), "BMW Connected Drive", "Hyundai/Kia Bluelink" (github.com/da8ter/Bluelink, currently beta), "OVMS native" (for OVMS boxes with the older API V2, github.com/lorbetzki/net.lorbetzki.native.ovms).')],
                 ['type' => 'Label', 'caption' => $this->Translate('"Push only to" limits the notifications of this location to individual targets from the WebFronts list further down, named explicitly (comma-separated, e.g. "iPhone Dietmar") -- handy with several people/vehicles so that not everyone gets the warnings of the other person. Empty = all activated targets as before.')],
                 $this->statusLabelItem('MobileStandorteStatusLabel', $this->mobileStandorteStatusLine()),
+                ['type' => 'NumberSpinner', 'name' => 'MobilZusammenfassenKm', 'caption' => $this->Translate('One alarm if mobile is within (km)'), 'digits' => 1, 'minimum' => 0, 'suffix' => ' km'],
+                ['type' => 'Label', 'name' => 'MobilZusammenfassenKmHint', 'caption' => $this->Translate('A mobile location (e.g. a car) closer than this to a fixed location counts as "at home": a warning the fixed location also has is pushed only once, for the fixed location. Further away, the mobile location gets its own alarm as before. Warning history and protective actions stay unchanged. 0 = off.')],
                 [
                     'type' => 'List',
                     'name' => 'Standorte',
@@ -2219,6 +2226,9 @@ class WarnHub extends IPSModule
             '🌙 New quiet hours (section "Notification"): at night only warnings from the chosen severity on are pushed, lighter ones come as one summary in the morning if still active. New sound option "Phone default sound", usually quieter than "alarm".',
             'For scripts and other modules: warning contract 1.0 -- WHUB_GetActiveWarnings() now also returns a hazard code per warning (frost, ice, snow, wind, thunderstorm, heavy_rain, hail, heat, fog, flood, smoke, other), start and end as Unix time and a fixed key per location (stays the same when you rename the location). New WHUB_GetWarningHistory($id, $limit, $sinceTs) with the same fields. WHUB_GetHistory() stays unchanged.',
             'The warning history now also records the end of a warning that expires without an all-clear (type "ende"). If a source cannot be reached, its warnings count as unknown, not as ended -- so after a short outage the same warning is no longer pushed a second time.',
+        ],
+        '1.21.1' => [
+            'New: one alarm for cars at home -- a mobile location closer than the set distance (default 1 km) to a fixed location is no longer pushed separately for a warning the fixed location already has (section "Locations").',
         ],
     ];
 
@@ -5921,6 +5931,11 @@ class WarnHub extends IPSModule
         $standorte = array_filter($this->decodeStandorte(), fn ($s) => $s['Aktiv'] && $s['Name'] !== '');
         $standortKeys = $this->syncStandortKeys();
         $now = time();
+        // Mobile Standorte, die gerade bei einem festen stehen (siehe
+        // mobileAtFixedLocations()), und je Standort die Ereignisse, die ihn
+        // in diesem Abruf getroffen haben -- für mergeMobileAtFixed().
+        $mobilBeiFest = $this->mobileAtFixedLocations($standorte);
+        $getroffen = [];
         $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
         $fired = json_decode($this->ReadAttributeString('FiredActions'), true) ?: [];
         $actions = array_filter($this->decodeSchutzaktionen(), fn ($a) => $a['Aktiv']);
@@ -6069,6 +6084,7 @@ class WarnHub extends IPSModule
                 }
 
                 $stillPresentEpisodes[$episodeKey] = true;
+                $getroffen[$standort['Name']][$w['source'] . '|' . $w['event']] = true;
 
                 if ($w['msgType'] === 'Cancel') {
                     if (isset($seen[$episodeKey])) {
@@ -6370,7 +6386,7 @@ class WarnHub extends IPSModule
         $this->WriteAttributeString('SeenWarnings', json_encode($seen));
         $this->WriteAttributeString('FiredActions', json_encode($fired));
 
-        $this->flushPushQueue($pushQueue, $pushSound, $now);
+        $this->flushPushQueue($this->mergeMobileAtFixed($pushQueue, $mobilBeiFest, $getroffen), $pushSound, $now);
         if ($pushAktiv) {
             $this->sendQuietHoursSummary($seen, $pushSound, $now);
         }
@@ -6450,6 +6466,77 @@ class WarnHub extends IPSModule
             }
             $this->pushToAllWebfronts($this->buildPushTitle($severity, (string) ($w['event'] ?? '')), $text, $sound, $item['ziele'], $severity);
         }
+    }
+
+    /**
+     * Mobiler Standort => nächstgelegener fester Standort, wenn er gerade
+     * näher als MobilZusammenfassenKm daran steht.
+     *
+     * @param array<int,array<string,mixed>> $standorte aktive Standorte
+     * @return array<string,string>
+     */
+    private function mobileAtFixedLocations(array $standorte): array
+    {
+        $radius = $this->ReadPropertyFloat('MobilZusammenfassenKm');
+        if ($radius <= 0) {
+            return [];
+        }
+        $feste = [];
+        foreach ($standorte as $s) {
+            if (!$this->isStandortMobil($s) && ($s['Lat'] != 0 || $s['Lon'] != 0)) {
+                $feste[] = $s;
+            }
+        }
+        $out = [];
+        foreach ($standorte as $s) {
+            if (!$this->isStandortMobil($s)) {
+                continue;
+            }
+            // Ohne Live-Position (0/0) liegt der Punkt tausende km entfernt
+            // und fällt von selbst aus dem Radius.
+            $pos = $this->resolveStandortCoords($s);
+            $best = null;
+            foreach ($feste as $f) {
+                $d = WHUB_Geo::haversineKm($pos['lat'], $pos['lon'], $f['Lat'], $f['Lon']);
+                if ($d <= $radius && ($best === null || $d < $best)) {
+                    $best = $d;
+                    $out[$s['Name']] = $f['Name'];
+                }
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Nimmt mobile Standorte, die gerade bei einem festen stehen, aus den
+     * Pushes heraus, wenn der feste Standort in diesem Abruf dieselbe Warnung
+     * (Quelle + Ereignis) hat -- dann genügt ein Alarm. Bleibt kein Standort
+     * übrig, entfällt der Push.
+     *
+     * @param array<string,array<string,mixed>> $queue
+     * @param array<string,string> $mobilBeiFest
+     * @param array<string,array<string,bool>> $getroffen
+     * @return array<string,array<string,mixed>>
+     */
+    private function mergeMobileAtFixed(array $queue, array $mobilBeiFest, array $getroffen): array
+    {
+        if (count($mobilBeiFest) === 0) {
+            return $queue;
+        }
+        foreach ($queue as $key => $item) {
+            $ereignis = ($item['w']['source'] ?? '') . '|' . ($item['w']['event'] ?? '');
+            $item['standorte'] = array_values(array_filter($item['standorte'], function ($name) use ($mobilBeiFest, $getroffen, $ereignis) {
+                $fest = $mobilBeiFest[$name] ?? null;
+                return $fest === null || !isset($getroffen[$fest][$ereignis]);
+            }));
+            if (count($item['standorte']) === 0) {
+                $this->SendDebug('Push', 'Mobiler Standort bei festem Standort, Alarm dort schon enthalten: ' . ($item['w']['headline'] ?? ''), 0);
+                unset($queue[$key]);
+            } else {
+                $queue[$key] = $item;
+            }
+        }
+        return $queue;
     }
 
     /** Ruhezeit aktiv und gerade innerhalb des Zeitfensters (volle Stunden, auch über Mitternacht). */

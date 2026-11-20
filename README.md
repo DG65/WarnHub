@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.21.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.21.1-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -133,7 +133,9 @@ Fahrzeug-Module über deren jeweils stabile Idents) und legt direkt verknüpfte,
 Standorte an -- kein manuelles Heraussuchen der Variablen-IDs nötig. Über einen
 "Push nur an"-Namensfilter lässt sich außerdem festlegen, dass ein Standort nur bestimmte
 Push-Ziele benachrichtigt (z. B. je eine Person/ein Fahrzeug bei mehreren gleichzeitig
-genutzten Standorten).
+genutzten Standorten). Steht ein mobiler Standort (z. B. das Auto) näher als ein
+einstellbarer Abstand an einem festen Standort (Standard 1 km, 0 = aus, seit 1.21.1), gilt er
+als „zuhause“: Eine Warnung, die der feste Standort auch hat, kommt dann nur einmal.
 
 Aktive Warnungen erscheinen als Push-Benachrichtigung auf allen **aktivierten**
 Push-Zielen -- WebFront- und Kachel-Visualisierung-Instanzen sowie, falls installiert,
