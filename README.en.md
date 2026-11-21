@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModule-blue)
-![Module version](https://img.shields.io/badge/Module-1.21.1-informational)
+![Module version](https://img.shields.io/badge/Module-1.22.0-informational)
 ![Symcon version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -258,6 +258,31 @@ Since 1.21.0, read-only and additive -- existing fields stay unchanged.
 - If a source cannot be reached, its warnings count as unknown, not as ended. For up to 6 hours
   there is then neither an `ende` entry nor a second push after the outage. If the warning
   expires in that time, it ends anyway.
+
+### Protection state, contract "protection" 1.0 (since 1.22.0)
+
+`WHUB_GetProtectionState($id): string` is read-only. It is meant for modules that move the same
+devices, for example a shading control: an awning that WarnHub retracted should not be extended
+again right away. It returns `{contractVersion: "1.0", generatedAt, leadTimeMinutes, actions: [...]}`.
+`leadTimeMinutes` is the lead time with which protective actions fire before a warning starts.
+
+Per protective action:
+- `name`, `type`, `enabled`, `categories`, `minSeverity`, `standortFilter`
+- Target objects: `targetVariableID`, `targetInstanceID` (instance of the target variable, else 0),
+  `targetValue`, `stateVariableID`, `targetScriptID`
+- **`active`**: the action fired for a warning that is still running. While `true`, do not extend
+  the device again. `activeEpisodes` lists these warnings with `standort`, `standortKey`, `event`,
+  `hazard`, `category`, `source`, `firedAt` and `expiresTs`.
+- **`neverFired`**: the action exists but has not fired since 1.22.0. This is not the same as
+  "not active".
+- `lastFiredAt` and `lastTrigger`: the last firing, also after the warning has ended.
+- `autoRestore`: a pending reset after your own weather station (`restoreValue`, `calmSinceTs`,
+  `dueAt`), else `null`. `dueAt` is the earliest time; it is `null` while wind or rain are not
+  calm yet.
+
+After an all-clear or the end of the warning, `active` turns `false` again. WarnHub itself never
+resets after official warnings. A hold time before extending again (e.g. 20–30 min) is up to the
+querying module.
 
 ## IPSView & your own dashboards
 

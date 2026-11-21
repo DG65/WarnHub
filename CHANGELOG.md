@@ -2,6 +2,28 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.22.0 (2026-11-21)
+
+Schutzaktions-Zustand für andere Module. Abgestimmt mit der Sitzung
+„Verschattung“ (Beschattungsmodul, DG65-Toolkit-Kandidat). Den Bau hat
+Dietmar dort freigegeben („Ja, bauen lassen“).
+
+- Neu: `WHUB_GetProtectionState()`, Vertrag „protection“ 1.0, rein lesend.
+  - Je Schutzaktion: Zielobjekte (Variable, deren Instanz, Zustandsvariable,
+    Skript), Kategorien, `active` (hat für eine noch laufende Warnung
+    ausgelöst) und `activeEpisodes` mit Standort, standortKey, Ereignis,
+    Code und Ende.
+  - `neverFired` (angelegt, aber nie ausgelöst) wird ausdrücklich von
+    „nicht aktiv“ getrennt. `lastFiredAt`/`lastTrigger` gelten auch nach
+    Ende der Warnung.
+  - `autoRestore` zeigt eine ausstehende Rückstellung nach der eigenen
+    Wetterstation mit frühestem Zeitpunkt. `leadTimeMinutes` ist der Vorlauf.
+- Neues Attribut `SchutzaktionLetzteAusloesung`: die letzte Auslösung je
+  Aktion, über Name, Typ und Ziel geschlüsselt, damit Umsortieren der Zeilen
+  nichts vertauscht. `FiredActions` wird ja mit der Episode geleert.
+- Prüfstand: neu `.tools/test-protection.php` (20 Prüfungen, 5 Gegenproben
+  alle erkannt).
+
 ## 1.21.1 (2026-11-20)
 
 Ein Alarm für Autos zuhause (Dietmars Wunsch 20.11.2026: „Wenn die Autos

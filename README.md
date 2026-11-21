@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.21.1-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.22.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -292,6 +292,32 @@ Seit 1.21.0, rein lesend und additiv -- bestehende Felder bleiben unverändert.
 - Ist eine Quelle beim Abruf nicht erreichbar, gelten ihre Warnungen als unbekannt, nicht als
   beendet. Bis zu 6 Stunden lang gibt es dann weder einen `ende`-Eintrag noch einen erneuten
   Push nach der Störung. Läuft die Warnung in dieser Zeit ab, endet sie trotzdem.
+
+### Schutzaktions-Zustand, Vertrag „protection“ 1.0 (seit 1.22.0)
+
+`WHUB_GetProtectionState($id): string` ist rein lesend. Die Funktion ist für Module gedacht, die
+dieselben Geräte bewegen, etwa eine Beschattung: Eine von WarnHub eingefahrene Markise soll nicht
+gleich wieder ausgefahren werden. Sie liefert
+`{contractVersion: "1.0", generatedAt, leadTimeMinutes, actions: [...]}`. `leadTimeMinutes` ist der
+Vorlauf, mit dem Schutzaktionen vor Warnbeginn auslösen.
+
+Je Schutzaktion:
+- `name`, `type`, `enabled`, `categories`, `minSeverity`, `standortFilter`
+- Zielobjekte: `targetVariableID`, `targetInstanceID` (Instanz der Zielvariable, sonst 0),
+  `targetValue`, `stateVariableID`, `targetScriptID`
+- **`active`**: Die Aktion hat für eine noch laufende Warnung ausgelöst. Solange `true`, das Gerät
+  nicht wieder ausfahren. `activeEpisodes` nennt diese Warnungen mit `standort`, `standortKey`,
+  `event`, `hazard`, `category`, `source`, `firedAt` und `expiresTs`.
+- **`neverFired`**: Die Aktion ist angelegt, hat aber seit 1.22.0 nie ausgelöst. Das ist nicht
+  dasselbe wie „nicht aktiv“.
+- `lastFiredAt` und `lastTrigger`: die letzte Auslösung, auch nach Ende der Warnung.
+- `autoRestore`: eine ausstehende Rückstellung nach der eigenen Wetterstation (`restoreValue`,
+  `calmSinceTs`, `dueAt`), sonst `null`. `dueAt` ist der früheste Zeitpunkt; er ist `null`,
+  solange Wind oder Regen noch nicht ruhig sind.
+
+Nach Entwarnung oder Ende der Warnung wird `active` wieder `false`. WarnHub selbst stellt bei
+amtlichen Warnungen nie zurück. Eine eigene Haltezeit vor dem Wiederausfahren (z. B. 20–30 min)
+liegt beim abfragenden Modul.
 
 ## IPSView & eigene Dashboards
 

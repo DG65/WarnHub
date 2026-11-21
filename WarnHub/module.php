@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.21.1';
+    private const DOC_VERSION = '1.22.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -444,6 +444,8 @@ class WarnHub extends IPSModule
     // additiv -- bestehende Felder bleiben unverändert, GetHistory() bleibt
     // eine reine Liste.
     private const CONTRACT_VERSION = '1.0';
+    // Vertrag "protection" (WHUB_GetProtectionState, seit 1.22.0), eigene Version.
+    private const PROTECTION_CONTRACT_VERSION = '1.0';
     // Gefahrencode: feiner als die Kategorie der Schutzaktionen (die Glätte
     // und Schnee zusammenfasst, Frost/Nebel unter "sonstige" führt) und
     // sprachunabhängig -- Abnehmer ordnen über diesen Code zu, nie über Texte
@@ -753,6 +755,8 @@ class WarnHub extends IPSModule
         $this->RegisterAttributeString('StandortKeys', '[]');
         // In der Ruhezeit zurückgehaltene Warnungen für die Morgen-Sammelmeldung.
         $this->RegisterAttributeString('RuhezeitZurueckgehalten', '[]');
+        // Letzte Auslösung je Schutzaktion (Schlüssel protectionActionKey()), für WHUB_GetProtectionState().
+        $this->RegisterAttributeString('SchutzaktionLetzteAusloesung', '{}');
         $this->RegisterAttributeInteger('PushSnoozeUntilTs', 0);
         $this->RegisterAttributeString('WetterstationRestoreState', '{}');
         $this->RegisterAttributeString('ReverseGeoCache', '{}');
@@ -2229,6 +2233,9 @@ class WarnHub extends IPSModule
         ],
         '1.21.1' => [
             'New: one alarm for cars at home -- a mobile location closer than the set distance (default 1 km) to a fixed location is no longer pushed separately for a warning the fixed location already has (section "Locations").',
+        ],
+        '1.22.0' => [
+            'For scripts and other modules (e.g. a shading control): new read-only function WHUB_GetProtectionState() -- per protective action whether it is currently holding a device in protective position, which warning triggered it, when it last fired or whether it never has, and a pending automatic reset. Shading modules can use it to avoid extending an awning that WarnHub has just retracted.',
         ],
     ];
 
@@ -5936,6 +5943,8 @@ class WarnHub extends IPSModule
         // in diesem Abruf getroffen haben -- für mergeMobileAtFixed().
         $mobilBeiFest = $this->mobileAtFixedLocations($standorte);
         $getroffen = [];
+        $letzteAusloesung = json_decode($this->ReadAttributeString('SchutzaktionLetzteAusloesung'), true) ?: [];
+        $letzteAusloesungVorher = $letzteAusloesung;
         $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
         $fired = json_decode($this->ReadAttributeString('FiredActions'), true) ?: [];
         $actions = array_filter($this->decodeSchutzaktionen(), fn ($a) => $a['Aktiv']);
@@ -6241,6 +6250,12 @@ class WarnHub extends IPSModule
                         continue; // noch vor dem Vorlauf-Fenster -- beim nächsten Poll erneut prüfen
                     }
                     $fired[$fireKey] = time();
+                    // Letzte Auslösung je Aktion dauerhaft merken (FiredActions
+                    // wird mit der Episode geleert) -- für WHUB_GetProtectionState().
+                    $letzteAusloesung[$this->protectionActionKey($action)] = [
+                        'firedAt' => time(), 'standort' => $standort['Name'], 'standortKey' => $standortKey,
+                        'event' => $w['event'], 'hazard' => $hazard, 'category' => $category, 'source' => $w['source'],
+                    ];
                     // Vor dem Auslösen den aktuellen Wert merken, falls die
                     // Auto-Rückstellung aktiv ist -- NUR für durch die eigene
                     // Wetterstation ausgelöste Raffstore-/Markisen-/Garagentor-
@@ -6385,6 +6400,9 @@ class WarnHub extends IPSModule
 
         $this->WriteAttributeString('SeenWarnings', json_encode($seen));
         $this->WriteAttributeString('FiredActions', json_encode($fired));
+        if ($letzteAusloesung !== $letzteAusloesungVorher) {
+            $this->WriteAttributeString('SchutzaktionLetzteAusloesung', json_encode($letzteAusloesung));
+        }
 
         $this->flushPushQueue($this->mergeMobileAtFixed($pushQueue, $mobilBeiFest, $getroffen), $pushSound, $now);
         if ($pushAktiv) {
@@ -7842,6 +7860,98 @@ HTML;
             'standorte' => $this->standortCatalog(),
             'entries' => $log,
         ]);
+    }
+
+    /**
+     * Schutzaktions-Zustand, Vertrag "protection" 1.0 (seit 1.22.0, rein
+     * lesend) -- für Module, die dieselben Geräte bewegen (erster Abnehmer:
+     * Verschattung, abgestimmt 20./21.11.2026). Je Schutzaktion:
+     * - Zielobjekte (Variable, deren Instanz, Zustandsvariable, Skript),
+     * - active: hat für eine noch laufende Warnung ausgelöst -- solange true,
+     *   das Gerät nicht wieder ausfahren,
+     * - activeEpisodes: diese Warnungen (Standort, Ereignis, Code, Ende),
+     * - neverFired: angelegt, aber seit 1.22.0 nie ausgelöst (nicht dasselbe
+     *   wie "nicht aktiv"),
+     * - lastFiredAt/lastTrigger: letzte Auslösung, auch nach Ende der Warnung,
+     * - autoRestore: ausstehende Rückstellung nach der eigenen Wetterstation
+     *   (dueAt = frühester Zeitpunkt, null solange Wind/Regen nicht ruhig).
+     * leadTimeMinutes: Schutzaktionen feuern so viele Minuten vor Beginn.
+     */
+    public function GetProtectionState(): string
+    {
+        $fired = json_decode($this->ReadAttributeString('FiredActions'), true) ?: [];
+        $seen = json_decode($this->ReadAttributeString('SeenWarnings'), true) ?: [];
+        $letzte = json_decode($this->ReadAttributeString('SchutzaktionLetzteAusloesung'), true) ?: [];
+        $restore = json_decode($this->ReadAttributeString('WetterstationRestoreState'), true) ?: [];
+        $now = time();
+        $aktionen = [];
+        foreach ($this->decodeSchutzaktionen() as $idx => $action) {
+            $episoden = [];
+            foreach ($fired as $fireKey => $firedAt) {
+                $pipe = strrpos((string) $fireKey, '|');
+                if ($pipe === false || substr((string) $fireKey, $pipe + 1) !== (string) $idx) {
+                    continue;
+                }
+                $episodeKey = substr((string) $fireKey, 0, $pipe);
+                $e = $seen[$episodeKey] ?? null;
+                if ($e === null) {
+                    continue; // Episode schon beendet (wird beim nächsten Abruf aufgeräumt)
+                }
+                $episoden[] = [
+                    'standort' => (string) ($e['standort'] ?? ''),
+                    'standortKey' => (string) ($e['standortKey'] ?? ''),
+                    'event' => (string) ($e['event'] ?? ''),
+                    'hazard' => (string) ($e['hazard'] ?? ''),
+                    'category' => (string) ($e['category'] ?? ''),
+                    'source' => (string) ($e['source'] ?? ''),
+                    'firedAt' => (int) $firedAt,
+                    'expiresTs' => $e['expiresTs'] ?? $this->capTimestamp($e['expires'] ?? null),
+                ];
+            }
+            $l = $letzte[$this->protectionActionKey($action)] ?? null;
+            $r = $restore[$idx] ?? $restore[(string) $idx] ?? null;
+            $zielInstanz = 0;
+            if ($action['ZielVariableID'] > 0 && function_exists('IPS_GetParent') && @IPS_VariableExists($action['ZielVariableID'])) {
+                $parent = (int) @IPS_GetParent($action['ZielVariableID']);
+                $zielInstanz = $parent > 0 && @IPS_InstanceExists($parent) ? $parent : 0;
+            }
+            $aktionen[] = [
+                'index' => $idx,
+                'name' => $action['Name'],
+                'type' => $action['Typ'],
+                'enabled' => $action['Aktiv'],
+                'categories' => $action['Kategorien'],
+                'minSeverity' => $action['MinSeverity'],
+                'standortFilter' => $action['StandortFilter'],
+                'targetVariableID' => $action['ZielVariableID'],
+                'targetInstanceID' => $zielInstanz,
+                'targetValue' => $action['ZielWert'],
+                'stateVariableID' => $action['ZustandsVariableID'],
+                'targetScriptID' => $action['ZielSkriptID'],
+                'active' => count($episoden) > 0,
+                'activeEpisodes' => $episoden,
+                'neverFired' => $l === null && count($episoden) === 0,
+                'lastFiredAt' => $l !== null ? (int) $l['firedAt'] : (count($episoden) > 0 ? max(array_column($episoden, 'firedAt')) : null),
+                'lastTrigger' => $l,
+                'autoRestore' => $r === null ? null : [
+                    'restoreValue' => $r['RestoreValue'] ?? null,
+                    'calmSinceTs' => $r['CalmSinceTs'] ?? null,
+                    'dueAt' => isset($r['CalmSinceTs']) && $r['CalmSinceTs'] !== null ? (int) $r['CalmSinceTs'] + self::WETTERSTATION_RESTORE_RUHEPHASE_SEKUNDEN : null,
+                ],
+            ];
+        }
+        return json_encode([
+            'contractVersion' => self::PROTECTION_CONTRACT_VERSION,
+            'generatedAt' => $now,
+            'leadTimeMinutes' => max(0, $this->ReadPropertyInteger('SchutzaktionVorlaufMinuten')),
+            'actions' => $aktionen,
+        ]);
+    }
+
+    /** Schlüssel einer Schutzaktion unabhängig von ihrer Zeilenposition (Name, Typ, Ziel). */
+    private function protectionActionKey(array $action): string
+    {
+        return $action['Name'] . '|' . $action['Typ'] . '|' . $action['ZielVariableID'] . '|' . $action['ZielSkriptID'];
     }
 
     /**
