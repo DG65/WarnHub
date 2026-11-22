@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModul-blue)
-![Modul Version](https://img.shields.io/badge/Modul-1.22.0-informational)
+![Modul Version](https://img.shields.io/badge/Modul-1.23.0-informational)
 ![Symcon Version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Spenden-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -189,6 +189,18 @@ meist leiser als "alarm".
 
 Dieselbe Warnung für mehrere Standorte (z. B. Haus und Auto in der Garage) kommt seit 1.21.0
 als **ein** Push mit allen Standortnamen, solange die Standorte dieselben Push-Ziele haben.
+
+**Durchsage auf HomePods (seit 1.23.0):** Ist das Modul „AirPlay-Steuerung“ ab 0.7.0 installiert,
+findet "Push-Ziele suchen" auch dessen HomePods (Typ "Durchsage (HomePod)"). Sie starten
+**inaktiv** -- eine gesprochene Warnung im Raum stört mehr als ein Push. Eingeschaltet sagen sie
+neue Warnungen und Hochstufungen ab einem eigenen Schweregrad an (Standard "Hoch (Severe)"),
+nachts im Zeitfenster der Ruhezeit nur ab der Nachtschwelle (Standard "Extrem"; gilt auch, wenn
+die Ruhezeit für Pushes aus ist; "Nie" schweigt nachts ganz). Der Text ist kurz und ohne Emojis,
+etwa „Achtung, schwere Warnung für Zuhause: Sturmböen. Bis 18 Uhr.“; die Handlungsempfehlung
+kommt nur bei "Extrem" dazu. Wahlweise ein Gong davor, Entwarnungen nur auf Wunsch, die
+Sammelmeldung am Morgen wird nie gesprochen. Es gelten dieselben Regeln wie beim Push: einmal je
+Warnung, Standorte gebündelt, "Push nur an ..."-Filter der Standorte, Pause. Die Durchsage
+wartet nicht auf den Lautsprecher, jeder HomePod spielt sie aus seiner eigenen Warteschlange.
 
 ## Installation
 

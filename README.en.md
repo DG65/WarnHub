@@ -1,7 +1,7 @@
 # WarnHub
 
 ![Symcon](https://img.shields.io/badge/Symcon-PHPModule-blue)
-![Module version](https://img.shields.io/badge/Module-1.22.0-informational)
+![Module version](https://img.shields.io/badge/Module-1.23.0-informational)
 ![Symcon version](https://img.shields.io/badge/Symcon-9.0%2B-informational)
 ![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-orange)
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://paypal.me/DietmarGureth)
@@ -168,6 +168,18 @@ selection offers "Phone default sound", usually quieter than "alarm".
 
 Since 1.21.0 the same warning for several locations (e.g. house and car in the garage) arrives as
 **one** push naming all locations, as long as those locations have the same push targets.
+
+**Announcement on HomePods (since 1.23.0):** with the module "AirPlay control" 0.7.0 or newer
+installed, "Search push targets" also finds its HomePods (type "Announcement (HomePod)"). They
+start **inactive** -- a spoken warning in the room disturbs more than a push. Once activated
+they announce new warnings and upgrades from their own severity on (default "High (Severe)"),
+at night in the quiet-hours time window only from the night threshold (default "Extreme";
+applies even when the quiet hours for pushes are off; "Never" stays silent at night). The text
+is short and without emojis, e.g. "Attention, severe warning for Home: Gusts. Until 18:00."; the
+recommended action is added only at "Extreme". Optional chime before it, all-clears only on
+request, the morning summary is never spoken. The same rules as for pushes apply: once per
+warning, locations bundled, the locations' "push only to ..." filter, pause. The announcement
+does not wait for the speaker; each HomePod plays it from its own queue.
 
 ## Installation
 

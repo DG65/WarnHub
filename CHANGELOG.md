@@ -2,6 +2,32 @@
 
 Ältere Versionen: [CHANGELOG-Archiv.md](CHANGELOG-Archiv.md)
 
+## 1.23.0 (2026-11-22)
+
+Durchsage auf HomePods. Anfrage aus der Sitzung „AirPlay-Steuerung“,
+Dietmars Freigabe: „Ja, bau es, nachts nur Extrem“.
+
+- Neuer Zieltyp „Durchsage (HomePod)“: „Push-Ziele suchen“ findet Instanzen
+  des Moduls AirPlay-Steuerung (nur exakte GUID). Sie starten inaktiv.
+- Versand über `AIRP_SayAsync($id, $text, -1, $gong)` (ab AirPlay 0.7.0).
+  Kehrt sofort zurück, der Abruf wartet nicht auf den Lautsprecher.
+  „Eingereiht“ zählt als zugestellt.
+- Neue Eigenschaften: `DurchsageMinSeverity` (Standard Severe),
+  `DurchsageNachtMinSeverity` (Standard Extreme, „Nie“ = 5),
+  `DurchsageGong` (an), `DurchsageEntwarnung` (aus).
+  - Nachts gilt die strengere der beiden Schwellen, im Zeitfenster der
+    Ruhezeit, auch wenn die Ruhezeit für Pushes aus ist.
+- Eigener Sprechtext: Schwere, Standorte („Zuhause und Tesla“), Ereignis,
+  Zeitraum („Von 16 Uhr bis morgen 9 Uhr“). Handlungsempfehlung nur bei
+  Extrem, ohne Beschreibung. Emojis, Links und `{}` (AirPlay-Platzhalter)
+  entfernt, höchstens 900 Zeichen.
+- Push-Regeln gelten mit: einmal je Warnung, Hochstufung erneut, Bündelung,
+  „Push nur an“-Filter, Pause, Benachrichtigung aus. Sammelmeldung,
+  Fensterkontakt- und Rückstellungs-Hinweise werden nicht gesprochen.
+- Testbenachrichtigung spricht auch auf aktiven HomePods.
+- Prüfstand: neu `.tools/test-durchsage.php` (45 Prüfungen, 3 Gegenproben
+  alle erkannt).
+
 ## 1.22.0 (2026-11-21)
 
 Schutzaktions-Zustand für andere Module. Abgestimmt mit der Sitzung

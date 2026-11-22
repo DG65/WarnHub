@@ -123,7 +123,7 @@ class WHUB_Geo
 
 class WarnHub extends IPSModule
 {
-    private const DOC_VERSION = '1.22.0';
+    private const DOC_VERSION = '1.23.0';
     private const LICENSE_URL = 'https://github.com/DG65/WarnHub/blob/main/LICENSE';
     private const PAYPAL_URL = 'https://paypal.me/DietmarGureth';
     private const FORUM_THREAD_URL = 'https://community.symcon.de/t/modul-warnhub-warn-und-alarmmeldungen-fuer-deutschland-oesterreich-und-die-schweiz-mit-umkreis-filter-push-und-schutzaktionen/144349';
@@ -229,6 +229,15 @@ class WarnHub extends IPSModule
     // SMTP_SendMailEx($InstanzID, $Empfänger, $Betreff, $Inhalt) erkennt HTML
     // automatisch am <html>...</html>-Wrapper (seit Symcon 7.0, offizielle Doku).
     private const SMTP_GUID = '{375EAF21-35EF-4BC4-83B3-C780FD8BD88A}';
+    // HomePod-Durchsage (seit 1.23.0) über das eigenständige DG65-Modul
+    // "AirPlay-Steuerung" (Präfix AIRP). Nur die exakte GUID, keine Namenssuche:
+    // ein anderes AirPlay-Modul hätte kein AIRP_SayAsync. AIRP_SayAsync($id,
+    // $text, $volume, $chime) kehrt sofort zurück (eigene Warteschlange je
+    // HomePod, Verfall nach 10 min), alle vier Parameter Pflicht; {...} im
+    // Text sind dort Platzhalter. Live bestätigt 21.11.2026 (AirPlay 0.7.0).
+    private const AIRPLAY_GUID = '{2BB8B63A-9A5A-4704-8230-C18259F9F3E7}';
+    // Wert "nie" für die Durchsage-Schwellen (höher als jeder Schweregrad).
+    private const DURCHSAGE_NIE = 5;
 
     // Notification Control (Symcon-Kernmodul, Prefix "NC") -- live gegen
     // Dietmars eigene IP-Symcon-Instanz verifiziert (01.10.2026, Instanz
@@ -728,6 +737,13 @@ class WarnHub extends IPSModule
         $this->RegisterPropertyInteger('RuhezeitBis', 7);
         $this->RegisterPropertyInteger('RuhezeitMinSeverity', 3);
         $this->RegisterPropertyBoolean('RuhezeitSammelmeldung', true);
+        // Durchsage auf HomePods (seit 1.23.0): eigene Schwelle, nachts (im
+        // Zeitfenster der Ruhezeit, auch wenn die Ruhezeit für Pushes aus
+        // ist) eine eigene, strengere. Dietmar 21.11.2026: "nachts nur Extrem".
+        $this->RegisterPropertyInteger('DurchsageMinSeverity', 3);
+        $this->RegisterPropertyInteger('DurchsageNachtMinSeverity', 4);
+        $this->RegisterPropertyBoolean('DurchsageEntwarnung', false);
+        $this->RegisterPropertyBoolean('DurchsageGong', true);
         // Mobiler Standort (Auto) näher als so viele km an einem festen
         // Standort: seine Warnungen pushen nicht extra, wenn der feste
         // Standort dieselbe Warnung hat (Dietmars Wunsch 20.11.2026: "dann
@@ -1230,6 +1246,7 @@ class WarnHub extends IPSModule
                             ['caption' => 'Pushover', 'value' => 'pushover'],
                             ['caption' => $this->Translate('E-mail (SMTP)'), 'value' => 'email'],
                             ['caption' => 'Notification Control (IPSView & Co.)', 'value' => 'notification'],
+                            ['caption' => $this->Translate('Announcement (HomePod)'), 'value' => 'durchsage'],
                         ]]],
                         ['caption' => $this->Translate('Instance ID'), 'name' => 'InstanceID', 'width' => '90px', 'edit' => ['type' => 'NumberSpinner', 'enabled' => false]],
                         ['caption' => $this->Translate('Active'), 'name' => 'Aktiv', 'width' => '70px', 'edit' => ['type' => 'CheckBox']],
@@ -1263,6 +1280,22 @@ class WarnHub extends IPSModule
                 ],
                 ['type' => 'CheckBox', 'name' => 'RuhezeitSammelmeldung', 'caption' => $this->Translate('Morning summary')],
                 ['type' => 'Label', 'name' => 'RuhezeitSammelmeldungHint', 'caption' => $this->Translate('After the quiet hours: one push with the held-back warnings that are still active then.')],
+                ['type' => 'Label', 'caption' => $this->Translate('🔊 Announcement on HomePods (module "AirPlay control" 0.7.0 or newer)')],
+                ['type' => 'Label', 'name' => 'DurchsageHint', 'caption' => $this->Translate('Found HomePods appear in the push target list above with type "Announcement (HomePod)" and start INACTIVE -- a spoken warning disturbs more than a push. Announced are new warnings and upgrades from the chosen severity on, short and without emojis, the recommended action only at "Extreme". At night (time window of the quiet hours above, also when the quiet hours for pushes are off) the stricter night threshold applies; the morning summary is never spoken.')],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'Select', 'name' => 'DurchsageMinSeverity', 'caption' => $this->Translate('Announce from'), 'options' => $this->durchsageSeverityOptions()],
+                        ['type' => 'Select', 'name' => 'DurchsageNachtMinSeverity', 'caption' => $this->Translate('Announce at night from'), 'options' => $this->durchsageSeverityOptions()],
+                    ],
+                ],
+                [
+                    'type' => 'RowLayout',
+                    'items' => [
+                        ['type' => 'CheckBox', 'name' => 'DurchsageGong', 'caption' => $this->Translate('Chime before the announcement')],
+                        ['type' => 'CheckBox', 'name' => 'DurchsageEntwarnung', 'caption' => $this->Translate('Also announce all-clears')],
+                    ],
+                ],
             ],
         ];
 
@@ -1572,6 +1605,11 @@ class WarnHub extends IPSModule
         ];
     }
 
+    private function durchsageSeverityOptions(): array
+    {
+        return array_merge($this->severityOptions(), [['caption' => $this->Translate('Never'), 'value' => self::DURCHSAGE_NIE]]);
+    }
+
     /**
      * Referenz-Dosisleistungen für die Einordnungshilfe (Popup + Warnungstext,
      * siehe formatDurationToPublicLimit()/bfsOdlContext() unten). Werte/
@@ -1771,6 +1809,9 @@ class WarnHub extends IPSModule
         foreach ($this->findNotificationControlInstances() as $instanceID) {
             $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'notification'];
         }
+        foreach (@IPS_GetInstanceListByModuleID(self::AIRPLAY_GUID) ?: [] as $instanceID) {
+            $out[] = ['InstanceID' => $instanceID, 'Name' => @IPS_GetName($instanceID) ?: ('#' . $instanceID), 'Typ' => 'durchsage'];
+        }
         return $out;
     }
 
@@ -1808,8 +1849,18 @@ class WarnHub extends IPSModule
         $known = array_column($rows, null, 'InstanceID');
         $added = 0;
         $addedEmail = 0;
+        $addedDurchsage = 0;
         foreach ($foundTargets as $target) {
             if (isset($known[$target['InstanceID']])) {
+                continue;
+            }
+            // Durchsage (HomePod) startet ebenfalls inaktiv: eine gesprochene
+            // Warnung im Raum stört mehr als ein Push, wer sie will, schaltet
+            // sie bewusst ein.
+            if ($target['Typ'] === 'durchsage') {
+                $rows[] = ['InstanceID' => $target['InstanceID'], 'Name' => $target['Name'], 'Typ' => 'durchsage', 'Aktiv' => false, 'Zieladresse' => ''];
+                $added++;
+                $addedDurchsage++;
                 continue;
             }
             // E-Mail (SMTP) ist anders als die übrigen Typen KEIN fertiges Ziel:
@@ -1833,8 +1884,14 @@ class WarnHub extends IPSModule
         if ($added === 0) {
             return $this->Translate('⚠️ No WebFront, tile visualization, Telegram bot, Pushover, SMTP or Notification Control instances found in the object tree.');
         }
+        $durchsageHinweis = $addedDurchsage > 0
+            ? ' ' . sprintf($this->Translate('%d HomePod(s) for announcements are INACTIVE -- activate them in the „Active“ column if wanted.'), $addedDurchsage)
+            : '';
         if ($addedEmail > 0) {
-            return sprintf($this->Translate('✅ %d new push target(s) found (%d in total) -- please click „Apply" below. %d e-mail target(s) are still INACTIVE: enter the target address first and activate them.'), $added, count($rows), $addedEmail);
+            return sprintf($this->Translate('✅ %d new push target(s) found (%d in total) -- please click „Apply" below. %d e-mail target(s) are still INACTIVE: enter the target address first and activate them.'), $added, count($rows), $addedEmail) . $durchsageHinweis;
+        }
+        if ($addedDurchsage > 0) {
+            return sprintf($this->Translate('✅ %d new push target(s) found (%d in total) -- please click „Apply" below.'), $added, count($rows)) . $durchsageHinweis;
         }
         return sprintf($this->Translate('✅ %d new push target(s) found and activated (%d in total) -- please click „Apply" below to save.'), $added, count($rows));
     }
@@ -1894,7 +1951,7 @@ class WarnHub extends IPSModule
             return sprintf($this->Translate('⚠️ %d push target(s) found, but none activated -- push notifications currently arrive nowhere.%s'), count($rows), $ungespeichert);
         }
 
-        $typNamen = ['webfront' => 'WebFront', 'kachel' => $this->Translate('Tile visualization'), 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => $this->Translate('E-mail'), 'notification' => 'Notification Control'];
+        $typNamen = ['webfront' => 'WebFront', 'kachel' => $this->Translate('Tile visualization'), 'telegram' => 'Telegram', 'pushover' => 'Pushover', 'email' => $this->Translate('E-mail'), 'notification' => 'Notification Control', 'durchsage' => $this->Translate('Announcement')];
         $laufen = [];
         $ohneAdresse = [];
         $verwaist = [];
@@ -2236,6 +2293,9 @@ class WarnHub extends IPSModule
         ],
         '1.22.0' => [
             'For scripts and other modules (e.g. a shading control): new read-only function WHUB_GetProtectionState() -- per protective action whether it is currently holding a device in protective position, which warning triggered it, when it last fired or whether it never has, and a pending automatic reset. Shading modules can use it to avoid extending an awning that WarnHub has just retracted.',
+        ],
+        '1.23.0' => [
+            'Announcement on HomePods: with the module "AirPlay control" (0.7.0 or newer), "Search push targets" also finds its HomePods. They start inactive; once activated they announce new warnings and upgrades from their own severity on, at night (time window of the quiet hours) only from the night threshold -- default "Extreme". Short spoken text without emojis, optional chime, all-clears only on request.',
         ],
     ];
 
@@ -5803,6 +5863,7 @@ class WarnHub extends IPSModule
             $this->truncateBytes($this->Translate('If this message arrives, the delivery route works. Not a real warning.'), 256),
             $this->ReadPropertyString('PushSound')
         );
+        $sent += $this->announceToSpeakers($this->Translate('WarnHub test announcement. Not a real warning.'));
         if ($sent === 0) {
             return sprintf($this->Translate('⚠️ Test failed -- could not deliver to any of the %d activated targets (see system log).'), count($active));
         }
@@ -6460,6 +6521,10 @@ class WarnHub extends IPSModule
             $w = $item['w'];
             $severity = (string) ($w['severity'] ?? 'Unknown');
             $namen = implode(', ', $item['standorte']);
+            // Durchsage unabhängig von der Push-Ruhezeit, mit eigener Schwelle.
+            if ($this->announcementAllowed($item['kind'], $severity, $now)) {
+                $this->announceToSpeakers($this->buildSpokenText($item['kind'], $item['standorte'], $w, $now), $item['ziele']);
+            }
             if ($this->quietHoursBlocks($severity, $now)) {
                 if ($item['kind'] === 'entwarnung') {
                     $this->forgetQuietHoursItems($item['episodeKeys']);
@@ -6560,9 +6625,12 @@ class WarnHub extends IPSModule
     /** Ruhezeit aktiv und gerade innerhalb des Zeitfensters (volle Stunden, auch über Mitternacht). */
     private function isQuietHours(int $now): bool
     {
-        if (!$this->ReadPropertyBoolean('RuhezeitAktiv')) {
-            return false;
-        }
+        return $this->ReadPropertyBoolean('RuhezeitAktiv') && $this->isNightWindow($now);
+    }
+
+    /** Innerhalb des Ruhezeit-Zeitfensters, unabhängig davon, ob die Ruhezeit für Pushes eingeschaltet ist (Durchsage-Nachtschwelle). */
+    private function isNightWindow(int $now): bool
+    {
         $von = $this->ReadPropertyInteger('RuhezeitVon');
         $bis = $this->ReadPropertyInteger('RuhezeitBis');
         if ($von === $bis) {
@@ -6576,6 +6644,100 @@ class WarnHub extends IPSModule
     private function quietHoursBlocks(string $severity, int $now): bool
     {
         return $this->isQuietHours($now) && $this->severityRank($severity) < $this->ReadPropertyInteger('RuhezeitMinSeverity');
+    }
+
+    /**
+     * Ob diese Meldung angesagt wird: ab DurchsageMinSeverity, im
+     * Nachtfenster zusätzlich ab DurchsageNachtMinSeverity (die strengere
+     * gilt, nachts nie lauter als tagsüber). Entwarnungen nur auf Wunsch.
+     */
+    private function announcementAllowed(string $kind, string $severity, int $now): bool
+    {
+        if ($kind === 'entwarnung' && !$this->ReadPropertyBoolean('DurchsageEntwarnung')) {
+            return false;
+        }
+        $schwelle = $this->ReadPropertyInteger('DurchsageMinSeverity');
+        if ($this->isNightWindow($now)) {
+            $schwelle = max($schwelle, $this->ReadPropertyInteger('DurchsageNachtMinSeverity'));
+        }
+        return $this->severityRank($severity) >= max(1, $schwelle);
+    }
+
+    /**
+     * Kurzer, hörbarer Text für die Durchsage: Schwere, Standort(e),
+     * Ereignis, Zeitraum; die Handlungsempfehlung nur bei Extrem. Ohne
+     * Emojis, Links und geschweifte Klammern (im AirPlay-Modul Platzhalter).
+     *
+     * @param array<int,string> $standorte
+     */
+    private function buildSpokenText(string $kind, array $standorte, array $w, int $now): string
+    {
+        $orte = count($standorte) > 1
+            ? implode(', ', array_slice($standorte, 0, -1)) . $this->Translate(' and ') . end($standorte)
+            : (string) ($standorte[0] ?? '');
+        $event = trim((string) ($w['event'] ?? ''));
+        if ($event === '') {
+            $event = trim((string) ($w['headline'] ?? ''));
+        }
+        // DWD liefert Ereignisse in Großbuchstaben ("SCHWERE STURMBÖEN").
+        if ($event !== '' && mb_strtoupper($event) === $event) {
+            $event = mb_strtoupper(mb_substr($event, 0, 1)) . mb_strtolower(mb_substr($event, 1));
+        }
+        $severity = (string) ($w['severity'] ?? 'Unknown');
+
+        if ($kind === 'entwarnung') {
+            $text = sprintf($this->Translate('All-clear for %s: %s is over.'), $orte, $event);
+        } else {
+            $muster = match ($severity) {
+                'Extreme' => $this->Translate('Attention! Extreme warning for %s: %s.'),
+                'Severe' => $this->Translate('Attention, severe warning for %s: %s.'),
+                'Moderate' => $this->Translate('Warning for %s: %s.'),
+                default => $this->Translate('Notice for %s: %s.'),
+            };
+            $text = sprintf($muster, $orte, $event);
+            if ($kind === 'eskalation') {
+                $text = $this->Translate('Warning upgraded.') . ' ' . $text;
+            }
+            $onsetTs = $this->capTimestamp($w['onset'] ?? null);
+            $expiresTs = $this->capTimestamp($w['expires'] ?? null);
+            if ($onsetTs !== null && $onsetTs > $now + 300 && $expiresTs !== null) {
+                $text .= ' ' . sprintf($this->Translate('From %s until %s.'), $this->spokenTime($onsetTs, $now), $this->spokenTime($expiresTs, $now));
+            } elseif ($onsetTs !== null && $onsetTs > $now + 300) {
+                $text .= ' ' . sprintf($this->Translate('From %s.'), $this->spokenTime($onsetTs, $now));
+            } elseif ($expiresTs !== null) {
+                $text .= ' ' . sprintf($this->Translate('Until %s.'), $this->spokenTime($expiresTs, $now));
+            }
+            if ($severity === 'Extreme' && trim((string) ($w['instruction'] ?? '')) !== '') {
+                $text .= ' ' . trim((string) $w['instruction']);
+            }
+        }
+
+        $text = preg_replace('~https?://\S+~u', '', $text) ?? $text;
+        $text = preg_replace('~[\x{1F000}-\x{1FFFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{200D}{}]~u', '', $text) ?? $text;
+        $text = trim(preg_replace('~\s+~u', ' ', $text) ?? $text);
+        return mb_strlen($text) > 900 ? rtrim(mb_substr($text, 0, 899)) . '…' : $text;
+    }
+
+    /** Uhrzeit zum Vorlesen: "18 Uhr", "18 Uhr 30", mit "morgen" oder Wochentag, wenn nicht heute. */
+    private function spokenTime(int $ts, int $now): string
+    {
+        $stunde = (int) date('G', $ts);
+        $minute = (int) date('i', $ts);
+        // Deutsch "18 Uhr 05" -> "18 Uhr 5", sonst liest die Stimme "null
+        // fünf". Nur eine durch Leerzeichen abgetrennte Minute, "18:05" bleibt.
+        $zeit = $minute === 0
+            ? sprintf($this->Translate('%d:00'), $stunde)
+            : (preg_replace('~ 0(\d)$~u', ' $1', sprintf($this->Translate('%1$d:%2$02d'), $stunde, $minute)) ?? '');
+        $tage = (int) round((strtotime(date('Y-m-d', $ts)) - strtotime(date('Y-m-d', $now))) / 86400);
+        if ($tage === 0) {
+            return $zeit;
+        }
+        if ($tage === 1) {
+            return sprintf($this->Translate('tomorrow %s'), $zeit);
+        }
+        $wochentage = [$this->Translate('Sunday'), $this->Translate('Monday'), $this->Translate('Tuesday'), $this->Translate('Wednesday'),
+            $this->Translate('Thursday'), $this->Translate('Friday'), $this->Translate('Saturday')];
+        return $wochentage[(int) date('w', $ts)] . ' ' . $zeit;
     }
 
     private function holdForQuietHoursSummary(array $item, string $namen): void
@@ -7519,6 +7681,37 @@ HTML;
      * buildPushText()/buildPushTitle(). Telegram/Pushover/E-Mail bekommen
      * den vollen Text (Praxis-Fund hfichtinger, Symcon-Forum, 09.09.2026).
      */
+    /**
+     * Spricht $text auf allen aktivierten Durchsage-Zielen (HomePods über
+     * AIRP_SayAsync, kehrt sofort zurück). $onlyNames wie bei
+     * pushToAllWebfronts(). "Eingereiht" zählt als zugestellt -- einen
+     * Zustellnachweis liefert das AirPlay-Modul nicht.
+     *
+     * @param array<int,string> $onlyNames
+     */
+    private function announceToSpeakers(string $text, array $onlyNames = []): int
+    {
+        $sent = 0;
+        foreach ($this->decodeWebFronts() as $w) {
+            if ($w['Typ'] !== 'durchsage' || !$w['Aktiv']) {
+                continue;
+            }
+            if (count($onlyNames) > 0 && !in_array(mb_strtolower(trim($w['Name'])), $onlyNames, true)) {
+                continue;
+            }
+            if (!function_exists('AIRP_SayAsync')) {
+                $this->LogError('announceToSpeakers', $this->Translate('AIRP_SayAsync is not available (module "AirPlay control" 0.7.0 or newer required).'));
+                continue;
+            }
+            if (@AIRP_SayAsync($w['InstanceID'], $text, -1, $this->ReadPropertyBoolean('DurchsageGong'))) {
+                $sent++;
+            } else {
+                $this->LogError('announceToSpeakers', sprintf($this->Translate('Announcement on "%s" could not be queued (see the message log of the AirPlay instance).'), $w['Name']));
+            }
+        }
+        return $sent;
+    }
+
     private function pushToAllWebfronts(string $title, string $text, string $sound, array $onlyNames = [], string $severity = ''): int
     {
         $sent = 0;
@@ -7527,6 +7720,11 @@ HTML;
                 continue;
             }
             if (count($onlyNames) > 0 && !in_array(mb_strtolower(trim($w['Name'])), $onlyNames, true)) {
+                continue;
+            }
+            // Durchsage-Ziele bekommen keinen Push-Text, sondern einen eigenen
+            // gesprochenen Text mit eigener Schwelle (announceToSpeakers()).
+            if ($w['Typ'] === 'durchsage') {
                 continue;
             }
             // Kachel-Visualisierung: VISU_PostNotificationEx (Icon+Sound
